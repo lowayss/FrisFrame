@@ -274,7 +274,7 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             "-c:v",
             "libx264",
             "-preset",
-            "medium",
+            "superfast",
             "-crf",
             "18",
             "-pix_fmt",

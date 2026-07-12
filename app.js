@@ -10172,18 +10172,61 @@ async function exportVideo() {
   try {
     jobId = await startMp4ExportJob({ ...size, fps, frameCount });
     selected = null;
+
+    const uploadQueue = [];
+    const maxConcurrency = 6;
+    let activeUploads = 0;
+    let uploadError = null;
+
+    const runUpload = async (index, blob) => {
+      activeUploads += 1;
+      try {
+        await uploadMp4ExportFrame(jobId, index, blob);
+      } catch (err) {
+        uploadError = err;
+      } finally {
+        activeUploads -= 1;
+        triggerNext();
+      }
+    };
+
+    const triggerNext = () => {
+      if (uploadError) return;
+      while (activeUploads < maxConcurrency && uploadQueue.length > 0) {
+        const nextTask = uploadQueue.shift();
+        nextTask();
+      }
+    };
+
     for (let index = 0; index < frameCount; index += 1) {
+      if (uploadError) throw uploadError;
+
       const progress = frameCount <= 1 ? 0 : index / (frameCount - 1);
       const renderState = interpolateRenderStateAtTime(exportState, progress * exportState.motion.duration);
       renderThreeView(renderState, true, size);
       await nextFrame();
       const frameBlob = await canvasToBlob(threeView.frameCanvas, "image/jpeg", 0.9);
-      await uploadMp4ExportFrame(jobId, index, frameBlob);
+
+      const task = () => runUpload(index, frameBlob);
+      uploadQueue.push(task);
+      triggerNext();
+
+      while (uploadQueue.length > 12) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (uploadError) throw uploadError;
+      }
+
       if (index === frameCount - 1 || index % Math.max(1, Math.round(fps / 4)) === 0) {
         mediaExportProgress = `MP4 ${index + 1}/${frameCount}`;
         renderMediaExportBusy();
       }
     }
+
+    while (activeUploads > 0 || uploadQueue.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (uploadError) throw uploadError;
+    }
+
     mediaExportProgress = "MP4 인코딩";
     renderMediaExportBusy();
     const blob = await finishMp4ExportJob(jobId);
