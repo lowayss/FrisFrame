@@ -529,6 +529,10 @@ function radToDeg(rad) {
   return ((rad * 180) / Math.PI + 360) % 360;
 }
 
+function radToDegSigned(rad) {
+  return (rad * 180) / Math.PI;
+}
+
 function focalToFov(focal) {
   return (2 * Math.atan(36 / (2 * focal)) * 180) / Math.PI;
 }
@@ -555,7 +559,7 @@ function cameraOrientationFromLegacy(camera, renderState = state) {
   const horizontal = Math.hypot(dx, dz);
   return {
     panDeg: horizontal > 0.0001 ? normalizePanDeg(radToDeg(Math.atan2(dz, dx))) : 180,
-    tiltDeg: clamp(radToDeg(Math.atan2(dy, Math.max(0.0001, horizontal))), -60, 60),
+    tiltDeg: clamp(radToDegSigned(Math.atan2(dy, Math.max(0.0001, horizontal))), -60, 60),
   };
 }
 
@@ -1551,7 +1555,7 @@ function trackingOrientation(item, camera = state.camera, renderState = state) {
   );
   return {
     panDeg: normalizePanDeg(radToDeg(Math.atan2(dz, dx))),
-    tiltDeg: clamp(radToDeg(faceAngle - framingOffset), -60, 60),
+    tiltDeg: clamp(radToDegSigned(faceAngle - framingOffset), -60, 60),
   };
 }
 
