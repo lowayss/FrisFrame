@@ -6,8 +6,32 @@
     <title>FrisFrame</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css?v=20260712-16" />
+    <script>
+      window.addEventListener('error', function(e) {
+        const consoleEl = document.getElementById('debugConsole');
+        if (consoleEl) {
+          consoleEl.style.display = 'block';
+          const div = document.createElement('div');
+          div.textContent = e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno;
+          document.getElementById('debugErrors').appendChild(div);
+        }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        const consoleEl = document.getElementById('debugConsole');
+        if (consoleEl) {
+          consoleEl.style.display = 'block';
+          const div = document.createElement('div');
+          div.textContent = 'Promise rejected: ' + (e.reason?.message || e.reason);
+          document.getElementById('debugErrors').appendChild(div);
+        }
+      });
+    </script>
   </head>
   <body>
+    <div id="debugConsole" style="position: fixed; top: 0; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: rgba(255, 0, 0, 0.95); color: white; z-index: 100000; font-family: monospace; font-size: 13px; padding: 15px; display: none; border-bottom: 2px solid #ff3333;">
+      <h3 style="margin: 0 0 10px 0; font-size: 14px;">⚠️ 브라우저 스크립트 에러 발생:</h3>
+      <div id="debugErrors" style="white-space: pre-wrap; line-height: 1.4;"></div>
+    </div>
     <div class="app">
       <header class="topbar">
         <div class="brand">
