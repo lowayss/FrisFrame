@@ -26,6 +26,18 @@ def json_bytes(payload):
 
 
 class PrevisHandler(SimpleHTTPRequestHandler):
+    extensions_map = SimpleHTTPRequestHandler.extensions_map.copy()
+    extensions_map.update({
+        ".css": "text/css",
+        ".js": "application/javascript",
+        ".json": "application/json",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".svg": "image/svg+xml",
+        ".mp4": "video/mp4",
+    })
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
