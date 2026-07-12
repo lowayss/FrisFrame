@@ -311,6 +311,7 @@ const defaultState = () => ({
   showNames: false,
   showCamera: true,
   cleanExport: true,
+  blenderControls: false,
   camera: {
     x: 0.92,
     y: 0.48,
@@ -2076,7 +2077,7 @@ function initThreeView() {
     frameRenderer,
     cameraRigHelper: null,
     raycaster,
-    orbit: { theta: -0.62, phi: 0.68, radius: 14.2 },
+    orbit: { theta: -0.62, phi: 0.68, radius: 14.2, target: new THREE.Vector3(0, 0.15, 0) },
     lastState: null,
   };
 
@@ -2085,6 +2086,9 @@ function initThreeView() {
   canvas3d.addEventListener("pointerup", endThreeDrag);
   canvas3d.addEventListener("pointercancel", endThreeDrag);
   canvas3d.addEventListener("wheel", zoomThreeView, { passive: false });
+  canvas3d.addEventListener("contextmenu", (event) => {
+    if (state.blenderControls) event.preventDefault();
+  });
   resizeThreeView();
   return true;
 }
@@ -2913,17 +2917,36 @@ function updateThreeCamera(renderState = state) {
   if (!threeView?.ready) return;
   const orbit = threeView.orbit;
   const radius = orbit.radius;
-  const phi = clamp(orbit.phi, 0.28, 1.32);
-  const x = Math.cos(orbit.theta) * Math.cos(phi) * radius;
-  const y = Math.sin(phi) * radius + 2.4;
-  const z = Math.sin(orbit.theta) * Math.cos(phi) * radius;
+  const phi = clamp(orbit.phi, 0.05, 1.48);
+  const target = orbit.target || new window.THREE.Vector3(0, 0.15, 0);
+  const x = target.x + Math.cos(orbit.theta) * Math.cos(phi) * radius;
+  const y = target.y + Math.sin(phi) * radius + 2.25;
+  const z = target.z + Math.sin(orbit.theta) * Math.cos(phi) * radius;
   threeView.camera.position.set(x, y, z);
-  threeView.camera.lookAt(0, 0.15, 0);
+  threeView.camera.lookAt(target.x, target.y, target.z);
 }
 
 function beginThreeDrag(event) {
   if (!threeView?.ready) return;
-  const editor = threeEditMode === "view" ? null : pickThreeEditor(event);
+
+  const isBlenderActive = state.blenderControls;
+  let forceNav = null; // "orbit", "pan", "zoom"
+  
+  if (isBlenderActive) {
+    if (event.button === 1) { // Middle button
+      forceNav = event.shiftKey ? "pan" : (event.ctrlKey ? "zoom" : "orbit");
+    } else if (event.button === 2) { // Right button
+      forceNav = "zoom";
+    } else if (event.button === 0) { // Left button
+      if (event.shiftKey) {
+        forceNav = "pan";
+      } else if (event.ctrlKey || event.altKey) {
+        forceNav = "zoom";
+      }
+    }
+  }
+
+  const editor = (forceNav || threeEditMode === "view") ? null : pickThreeEditor(event);
   if (editor) {
     materializeEvaluatedViewForEditing();
     selected = editor;
@@ -2954,13 +2977,17 @@ function beginThreeDrag(event) {
     renderThreeView(evaluatedViewState || state, true);
     return;
   }
+  
+  const dragKind = forceNav || "orbit";
   threeDrag = {
-    kind: "orbit",
+    kind: dragKind,
     pointerId: event.pointerId,
     x: event.clientX,
     y: event.clientY,
     theta: threeView.orbit.theta,
     phi: threeView.orbit.phi,
+    radius: threeView.orbit.radius,
+    targetStart: (threeView.orbit.target || new window.THREE.Vector3(0, 0.15, 0)).clone()
   };
   threeView.canvas.setPointerCapture(event.pointerId);
 }
@@ -2971,10 +2998,31 @@ function updateThreeDrag(event) {
     updateThreeEditorDrag(event);
     return;
   }
+  
   const dx = event.clientX - threeDrag.x;
   const dy = event.clientY - threeDrag.y;
-  threeView.orbit.theta = threeDrag.theta - dx * 0.0024;
-  threeView.orbit.phi = clamp(threeDrag.phi + dy * 0.0016, 0.3, 1.18);
+  
+  if (threeDrag.kind === "orbit") {
+    threeView.orbit.theta = threeDrag.theta - dx * 0.0024;
+    threeView.orbit.phi = clamp(threeDrag.phi + dy * 0.0016, 0.05, 1.48);
+  } else if (threeDrag.kind === "pan") {
+    const factor = (threeDrag.radius / 800) * 1.5;
+    const right = new window.THREE.Vector3(1, 0, 0).applyQuaternion(threeView.camera.quaternion);
+    const up = new window.THREE.Vector3(0, 1, 0).applyQuaternion(threeView.camera.quaternion);
+    
+    const newTarget = threeDrag.targetStart.clone();
+    newTarget.addScaledVector(right, -dx * factor);
+    newTarget.addScaledVector(up, dy * factor);
+    
+    if (!threeView.orbit.target) {
+      threeView.orbit.target = new window.THREE.Vector3(0, 0.15, 0);
+    }
+    threeView.orbit.target.copy(newTarget);
+  } else if (threeDrag.kind === "zoom") {
+    const factor = dy * 0.02;
+    threeView.orbit.radius = clamp(threeDrag.radius + factor, 8, 26);
+  }
+  
   renderThreeView(threeView.lastState || state, true);
 }
 
@@ -3997,6 +4045,8 @@ function syncUi(updateInputs = true) {
   $("#namesToggle").checked = state.showNames;
   $("#cameraToggle").checked = state.showCamera;
   $("#cleanExportToggle").checked = state.cleanExport;
+  $("#blenderControlsToggle").checked = state.blenderControls;
+  $("#blenderControlsRow").hidden = viewMode !== "3d";
   $("#focalSlider").value = state.camera.focal;
   $("#focalValue").value = state.camera.focal;
   $("#cameraHeightSlider").value = state.camera.height;
@@ -7258,6 +7308,11 @@ $("#cameraToggle").addEventListener("change", (event) => {
 
 $("#cleanExportToggle").addEventListener("change", (event) => {
   state.cleanExport = event.target.checked;
+  commit();
+});
+
+$("#blenderControlsToggle").addEventListener("change", (event) => {
+  state.blenderControls = event.target.checked;
   commit();
 });
 
