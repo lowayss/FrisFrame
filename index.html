@@ -263,22 +263,22 @@
           <summary>카메라</summary>
           <label class="range-row">
             <span>렌즈</span>
-            <strong id="focalValue">85mm</strong>
+            <div class="range-val-container"><input id="focalValue" type="number" min="14" max="135" step="1" value="85" /><span>mm</span></div>
             <input id="focalSlider" type="range" min="14" max="135" step="1" value="85" />
           </label>
           <label class="range-row">
             <span>카메라 높이</span>
-            <strong id="cameraHeightValue">1.6m</strong>
+            <div class="range-val-container"><input id="cameraHeightValue" type="number" min="0.4" max="3" step="0.05" value="1.6" /><span>m</span></div>
             <input id="cameraHeightSlider" type="range" min="0.4" max="3" step="0.05" value="1.6" />
           </label>
           <label class="range-row">
             <span>팬</span>
-            <strong id="cameraPanValue">180°</strong>
+            <div class="range-val-container"><input id="cameraPanValue" type="number" min="0" max="359" step="1" value="180" /><span>°</span></div>
             <input id="cameraPanSlider" type="range" min="0" max="359" step="1" value="180" />
           </label>
           <label class="range-row">
             <span>틸트</span>
-            <strong id="cameraTiltValue">0°</strong>
+            <div class="range-val-container"><input id="cameraTiltValue" type="number" min="-60" max="60" step="1" value="0" /><span>°</span></div>
             <input id="cameraTiltSlider" type="range" min="-60" max="60" step="1" value="0" />
           </label>
           <label class="stack-field tracking-field">
@@ -441,7 +441,7 @@
 
             <label class="range-row">
               <span>크기</span>
-              <strong id="sizeValue">1.00x</strong>
+              <div class="range-val-container"><input id="sizeValue" type="number" min="0.25" max="4" step="0.01" value="1" /><span>x</span></div>
               <input id="sizeSlider" type="range" min="0.25" max="4" step="0.01" value="1" />
             </label>
 
@@ -454,17 +454,17 @@
                 <label>
                   <span>길이</span>
                   <input id="propScaleX" type="range" min="0.25" max="3.5" step="0.05" value="1" />
-                  <strong id="propScaleXValue">1.00x</strong>
+                  <div class="range-val-container"><input id="propScaleXValue" type="number" min="0.25" max="3.5" step="0.05" value="1" /><span>x</span></div>
                 </label>
                 <label>
                   <span>높이</span>
                   <input id="propScaleY" type="range" min="0.25" max="3.5" step="0.05" value="1" />
-                  <strong id="propScaleYValue">1.00x</strong>
+                  <div class="range-val-container"><input id="propScaleYValue" type="number" min="0.25" max="3.5" step="0.05" value="1" /><span>x</span></div>
                 </label>
                 <label>
                   <span>너비</span>
                   <input id="propScaleZ" type="range" min="0.25" max="3.5" step="0.05" value="1" />
-                  <strong id="propScaleZValue">1.00x</strong>
+                  <div class="range-val-container"><input id="propScaleZValue" type="number" min="0.25" max="3.5" step="0.05" value="1" /><span>x</span></div>
                 </label>
               </div>
               <label class="toggle-row compact-toggle-row">
@@ -506,7 +506,7 @@
 
             <label class="range-row">
               <span>방향</span>
-              <strong id="facingValue">0°</strong>
+              <div class="range-val-container"><input id="facingValue" type="number" min="0" max="359" step="1" value="0" /><span>°</span></div>
               <input id="facingSlider" type="range" min="0" max="359" step="1" value="0" />
             </label>
 

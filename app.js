@@ -3998,13 +3998,13 @@ function syncUi(updateInputs = true) {
   $("#cameraToggle").checked = state.showCamera;
   $("#cleanExportToggle").checked = state.cleanExport;
   $("#focalSlider").value = state.camera.focal;
-  $("#focalValue").textContent = `${state.camera.focal}mm`;
+  $("#focalValue").value = state.camera.focal;
   $("#cameraHeightSlider").value = state.camera.height;
-  $("#cameraHeightValue").textContent = `${Number(state.camera.height).toFixed(1)}m`;
+  $("#cameraHeightValue").value = Number(state.camera.height).toFixed(2);
   $("#cameraPanSlider").value = state.camera.panDeg;
-  $("#cameraPanValue").textContent = `${Math.round(state.camera.panDeg)}°`;
+  $("#cameraPanValue").value = Math.round(state.camera.panDeg);
   $("#cameraTiltSlider").value = state.camera.tiltDeg;
-  $("#cameraTiltValue").textContent = `${Math.round(state.camera.tiltDeg)}°`;
+  $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
   $("#cameraPanSlider").disabled = Boolean(state.camera.trackingTargetId);
   $("#cameraTiltSlider").disabled = Boolean(state.camera.trackingTargetId);
   $$("#focalPresets button").forEach((button) => {
@@ -6766,8 +6766,8 @@ function renderProperties(updateInputs) {
     $("#facingSlider").value = transformItem.facing;
   }
   $("#sizeSlider").max = item.type === "actor" ? "2.2" : "4";
-  $("#sizeValue").textContent = `${Number(item.size).toFixed(2)}x`;
-  $("#facingValue").textContent = `${Math.round(transformItem.facing)}°`;
+  $("#sizeValue").value = Number(item.size).toFixed(2);
+  $("#facingValue").value = Math.round(transformItem.facing);
   $("#sizeSlider").value = item.size;
   $("#facingSlider").value = transformItem.facing;
 
@@ -6781,7 +6781,7 @@ function renderProperties(updateInputs) {
     $("#propMotionToggle").checked = item.motionEnabled !== false;
     [["X", item.scaleX], ["Y", item.scaleY], ["Z", item.scaleZ]].forEach(([axis, value]) => {
       $("#propScale" + axis).value = value;
-      $("#propScale" + axis + "Value").textContent = `${Number(value).toFixed(2)}x`;
+      $("#propScale" + axis + "Value").value = Number(value).toFixed(2);
     });
   } else {
     $("#actorPlacementMode").value = item.placementMode || "manual";
@@ -7271,6 +7271,7 @@ $("#trackingTargetSelect").addEventListener("change", (event) => {
 
 $("#focalSlider").addEventListener("input", (event) => {
   state.camera.focal = Number(event.target.value);
+  $("#focalValue").value = state.camera.focal;
   selected = { kind: "camera" };
   setActiveSource("camera");
   selectKeyForSource("camera");
@@ -7280,11 +7281,25 @@ $("#focalSlider").addEventListener("input", (event) => {
 
 $("#focalSlider").addEventListener("change", commit);
 
+$("#focalValue").addEventListener("input", (event) => {
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, 14, 135);
+  state.camera.focal = val;
+  $("#focalSlider").value = val;
+  selected = { kind: "camera" };
+  setActiveSource("camera");
+  selectKeyForSource("camera");
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#focalValue").addEventListener("change", commit);
+
 $("#cameraHeightSlider").addEventListener("input", (event) => {
   state.camera.height = Number(event.target.value);
   applyCameraTracking(state);
   syncCameraDerivedAim(state.camera, state);
-  $("#cameraHeightValue").textContent = `${state.camera.height.toFixed(1)}m`;
+  $("#cameraHeightValue").value = Number(state.camera.height).toFixed(2);
   selected = { kind: "camera" };
   setActiveSource("camera");
   selectKeyForSource("camera");
@@ -7294,10 +7309,26 @@ $("#cameraHeightSlider").addEventListener("input", (event) => {
 
 $("#cameraHeightSlider").addEventListener("change", commit);
 
+$("#cameraHeightValue").addEventListener("input", (event) => {
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, 0.4, 3);
+  state.camera.height = val;
+  $("#cameraHeightSlider").value = val;
+  applyCameraTracking(state);
+  syncCameraDerivedAim(state.camera, state);
+  selected = { kind: "camera" };
+  setActiveSource("camera");
+  selectKeyForSource("camera");
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#cameraHeightValue").addEventListener("change", commit);
+
 $("#cameraPanSlider").addEventListener("input", (event) => {
   state.camera.panDeg = normalizePanDeg(event.target.value);
   syncCameraDerivedAim(state.camera, state);
-  $("#cameraPanValue").textContent = `${Math.round(state.camera.panDeg)}°`;
+  $("#cameraPanValue").value = Math.round(state.camera.panDeg);
   selected = { kind: "camera" };
   setActiveSource("camera");
   selectKeyForSource("camera");
@@ -7307,10 +7338,25 @@ $("#cameraPanSlider").addEventListener("input", (event) => {
 
 $("#cameraPanSlider").addEventListener("change", commit);
 
+$("#cameraPanValue").addEventListener("input", (event) => {
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = normalizePanDeg(val);
+  state.camera.panDeg = val;
+  $("#cameraPanSlider").value = val;
+  syncCameraDerivedAim(state.camera, state);
+  selected = { kind: "camera" };
+  setActiveSource("camera");
+  selectKeyForSource("camera");
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#cameraPanValue").addEventListener("change", commit);
+
 $("#cameraTiltSlider").addEventListener("input", (event) => {
   state.camera.tiltDeg = clamp(Number(event.target.value), -60, 60);
   syncCameraDerivedAim(state.camera, state);
-  $("#cameraTiltValue").textContent = `${Math.round(state.camera.tiltDeg)}°`;
+  $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
   selected = { kind: "camera" };
   setActiveSource("camera");
   selectKeyForSource("camera");
@@ -7319,6 +7365,21 @@ $("#cameraTiltSlider").addEventListener("input", (event) => {
 });
 
 $("#cameraTiltSlider").addEventListener("change", commit);
+
+$("#cameraTiltValue").addEventListener("input", (event) => {
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, -60, 60);
+  state.camera.tiltDeg = val;
+  $("#cameraTiltSlider").value = val;
+  syncCameraDerivedAim(state.camera, state);
+  selected = { kind: "camera" };
+  setActiveSource("camera");
+  selectKeyForSource("camera");
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#cameraTiltValue").addEventListener("change", commit);
 
 $("#focalPresets").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-focal]");
@@ -7429,11 +7490,24 @@ $("#sizeSlider").addEventListener("input", (event) => {
   const item = selectedItem();
   if (!item) return;
   item.size = Number(event.target.value);
-  $("#sizeValue").textContent = `${item.size.toFixed(2)}x`;
+  $("#sizeValue").value = item.size.toFixed(2);
   draw();
 });
 
 $("#sizeSlider").addEventListener("change", commit);
+
+$("#sizeValue").addEventListener("input", (event) => {
+  const item = selectedItem();
+  if (!item) return;
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  const maxVal = item.type === "actor" ? 2.2 : 4;
+  val = clamp(val, 0.25, maxVal);
+  item.size = val;
+  $("#sizeSlider").value = val;
+  draw();
+});
+$("#sizeValue").addEventListener("change", commit);
 
 $("#selectedPropAsset").addEventListener("change", (event) => {
   const item = selectedItem();
@@ -7459,10 +7533,22 @@ $("#propMotionToggle").addEventListener("change", (event) => {
     const item = selectedItem();
     if (!item || item.type !== "prop") return;
     item[field] = Number(event.target.value);
-    $("#propScale" + axis + "Value").textContent = `${item[field].toFixed(2)}x`;
+    $("#propScale" + axis + "Value").value = item[field].toFixed(2);
     draw();
   });
   $("#propScale" + axis).addEventListener("change", commit);
+
+  $("#propScale" + axis + "Value").addEventListener("input", (event) => {
+    const item = selectedItem();
+    if (!item || item.type !== "prop") return;
+    let val = Number(event.target.value);
+    if (!Number.isFinite(val)) return;
+    val = clamp(val, 0.25, 3.5);
+    item[field] = val;
+    $("#propScale" + axis).value = val;
+    draw();
+  });
+  $("#propScale" + axis + "Value").addEventListener("change", commit);
 });
 
 $("#actorPlacementMode").addEventListener("change", (event) => {
@@ -7542,11 +7628,24 @@ $("#facingSlider").addEventListener("input", (event) => {
   if (!item) return;
   const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
   target.facing = Number(event.target.value);
-  $("#facingValue").textContent = `${Math.round(target.facing)}°`;
+  $("#facingValue").value = Math.round(target.facing);
   draw();
 });
 
 $("#facingSlider").addEventListener("change", commit);
+
+$("#facingValue").addEventListener("input", (event) => {
+  const item = selectedItem();
+  if (!item) return;
+  const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = normalizePanDeg(val);
+  target.facing = val;
+  $("#facingSlider").value = val;
+  draw();
+});
+$("#facingValue").addEventListener("change", commit);
 
 $(".facing-grid").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-facing]");

@@ -424,6 +424,46 @@ input[type="range"] {
   font-size: 12px;
 }
 
+.range-val-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+.range-val-container input[type="number"] {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  width: 52px;
+  height: 20px;
+  text-align: right;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.range-val-container input[type="number"]::-webkit-outer-spin-button,
+.range-val-container input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.range-val-container input[type="number"]:focus {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 0 2px rgba(255, 107, 85, 0.2);
+}
+
+.range-val-container span {
+  font-size: 10px;
+  color: #7d8b94;
+  font-weight: normal;
+}
+
 .tracking-field {
   margin-top: 9px;
   color: #dce3dc;
@@ -4072,14 +4112,19 @@ section + .panel-section,
 
 .dimension-grid label {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 42px;
+  grid-template-columns: 32px minmax(0, 1fr) 58px;
   align-items: center;
   gap: 7px;
   color: #8e9aa1;
   font-size: 10.5px;
 }
 
-.dimension-grid strong {
+.dimension-grid .range-val-container input[type="number"] {
+  width: 42px;
+}
+
+.dimension-grid strong,
+.dimension-grid .range-val-container {
   color: #7ed9cf;
   font: 760 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: right;
