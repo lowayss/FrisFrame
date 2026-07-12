@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FrisFrame</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=20260712-16" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><i data-lucide="clapperboard">F</i></div>
+          <div>
+            <h1>FrisFrame</h1>
+            <p id="projectBreadcrumb">새 프로젝트 · 장면 1 · 컷 1</p>
+          </div>
+        </div>
+
+        <nav class="workspace-nav" aria-label="작업 화면">
+          <button id="storyboardBtn" class="workspace-tab" type="button" title="스토리보드 (⌘1)">
+            <i data-lucide="layout-dashboard" aria-hidden="true"></i>
+            <span id="storyboardBtnLabel">스토리보드</span>
+          </button>
+          <div class="view-switch" id="viewButtons" aria-label="블로킹 보기 방식">
+            <button data-view="2d" class="is-active" title="2D 평면도 (⌘2)">
+              <i data-lucide="map" aria-hidden="true"></i><span>2D</span>
+            </button>
+            <button data-view="3d" title="3D 무대 (⌘3)">
+              <i data-lucide="box" aria-hidden="true"></i><span>3D</span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="toolbar" aria-label="주요 작업">
+          <button id="tutorialBtn" class="icon-btn" type="button" title="처음 사용 가이드" aria-label="처음 사용 가이드"><i data-lucide="circle-help">?</i></button>
+          <div class="toolbar-history" aria-label="편집 기록">
+            <button id="undoBtn" class="icon-btn" title="실행 취소" aria-label="실행 취소"><i data-lucide="undo-2">↶</i></button>
+            <button id="redoBtn" class="icon-btn" title="다시 실행" aria-label="다시 실행"><i data-lucide="redo-2">↷</i></button>
+          </div>
+          <span id="projectSaveState" class="project-save-state"><span aria-hidden="true"></span>변경됨</span>
+          <span class="toolbar-divider"></span>
+          <button id="sourceVideoBtn" class="text-btn" hidden>레퍼런스</button>
+          <button id="jsonBtn" class="text-btn toolbar-command" title="프로젝트 저장 준비 (⌘S)"><i data-lucide="save" aria-hidden="true"></i><span>저장</span></button>
+          <details class="toolbar-menu project-menu" id="projectMenu">
+            <summary><i data-lucide="folder-kanban" aria-hidden="true"></i><span>프로젝트</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="toolbar-menu-popover">
+              <button id="newBtn" class="text-btn"><i data-lucide="file-plus-2" aria-hidden="true"></i><span>새 프로젝트</span></button>
+              <button id="scenarioBtn" class="text-btn"><i data-lucide="scroll-text" aria-hidden="true"></i><span>시나리오·콘티</span></button>
+              <button id="importBtn" class="text-btn"><i data-lucide="folder-open" aria-hidden="true"></i><span>불러오기</span></button>
+              <button id="shareBtn" class="text-btn"><i data-lucide="share-2" aria-hidden="true"></i><span>링크로 공유하기</span></button>
+              <input id="importInput" type="file" accept="application/json,.json" hidden />
+            </div>
+          </details>
+          <details class="toolbar-menu" id="exportMenu">
+            <summary><i data-lucide="share-2" aria-hidden="true"></i><span>내보내기</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="toolbar-menu-popover">
+              <button id="frameBtn" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
+              <button id="framePairBtn" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝 프레임</span></button>
+              <button id="videoBtn" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>카메라 영상</span></button>
+            </div>
+          </details>
+        </div>
+      </header>
+      <div id="appToast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
+      <div id="tutorialOverlay" class="tutorial-overlay" hidden aria-hidden="true">
+        <div id="tutorialSpotlight" class="tutorial-spotlight" aria-hidden="true"></div>
+        <section id="tutorialCard" class="tutorial-card" role="dialog" aria-modal="false" aria-labelledby="tutorialTitle" tabindex="-1">
+          <header class="tutorial-card-head">
+            <div>
+              <span class="tutorial-kicker">처음 사용 가이드</span>
+              <strong id="tutorialStepCount">1 / 12</strong>
+            </div>
+            <button id="tutorialCloseBtn" class="icon-btn" type="button" title="튜토리얼 닫기" aria-label="튜토리얼 닫기"><i data-lucide="x">×</i></button>
+          </header>
+          <div id="tutorialProgress" class="tutorial-progress" aria-label="튜토리얼 진행률"></div>
+          <div class="tutorial-copy">
+            <h2 id="tutorialTitle">FrisFrame 시작하기</h2>
+            <p id="tutorialBody"></p>
+            <div class="tutorial-try">
+              <i data-lucide="mouse-pointer-2" aria-hidden="true"></i>
+              <span id="tutorialTryText"></span>
+            </div>
+          </div>
+          <footer class="tutorial-actions">
+            <button id="tutorialSkipBtn" class="text-btn" type="button">건너뛰기</button>
+            <div>
+              <button id="tutorialPrevBtn" class="icon-btn" type="button" title="이전 단계" aria-label="이전 단계"><i data-lucide="chevron-left">‹</i></button>
+              <button id="tutorialNextBtn" class="primary-btn" type="button"><span>다음</span><i data-lucide="chevron-right" aria-hidden="true">›</i></button>
+            </div>
+          </footer>
+        </section>
+      </div>
+
+      <section id="storyboardScreen" class="storyboard-screen" hidden>
+        <aside class="storyboard-scenes">
+          <header class="storyboard-panel-head">
+            <div>
+              <span class="section-kicker">프로젝트</span>
+              <strong id="storyboardProjectTitle">새 프로젝트</strong>
+            </div>
+            <button id="editScenarioBtn" class="icon-btn" type="button" title="시나리오와 콘티 편집" aria-label="시나리오와 콘티 편집"><i data-lucide="pencil">✎</i></button>
+          </header>
+          <p id="storyboardLogline" class="storyboard-logline">로그라인 없음</p>
+          <div class="storyboard-list-head">
+            <span>씬</span>
+            <button id="addSceneBtn" type="button" class="icon-btn" title="씬 추가" aria-label="씬 추가"><i data-lucide="plus">＋</i></button>
+          </div>
+          <div id="storyboardSceneList" class="storyboard-scene-list"></div>
+        </aside>
+
+        <main class="storyboard-board">
+          <header class="storyboard-board-head">
+            <div>
+              <span id="activeSceneNumber" class="section-kicker">장면 1</span>
+              <input id="activeSceneHeading" class="storyboard-heading-input" type="text" value="장면 1" aria-label="씬 제목" />
+              <textarea id="activeSceneSynopsis" rows="2" placeholder="이 씬에서 일어나는 일을 짧게 정리하세요."></textarea>
+            </div>
+            <div class="storyboard-board-actions">
+              <div class="storyboard-scope-switch" id="storyboardScopeSwitch" aria-label="스토리보드 범위">
+                <button type="button" data-storyboard-scope="scene" class="is-active">현재 씬</button>
+                <button type="button" data-storyboard-scope="project">전체 시나리오</button>
+              </div>
+              <select id="storyboardStatusFilter" aria-label="컷 상태 필터">
+                <option value="all">전체 상태</option>
+                <option value="draft">초안</option>
+                <option value="blocking">블로킹 중</option>
+                <option value="review">검토 필요</option>
+                <option value="approved">확정</option>
+              </select>
+              <details id="contactSheetMenu" class="storyboard-board-menu">
+                <summary><i data-lucide="layout-grid" aria-hidden="true"></i><span>이미지 묶기</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+                <div class="storyboard-board-menu-popover">
+                  <span id="contactSheetScopeLabel">현재 씬 기준</span>
+                  <button type="button" data-contact-sheet-size="4"><i data-lucide="grid-2x2" aria-hidden="true"></i><span>4컷 · 2×2</span></button>
+                  <button type="button" data-contact-sheet-size="6"><i data-lucide="layout-grid" aria-hidden="true"></i><span>6컷 · 3×2</span></button>
+                  <button type="button" data-contact-sheet-size="12"><i data-lucide="grid-3x3" aria-hidden="true"></i><span>12컷 · 4×3</span></button>
+                </div>
+              </details>
+              <button id="addCutBtn" type="button" class="primary-btn"><i data-lucide="plus" aria-hidden="true"></i><span>컷 추가</span></button>
+            </div>
+          </header>
+          <div id="storyboardWarnings" class="storyboard-warnings" hidden></div>
+          <div id="storyboardCutGrid" class="storyboard-cut-grid"></div>
+        </main>
+
+        <aside class="storyboard-inspector">
+          <header class="storyboard-panel-head">
+            <div>
+              <span class="section-kicker">선택한 컷</span>
+              <strong id="selectedCutCode">S01 · C01</strong>
+            </div>
+            <button id="selectedCutIssueCount" class="issue-count" type="button" aria-expanded="false">0 확인</button>
+          </header>
+          <div id="selectedCutIssueList" class="selected-cut-issue-list" hidden></div>
+          <label class="stack-field">
+            <span>진행 상태</span>
+            <select id="cutStatusInput">
+              <option value="draft">초안</option>
+              <option value="blocking">블로킹 중</option>
+              <option value="review">검토 필요</option>
+              <option value="approved">확정</option>
+            </select>
+          </label>
+          <label class="stack-field">
+            <span>컷 제목</span>
+            <input id="cutTitleInput" type="text" />
+          </label>
+          <label class="stack-field">
+            <span>샷 크기</span>
+            <select id="cutShotTypeInput">
+              <option>미정</option>
+              <option>와이드숏</option>
+              <option>풀숏</option>
+              <option>미디엄숏</option>
+              <option>바스트숏</option>
+              <option>클로즈업</option>
+              <option>익스트림 클로즈업</option>
+              <option>오버숄더</option>
+              <option>투숏</option>
+              <option>인서트</option>
+              <option>POV</option>
+            </select>
+          </label>
+          <label class="stack-field">
+            <span>액션</span>
+            <textarea id="cutActionInput" rows="3" placeholder="인물과 화면에서 일어나는 일"></textarea>
+          </label>
+          <label class="stack-field">
+            <span>대사</span>
+            <textarea id="cutDialogueInput" rows="2" placeholder="이 컷에 해당하는 대사"></textarea>
+          </label>
+          <label class="stack-field">
+            <span>카메라·연출 의도</span>
+            <textarea id="cutIntentInput" rows="3" placeholder="구도, 카메라 움직임, 감정적 의도"></textarea>
+          </label>
+          <label class="stack-field">
+            <span>연속성 메모</span>
+            <textarea id="cutNotesInput" rows="2" placeholder="시선, 손 위치, 소품 등 다음 컷과 이어질 요소"></textarea>
+          </label>
+          <div class="storyboard-cut-actions">
+            <button id="openCutBtn" type="button" class="primary-btn"><i data-lucide="box" aria-hidden="true"></i><span>블로킹 열기</span></button>
+            <button id="duplicateCutBtn" type="button" class="text-btn"><i data-lucide="copy" aria-hidden="true"></i><span>복제</span></button>
+            <button id="deleteCutBtn" type="button" class="danger-btn"><i data-lucide="trash-2" aria-hidden="true"></i><span>삭제</span></button>
+          </div>
+        </aside>
+      </section>
+
+      <aside class="left-panel panel">
+        <details class="compact-details mobile-collapsible" data-mobile-collapsible open>
+          <summary>무대</summary>
+          <div class="segmented" id="aspectButtons" aria-label="화면비">
+            <button data-aspect="16:9" class="is-active">16:9</button>
+            <button data-aspect="9:16">9:16</button>
+            <button data-aspect="4:3">4:3</button>
+            <button data-aspect="1:1">1:1</button>
+            <button data-aspect="3:4">3:4</button>
+          </div>
+          <label class="toggle-row">
+            <span>격자</span>
+            <input id="gridToggle" type="checkbox" checked />
+          </label>
+          <label class="toggle-row">
+            <span>이름</span>
+            <input id="namesToggle" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>카메라 시야</span>
+            <input id="cameraToggle" type="checkbox" checked />
+          </label>
+          <label class="toggle-row">
+            <span>깨끗한 출력</span>
+            <input id="cleanExportToggle" type="checkbox" checked />
+          </label>
+        </details>
+
+        <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible open>
+          <summary>카메라</summary>
+          <label class="range-row">
+            <span>렌즈</span>
+            <strong id="focalValue">85mm</strong>
+            <input id="focalSlider" type="range" min="14" max="135" step="1" value="85" />
+          </label>
+          <label class="range-row">
+            <span>카메라 높이</span>
+            <strong id="cameraHeightValue">1.6m</strong>
+            <input id="cameraHeightSlider" type="range" min="0.4" max="3" step="0.05" value="1.6" />
+          </label>
+          <label class="range-row">
+            <span>팬</span>
+            <strong id="cameraPanValue">180°</strong>
+            <input id="cameraPanSlider" type="range" min="0" max="359" step="1" value="180" />
+          </label>
+          <label class="range-row">
+            <span>틸트</span>
+            <strong id="cameraTiltValue">0°</strong>
+            <input id="cameraTiltSlider" type="range" min="-60" max="60" step="1" value="0" />
+          </label>
+          <label class="stack-field tracking-field">
+            <span>피사체 추적</span>
+            <select id="trackingTargetSelect" title="카메라가 계속 화면 중심에 둘 배우나 소품">
+              <option value="">추적 안 함</option>
+            </select>
+          </label>
+          <div class="preset-grid" id="focalPresets">
+            <button data-focal="14">14</button>
+            <button data-focal="24">24</button>
+            <button data-focal="35">35</button>
+            <button data-focal="50">50</button>
+            <button data-focal="85" class="is-active">85</button>
+            <button data-focal="135">135</button>
+          </div>
+        </details>
+
+        <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed" open>
+          <summary>배우</summary>
+          <form id="actorForm" class="add-row">
+            <input id="actorName" type="text" placeholder="@ 배우 이름" autocomplete="off" />
+            <button title="배우 추가"><i data-lucide="plus" aria-hidden="true"></i><span>추가</span></button>
+          </form>
+          <div id="actorList" class="object-list"></div>
+        </details>
+
+        <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed" open>
+          <summary>소품</summary>
+          <form id="propForm" class="prop-add-form">
+            <select id="propAssetSelect" aria-label="소품 유형"></select>
+            <input id="propName" type="text" placeholder="@ 소품 이름" autocomplete="off" />
+            <button title="소품 추가"><i data-lucide="plus" aria-hidden="true"></i><span>추가</span></button>
+          </form>
+          <div class="space-preset-block">
+            <span>공간 프리셋</span>
+            <div id="environmentPresetButtons" class="space-preset-grid"></div>
+          </div>
+          <div id="propList" class="object-list"></div>
+        </details>
+      </aside>
+
+      <main class="workspace">
+        <div class="canvas-wrap">
+          <canvas id="stageCanvas" aria-label="무대 블로킹 캔버스"></canvas>
+          <div id="threeWrap" class="three-wrap" hidden>
+            <canvas id="threeCanvas" aria-label="3D 무대 블로킹 보기"></canvas>
+            <div class="three-hud" id="threeHud">
+              <div class="three-hud-status">
+                <strong>3D 블로킹</strong>
+                <span id="threeHudMeta">16:9 · 위치 편집</span>
+              </div>
+              <div class="three-legend" aria-label="3D 요소 구분">
+                <span data-three-role="actor"><i></i>배우</span>
+                <span data-three-role="prop"><i></i>소품</span>
+                <span data-three-role="camera"><i></i>카메라</span>
+                <span data-three-role="path"><i></i>동선</span>
+              </div>
+            </div>
+            <div class="three-editbar" aria-label="3D 편집 방식">
+              <button type="button" data-three-mode="move" class="is-active">이동</button>
+              <button type="button" data-three-mode="rotate">방향</button>
+              <button type="button" data-three-mode="view">시점</button>
+              <span id="threeSelectionLabel">선택 없음</span>
+            </div>
+            <div class="camera-frame" id="cameraFrame">
+              <div class="camera-frame-top">
+                <span>카메라 프레임</span>
+                <span id="cameraFrameMeta">85mm · H 1.6m · P 180° · T 0°</span>
+              </div>
+              <canvas id="cameraFrameCanvas" aria-label="카메라 프레임 미리보기"></canvas>
+            </div>
+          </div>
+        </div>
+        <section class="timeline panel">
+          <div class="timeline-main">
+            <div class="timeline-mode" id="timelineMode" aria-label="키프레임 보기 방식">
+              <button type="button" data-timeline-view="combined" class="is-active">통합</button>
+              <button type="button" data-timeline-view="split">대상별</button>
+            </div>
+            <button id="addKeyBtn" class="text-btn" title="현재 키 추가 (K)"><i data-lucide="key-round" aria-hidden="true"></i><span>현재 키 추가</span></button>
+            <button id="updateKeyBtn" class="text-btn" title="선택 키 갱신 (Shift+K)"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>선택 키 갱신</span></button>
+            <button id="deleteKeyBtn" class="text-btn"><i data-lucide="trash-2" aria-hidden="true"></i><span>삭제</span></button>
+          <button id="playBtn" class="icon-btn" title="동선 재생 (Space)" aria-label="동선 재생"><i data-lucide="play">▶</i></button>
+          <button id="stopBtn" class="icon-btn" title="정지" aria-label="정지"><i data-lucide="square">■</i></button>
+          </div>
+          <div class="timeline-fields">
+            <label class="compact-field source-field">
+              <span>대상</span>
+              <select id="keySourceSelect"></select>
+            </label>
+            <label class="compact-field">
+              <span>현재 시간</span>
+              <input id="keyTimeInput" type="number" min="0" max="60" step="0.1" value="0" />
+            </label>
+            <label class="compact-field">
+              <span>도착</span>
+              <select id="keyTransitionSelect" title="이 키에 도착하는 이동 방식">
+                <option value="smooth">부드럽게</option>
+                <option value="linear">일정 속도</option>
+                <option value="hold">직전 유지</option>
+                <option value="cut">즉시 전환</option>
+              </select>
+            </label>
+            <label class="compact-field path-field">
+              <span>경로</span>
+              <select id="keyPathSelect" title="새 키 또는 선택한 키로 들어오는 공간 경로">
+                <option value="straight">정확한 직선</option>
+                <option value="horizontal">수평 직선</option>
+                <option value="vertical">수직 직선</option>
+                <option value="arc-left">원호 왼쪽</option>
+                <option value="arc-right">원호 오른쪽</option>
+                <option value="free-curve">자유 곡선</option>
+                <option value="drone">드론 비행</option>
+                <option value="jib-up">지미집 상승</option>
+                <option value="jib-down">지미집 하강</option>
+              </select>
+            </label>
+            <label class="compact-field">
+              <span>전체 시간</span>
+              <input id="durationInput" type="number" min="1" max="60" step="1" value="15" />
+            </label>
+            <label class="compact-field">
+              <span>FPS</span>
+              <input id="fpsInput" type="number" min="12" max="60" step="1" value="24" />
+            </label>
+          </div>
+          <div class="timeline-track" id="timelineTrack" aria-label="동선 타임라인">
+            <div class="timeline-progress" id="timelineProgress"></div>
+            <div id="timelineMarkers"></div>
+          </div>
+          <div id="sourceTimelineList" class="source-timeline-list" aria-label="대상별 타임라인"></div>
+          <div class="timeline-hint" id="timelineHint">키 0 · 15초 · 24 FPS</div>
+          <div id="keyStatus" class="status-line">키프레임 없음</div>
+        </section>
+      </main>
+
+      <aside class="right-panel panel">
+        <details id="propertiesPanel" class="compact-details mobile-collapsible" data-mobile-collapsible open>
+          <summary>속성</summary>
+          <div id="selectionEmpty" class="empty-state">배우, 소품, 카메라를 선택하세요.</div>
+          <div id="propertiesForm" class="properties-form" hidden>
+            <label class="stack-field">
+              <span>이름</span>
+              <input id="selectedName" type="text" />
+            </label>
+
+            <details class="mini-details">
+              <summary>색 / 표시</summary>
+              <div>
+                <span class="field-label">색</span>
+                <div id="colorSwatches" class="swatches"></div>
+              </div>
+
+              <div id="shapeField">
+                <span class="field-label">모양</span>
+                <div id="shapeButtons" class="shape-grid"></div>
+              </div>
+            </details>
+
+            <label class="range-row">
+              <span>크기</span>
+              <strong id="sizeValue">1.00x</strong>
+              <input id="sizeSlider" type="range" min="0.25" max="4" step="0.01" value="1" />
+            </label>
+
+            <div id="propSpecificFields" class="property-subgroup" hidden>
+              <label class="stack-field">
+                <span>소품 유형</span>
+                <select id="selectedPropAsset"></select>
+              </label>
+              <div class="dimension-grid">
+                <label>
+                  <span>길이</span>
+                  <input id="propScaleX" type="range" min="0.25" max="3.5" step="0.05" value="1" />
+                  <strong id="propScaleXValue">1.00x</strong>
+                </label>
+                <label>
+                  <span>높이</span>
+                  <input id="propScaleY" type="range" min="0.25" max="3.5" step="0.05" value="1" />
+                  <strong id="propScaleYValue">1.00x</strong>
+                </label>
+                <label>
+                  <span>너비</span>
+                  <input id="propScaleZ" type="range" min="0.25" max="3.5" step="0.05" value="1" />
+                  <strong id="propScaleZValue">1.00x</strong>
+                </label>
+              </div>
+              <label class="toggle-row compact-toggle-row">
+                <span>동선 타임라인</span>
+                <input id="propMotionToggle" type="checkbox" checked />
+              </label>
+            </div>
+
+            <div id="actorPlacementFields" class="property-subgroup" hidden>
+              <label class="stack-field">
+                <span>탑승 방식</span>
+                <select id="actorPlacementMode">
+                  <option value="manual">수동 탑승</option>
+                  <option value="auto">자동 탑승</option>
+                </select>
+              </label>
+              <div id="autoMountFields" class="auto-mount-fields" hidden>
+                <label class="stack-field">
+                  <span>차량</span>
+                  <select id="actorMountSelect"></select>
+                </label>
+                <label id="actorSeatRow" class="stack-field" hidden>
+                  <span>좌석</span>
+                  <select id="actorSeatSelect"></select>
+                </label>
+              </div>
+            </div>
+
+            <div id="manualGroupFields" class="property-subgroup">
+              <div class="manual-group-summary">
+                <span>묶음</span>
+                <strong id="manualGroupStatus">개별 대상</strong>
+              </div>
+              <div class="button-row manual-group-actions">
+                <button id="groupOverlapBtn" type="button" class="text-btn"><i data-lucide="combine" aria-hidden="true"></i><span>겹친 대상 묶기</span></button>
+                <button id="ungroupBtn" type="button" class="text-btn" disabled><i data-lucide="ungroup" aria-hidden="true"></i><span>해제</span></button>
+              </div>
+            </div>
+
+            <label class="range-row">
+              <span>방향</span>
+              <strong id="facingValue">0°</strong>
+              <input id="facingSlider" type="range" min="0" max="359" step="1" value="0" />
+            </label>
+
+            <details class="mini-details">
+              <summary>방향 / 위치 버튼</summary>
+              <div>
+                <span class="field-label">바라보기</span>
+                <div class="facing-grid" aria-label="선택 대상 방향 설정">
+                  <button data-facing="270">↑</button>
+                  <button data-facing="315">↗</button>
+                  <button data-facing="0">→</button>
+                  <button data-facing="45">↘</button>
+                  <button data-facing="90">↓</button>
+                  <button data-facing="135">↙</button>
+                  <button data-facing="180">←</button>
+                  <button data-facing="225">↖</button>
+                </div>
+              </div>
+
+              <div>
+                <span class="field-label">미세 이동</span>
+                <div class="nudge-grid" aria-label="선택 대상 미세 이동">
+                  <button data-nudge="0,-1">↑</button>
+                  <button data-nudge="1,-1">↗</button>
+                  <button data-nudge="1,0">→</button>
+                  <button data-nudge="1,1">↘</button>
+                  <button data-nudge="0,1">↓</button>
+                  <button data-nudge="-1,1">↙</button>
+                  <button data-nudge="-1,0">←</button>
+                  <button data-nudge="-1,-1">↖</button>
+                </div>
+              </div>
+            </details>
+
+            <div class="button-row">
+              <button id="duplicateBtn" class="text-btn"><i data-lucide="copy" aria-hidden="true"></i><span>복제</span></button>
+              <button id="deleteBtn" class="danger-btn"><i data-lucide="trash-2" aria-hidden="true"></i><span>삭제</span></button>
+            </div>
+          </div>
+        </details>
+
+        <details id="cameraProperties" class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="open" open>
+          <summary>컷 노트</summary>
+          <label class="stack-field">
+            <span>컷 제목</span>
+            <input id="sceneTitle" type="text" value="새 블로킹" />
+          </label>
+          <label class="stack-field">
+            <span>의도</span>
+            <textarea id="sceneIntent" rows="4">이 프리비즈는 카메라, 배우, 소품의 관계와 움직임을 설계합니다. 최종 결과는 다이어그램이 아니라 영화적인 실사 장면이어야 합니다.</textarea>
+          </label>
+        </details>
+
+        <details id="videoDraftPanel" class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed" hidden>
+          <summary>레퍼런스에서 초안</summary>
+          <p class="video-draft-copy">영상은 카메라·배우 동선을, 이미지는 인물·주요 오브젝트의 3D 배치 초안을 만듭니다.</p>
+          <label class="video-file-picker" for="referenceFile">
+            <span>영상 또는 이미지</span>
+            <strong id="videoFileLabel">파일 선택</strong>
+            <input id="referenceFile" type="file" accept="video/*,image/*" />
+          </label>
+          <div id="referencePreviewWrap" class="reference-preview-wrap" hidden>
+            <video id="referencePreview" class="reference-preview" controls muted playsinline></video>
+            <img id="referenceImagePreview" class="reference-preview" alt="레퍼런스 이미지 미리보기" hidden />
+            <canvas id="referenceOverlayCanvas" class="reference-overlay" aria-label="영상 분석 오버레이" hidden></canvas>
+          </div>
+          <div id="referenceFrameBar" class="reference-frame-bar" hidden>
+            <strong id="referenceFrameTime">0.0s</strong>
+            <button id="useReferenceTimeBtn" type="button" class="text-btn">프레임 시간 적용</button>
+          </div>
+          <div id="referenceRange" class="reference-range" hidden>
+            <div class="reference-range-head">
+              <span>분석 구간</span>
+              <strong id="referenceRangeText">0.0s - 0.0s</strong>
+            </div>
+            <div class="reference-range-actions">
+              <button id="setReferenceStartBtn" type="button" class="text-btn">현재를 시작점</button>
+              <button id="setReferenceEndBtn" type="button" class="text-btn">현재를 끝점</button>
+            </div>
+          </div>
+          <div class="video-analysis-fields">
+            <label class="stack-field trace-actor-field">
+              <span>최소 추적 배우</span>
+              <select id="traceActorCount">
+                <option value="1" selected>1명</option>
+                <option value="2">2명</option>
+                <option value="3">3명</option>
+                <option value="4">4명</option>
+                <option value="5">5명</option>
+                <option value="6">6명</option>
+                <option value="7">7명</option>
+                <option value="8">8명</option>
+              </select>
+            </label>
+            <label class="stack-field trace-actor-field">
+              <span>분석 정밀도</span>
+              <select id="analysisPrecision">
+                <option value="detailed" selected>정밀</option>
+                <option value="fast">빠르게</option>
+              </select>
+            </label>
+          </div>
+          <details class="mini-details analysis-calibration">
+            <summary>3D 공간 보정</summary>
+            <label class="toggle-row">
+              <span>분석 오버레이</span>
+              <input id="referenceOverlayToggle" type="checkbox" checked />
+            </label>
+            <label class="toggle-row">
+              <span>현재 배우 배치에서 시작</span>
+              <input id="calibrationAnchorToggle" type="checkbox" checked />
+            </label>
+            <label class="toggle-row">
+              <span>좌우 반전</span>
+              <input id="calibrationMirrorToggle" type="checkbox" />
+            </label>
+            <div class="calibration-direction">
+              <span>영상 오른쪽을 평면도의</span>
+              <div id="calibrationRotation" class="calibration-direction-buttons" aria-label="동선 방향">
+                <button type="button" data-calibration-rotation="0" class="is-active" title="오른쪽">→</button>
+                <button type="button" data-calibration-rotation="90" title="아래">↓</button>
+                <button type="button" data-calibration-rotation="180" title="왼쪽">←</button>
+                <button type="button" data-calibration-rotation="270" title="위">↑</button>
+              </div>
+            </div>
+            <label class="stack-field calibration-select">
+              <span>카메라 해석</span>
+              <select id="calibrationCameraInterpretation">
+                <option value="rotation">회전 중심</option>
+                <option value="balanced" selected>균형</option>
+                <option value="movement">이동 중심</option>
+              </select>
+            </label>
+            <label class="range-row calibration-range">
+              <span>동선 폭</span>
+              <strong id="calibrationLateralValue">80%</strong>
+              <input id="calibrationLateralSlider" type="range" min="0.3" max="1.2" step="0.05" value="0.8" />
+            </label>
+            <label class="range-row calibration-range">
+              <span>깊이 범위</span>
+              <strong id="calibrationDepthValue">66%</strong>
+              <input id="calibrationDepthSlider" type="range" min="0.2" max="1.2" step="0.05" value="0.65" />
+            </label>
+            <label class="range-row calibration-range">
+              <span>화면 크기로 깊이 보정</span>
+              <strong id="calibrationSizeDepthValue">10%</strong>
+              <input id="calibrationSizeDepthSlider" type="range" min="0" max="0.3" step="0.02" value="0.1" />
+            </label>
+            <label class="range-row calibration-range">
+              <span>카메라 이동량</span>
+              <strong id="calibrationCameraGainValue">110%</strong>
+              <input id="calibrationCameraGainSlider" type="range" min="0.25" max="2" step="0.05" value="1.1" />
+            </label>
+            <label class="range-row calibration-range">
+              <span>흔들림 정리</span>
+              <strong id="calibrationStabilizationValue">75%</strong>
+              <input id="calibrationStabilizationSlider" type="range" min="0" max="1" step="0.05" value="0.75" />
+            </label>
+            <button id="resetReferenceCalibrationBtn" type="button" class="text-btn calibration-reset">보정 초기화</button>
+          </details>
+          <div class="video-draft-actions">
+            <button id="analyzeReferenceBtn" type="button" class="primary-btn">초안 만들기</button>
+            <button id="clearReferenceBtn" type="button" class="text-btn">레퍼런스 해제</button>
+          </div>
+          <div id="referenceStatus" class="status-line reference-status">영상이 선택되지 않았습니다.</div>
+          <div id="referenceAnalysisSummary" class="reference-analysis-summary" hidden>
+            <div><span>카메라</span><strong id="cameraAnalysisScore"><span id="cameraMotionLabel">--</span><small id="cameraConfidenceValue">--</small></strong></div>
+            <div><span>배우 추적</span><strong id="actorAnalysisScore">--</strong></div>
+            <div><span>장면 전환</span><strong id="sceneCutCount">--</strong></div>
+            <p id="referenceAnalysisNote"></p>
+          </div>
+        </details>
+
+        <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed">
+          <summary>내보내기</summary>
+          <p class="export-panel-copy">3D 카메라 프레임에 보이는 결과를 그대로 출력합니다.</p>
+          <div class="export-panel-actions">
+            <button id="framePanelBtn" type="button" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
+            <button id="framePairPanelBtn" type="button" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝</span></button>
+            <button id="videoPanelBtn" type="button" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>카메라 영상</span></button>
+          </div>
+        </details>
+      </aside>
+    </div>
+
+    <dialog id="scenarioDialog" class="scenario-dialog">
+      <form method="dialog" class="scenario-dialog-inner">
+        <header>
+          <div>
+            <span class="section-kicker">프로젝트 구조 만들기</span>
+            <h2>시나리오와 콘티</h2>
+          </div>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <div class="scenario-meta-grid">
+          <label class="stack-field">
+            <span>프로젝트 제목</span>
+            <input id="scenarioProjectTitle" type="text" />
+          </label>
+          <label class="stack-field">
+            <span>로그라인</span>
+            <input id="scenarioLogline" type="text" placeholder="이야기를 한 문장으로 정리하세요." />
+          </label>
+        </div>
+        <div class="scenario-text-grid">
+          <label class="stack-field">
+            <span>시나리오</span>
+            <textarea id="scenarioTextInput" rows="16" placeholder="INT. 카페 - 낮&#10;수아가 창가에서 누군가를 기다린다."></textarea>
+          </label>
+          <label class="stack-field">
+            <span>콘티 텍스트</span>
+            <textarea id="storyboardTextInput" rows="16" placeholder="컷 1: 와이드&#10;액션: 수아가 창가에 앉아 있다.&#10;카메라: 천천히 밀고 들어간다.&#10;렌즈: 35mm&#10;길이: 4초"></textarea>
+          </label>
+        </div>
+        <section class="structure-preview">
+          <header>
+            <strong>구조 미리보기</strong>
+            <div class="structure-preview-actions">
+              <span id="structurePreviewSummary">구조 분석 전</span>
+              <button id="toggleStructureReviewBtn" type="button" class="text-btn" disabled><i data-lucide="maximize-2" aria-hidden="true"></i><span>검토 확대</span></button>
+            </div>
+          </header>
+          <div id="structurePreviewList" class="structure-preview-list"></div>
+          <p id="structurePreviewWarnings" class="storyboard-warnings" hidden></p>
+        </section>
+        <footer>
+          <label class="compact-field">
+            <span>적용 방식</span>
+            <select id="scenarioApplyMode">
+              <option value="replace">현재 씬 구조 교체</option>
+              <option value="append">기존 프로젝트 뒤에 추가</option>
+            </select>
+          </label>
+          <button id="analyzeStructureBtn" type="button" class="text-btn"><i data-lucide="list-tree" aria-hidden="true"></i><span>구조 분석</span></button>
+          <button id="applyStructureBtn" type="button" class="primary-btn" disabled><i data-lucide="check" aria-hidden="true"></i><span>구조 적용</span></button>
+          <button value="close" class="text-btn">취소</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="exportDialog" class="export-dialog">
+      <form method="dialog" class="export-dialog-inner">
+        <header>
+          <h2>내보내기 프리뷰</h2>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <div id="exportDialogBody" class="export-dialog-body"></div>
+        <footer class="export-dialog-footer">
+          <span class="export-manual-notice">자동 저장 안 함</span>
+          <button id="exportDownloadBtn" type="button" class="primary-btn"><i data-lucide="download" aria-hidden="true"></i><span>이 프리뷰로 저장</span></button>
+          <button value="close" class="text-btn">닫기</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="shareDialog" class="share-dialog">
+      <form method="dialog" class="share-dialog-inner">
+        <header>
+          <h2>프로젝트 웹 공유</h2>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <div class="share-dialog-body">
+          <p>이 프로젝트를 다른 사람들과 공유할 수 있는 링크입니다. 누구나 이 링크로 접속하면 현재 저장된 프로젝트 상태를 그대로 볼 수 있습니다.</p>
+          <div class="share-link-container">
+            <input id="shareLinkInput" type="text" readonly onclick="this.select()" />
+            <button id="copyShareLinkBtn" type="button" class="primary-btn"><i data-lucide="copy" aria-hidden="true"></i><span>복사</span></button>
+          </div>
+        </div>
+        <footer class="share-dialog-footer">
+          <button value="close" class="text-btn">닫기</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="./video-analysis-core.js?v=20260711-14"></script>
+    <script src="./storyboard-core.js?v=20260711-03"></script>
+    <script src="./app.js?v=20260712-16"></script>
+  </body>
+</html>
