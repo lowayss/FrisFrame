@@ -151,6 +151,8 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             str(job["fps"]),
             "-i",
             str(job["directory"] / "frame_%06d.jpg"),
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             "-c:v",
             "libx264",
             "-preset",
