@@ -1975,8 +1975,8 @@ function drawStage(renderState, rect, options = {}) {
 
 function stageWorldSize(renderState = state) {
   const ratio = aspectMap[renderState.aspect] || 16 / 9;
-  if (ratio >= 1) return { width: 12, depth: 12 / ratio };
-  return { width: 12 * ratio, depth: 12 };
+  if (ratio >= 1) return { width: 24, depth: 24 / ratio };
+  return { width: 24 * ratio, depth: 24 };
 }
 
 function mapToWorld(point, renderState = state, y = 0) {
@@ -7325,6 +7325,7 @@ $("#trackingTargetSelect").addEventListener("change", (event) => {
 });
 
 $("#focalSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   state.camera.focal = Number(event.target.value);
   $("#focalValue").value = state.camera.focal;
   selected = { kind: "camera" };
@@ -7337,6 +7338,7 @@ $("#focalSlider").addEventListener("input", (event) => {
 $("#focalSlider").addEventListener("change", commit);
 
 $("#focalValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, 14, 135);
@@ -7351,6 +7353,7 @@ $("#focalValue").addEventListener("input", (event) => {
 $("#focalValue").addEventListener("change", commit);
 
 $("#cameraHeightSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   state.camera.height = Number(event.target.value);
   applyCameraTracking(state);
   syncCameraDerivedAim(state.camera, state);
@@ -7365,6 +7368,7 @@ $("#cameraHeightSlider").addEventListener("input", (event) => {
 $("#cameraHeightSlider").addEventListener("change", commit);
 
 $("#cameraHeightValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, 0.4, 3);
@@ -7381,6 +7385,7 @@ $("#cameraHeightValue").addEventListener("input", (event) => {
 $("#cameraHeightValue").addEventListener("change", commit);
 
 $("#cameraPanSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   state.camera.panDeg = normalizePanDeg(event.target.value);
   syncCameraDerivedAim(state.camera, state);
   $("#cameraPanValue").value = Math.round(state.camera.panDeg);
@@ -7394,6 +7399,7 @@ $("#cameraPanSlider").addEventListener("input", (event) => {
 $("#cameraPanSlider").addEventListener("change", commit);
 
 $("#cameraPanValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = normalizePanDeg(val);
@@ -7409,6 +7415,7 @@ $("#cameraPanValue").addEventListener("input", (event) => {
 $("#cameraPanValue").addEventListener("change", commit);
 
 $("#cameraTiltSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   state.camera.tiltDeg = clamp(Number(event.target.value), -60, 60);
   syncCameraDerivedAim(state.camera, state);
   $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
@@ -7422,6 +7429,7 @@ $("#cameraTiltSlider").addEventListener("input", (event) => {
 $("#cameraTiltSlider").addEventListener("change", commit);
 
 $("#cameraTiltValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, -60, 60);
@@ -7439,6 +7447,7 @@ $("#cameraTiltValue").addEventListener("change", commit);
 $("#focalPresets").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-focal]");
   if (!button) return;
+  materializeEvaluatedViewForEditing();
   state.camera.focal = Number(button.dataset.focal);
   selected = { kind: "camera" };
   setActiveSource("camera");
@@ -7542,6 +7551,7 @@ $("#selectedName").addEventListener("input", (event) => {
 $("#selectedName").addEventListener("change", commit);
 
 $("#sizeSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   item.size = Number(event.target.value);
@@ -7552,6 +7562,7 @@ $("#sizeSlider").addEventListener("input", (event) => {
 $("#sizeSlider").addEventListener("change", commit);
 
 $("#sizeValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   let val = Number(event.target.value);
@@ -7565,6 +7576,7 @@ $("#sizeValue").addEventListener("input", (event) => {
 $("#sizeValue").addEventListener("change", commit);
 
 $("#selectedPropAsset").addEventListener("change", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item || item.type !== "prop" || !propCatalog[event.target.value]) return;
   if (isVehicleProp(item) && propDefinition(event.target.value).kind !== "vehicle") {
@@ -7576,6 +7588,7 @@ $("#selectedPropAsset").addEventListener("change", (event) => {
 });
 
 $("#propMotionToggle").addEventListener("change", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item || item.type !== "prop") return;
   item.motionEnabled = event.target.checked;
@@ -7585,6 +7598,7 @@ $("#propMotionToggle").addEventListener("change", (event) => {
 
 [["X", "scaleX"], ["Y", "scaleY"], ["Z", "scaleZ"]].forEach(([axis, field]) => {
   $("#propScale" + axis).addEventListener("input", (event) => {
+    materializeEvaluatedViewForEditing();
     const item = selectedItem();
     if (!item || item.type !== "prop") return;
     item[field] = Number(event.target.value);
@@ -7594,6 +7608,7 @@ $("#propMotionToggle").addEventListener("change", (event) => {
   $("#propScale" + axis).addEventListener("change", commit);
 
   $("#propScale" + axis + "Value").addEventListener("input", (event) => {
+    materializeEvaluatedViewForEditing();
     const item = selectedItem();
     if (!item || item.type !== "prop") return;
     let val = Number(event.target.value);
@@ -7607,6 +7622,7 @@ $("#propMotionToggle").addEventListener("change", (event) => {
 });
 
 $("#actorPlacementMode").addEventListener("change", (event) => {
+  materializeEvaluatedViewForEditing();
   const actor = selectedItem();
   if (!actor || actor.type !== "actor") return;
   const nextMode = event.target.value === "auto" ? "auto" : "manual";
@@ -7631,6 +7647,7 @@ $("#actorPlacementMode").addEventListener("change", (event) => {
 });
 
 $("#actorMountSelect").addEventListener("change", (event) => {
+  materializeEvaluatedViewForEditing();
   const actor = selectedItem();
   if (!actor || actor.type !== "actor" || actor.placementMode !== "auto") return;
   const vehicle = state.items.find((item) => item.id === event.target.value && isVehicleProp(item));
@@ -7648,6 +7665,7 @@ $("#actorMountSelect").addEventListener("change", (event) => {
 });
 
 $("#actorSeatSelect").addEventListener("change", (event) => {
+  materializeEvaluatedViewForEditing();
   const actor = selectedItem();
   if (!actor || actor.type !== "actor" || actor.placementMode !== "auto" || !actor.mountId) return;
   actor.seatIndex = Math.max(0, Number(event.target.value) || 0);
@@ -7656,6 +7674,7 @@ $("#actorSeatSelect").addEventListener("change", (event) => {
 });
 
 $("#groupOverlapBtn").addEventListener("click", () => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   const candidates = overlappingItemsForGroup(item, state);
@@ -7668,6 +7687,7 @@ $("#groupOverlapBtn").addEventListener("click", () => {
 });
 
 $("#ungroupBtn").addEventListener("click", () => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   const group = item ? groupForItem(item.id, state) : null;
   if (!group) return;
@@ -7679,6 +7699,7 @@ $("#ungroupBtn").addEventListener("click", () => {
 });
 
 $("#facingSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
@@ -7690,6 +7711,7 @@ $("#facingSlider").addEventListener("input", (event) => {
 $("#facingSlider").addEventListener("change", commit);
 
 $("#facingValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
@@ -7706,6 +7728,7 @@ $(".facing-grid").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-facing]");
   const item = selectedItem();
   if (!button || !item) return;
+  materializeEvaluatedViewForEditing();
   const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
   target.facing = Number(button.dataset.facing);
   selected = { kind: "item", id: item.id };
