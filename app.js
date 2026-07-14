@@ -3342,10 +3342,10 @@ function updateThreeCamera(renderState = state) {
   if (!threeView?.ready) return;
   const orbit = threeView.orbit;
   const radius = orbit.radius;
-  const phi = clamp(orbit.phi, 0.05, 1.48);
+  const phi = clamp(orbit.phi, -0.85, 1.48);
   const target = orbit.target || new window.THREE.Vector3(0, 0.15, 0);
   const x = target.x + Math.cos(orbit.theta) * Math.cos(phi) * radius;
-  const y = target.y + Math.sin(phi) * radius + 2.25;
+  const y = Math.max(0.12, target.y + Math.sin(phi) * radius + 2.25);
   const z = target.z + Math.sin(orbit.theta) * Math.cos(phi) * radius;
   threeView.camera.position.set(x, y, z);
   threeView.camera.lookAt(target.x, target.y, target.z);
@@ -3481,7 +3481,7 @@ function updateThreeDrag(event) {
   
   if (threeDrag.kind === "orbit") {
     threeView.orbit.theta = threeDrag.theta - dx * 0.0024;
-    threeView.orbit.phi = clamp(threeDrag.phi + dy * 0.0016, 0.05, 1.48);
+    threeView.orbit.phi = clamp(threeDrag.phi + dy * 0.0016, -0.85, 1.48);
   } else if (threeDrag.kind === "pan") {
     const factor = (threeDrag.radius / 800) * 1.5;
     const right = new window.THREE.Vector3(1, 0, 0).applyQuaternion(threeView.camera.quaternion);
