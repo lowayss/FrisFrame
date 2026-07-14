@@ -2212,7 +2212,7 @@ function initThreeView() {
     frameRenderer,
     cameraRigHelper: null,
     raycaster,
-    orbit: { theta: -0.62, phi: 0.68, radius: 21.3, target: new THREE.Vector3(0, 0.15, 0) },
+    orbit: { theta: -0.62, phi: 0.68, radius: 21.3, target: new THREE.Vector3(0, 1.15, 0) },
     lastState: null,
   };
 
@@ -3384,9 +3384,9 @@ function updateThreeCamera(renderState = state) {
   const orbit = threeView.orbit;
   const radius = orbit.radius;
   const phi = clamp(orbit.phi, -0.85, 1.48);
-  const target = orbit.target || new window.THREE.Vector3(0, 0.15, 0);
+  const target = orbit.target || new window.THREE.Vector3(0, 1.15, 0);
   const x = target.x + Math.cos(orbit.theta) * Math.cos(phi) * radius;
-  const y = Math.max(0.12, target.y + Math.sin(phi) * radius + 2.25);
+  const y = Math.max(0.12, target.y + Math.sin(phi) * radius);
   const z = target.z + Math.sin(orbit.theta) * Math.cos(phi) * radius;
   threeView.camera.position.set(x, y, z);
   threeView.camera.lookAt(target.x, target.y, target.z);
@@ -3501,7 +3501,7 @@ function beginThreeDrag(event) {
     theta: threeView.orbit.theta,
     phi: threeView.orbit.phi,
     radius: threeView.orbit.radius,
-    targetStart: (threeView.orbit.target || new window.THREE.Vector3(0, 0.15, 0)).clone()
+    targetStart: (threeView.orbit.target || new window.THREE.Vector3(0, 1.15, 0)).clone()
   };
   threeView.canvas.dataset.navMode = dragKind;
   threeView.canvas.setPointerCapture(event.pointerId);
@@ -3534,7 +3534,7 @@ function updateThreeDrag(event) {
     newTarget.addScaledVector(up, dy * factor);
     
     if (!threeView.orbit.target) {
-      threeView.orbit.target = new window.THREE.Vector3(0, 0.15, 0);
+      threeView.orbit.target = new window.THREE.Vector3(0, 1.15, 0);
     }
     threeView.orbit.target.copy(newTarget);
   } else if (threeDrag.kind === "zoom") {
