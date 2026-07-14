@@ -26,7 +26,7 @@ python3 quality_check.py
 
 ## macOS 데스크톱 앱
 
-Apple Silicon용 설치 이미지는 `release/FrisFrame-0.2.3-arm64.dmg`입니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
+Apple Silicon용 설치 이미지는 `release/FrisFrame-0.2.4-arm64.dmg`입니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
 
 기존 로컬 서버 프로젝트를 데스크톱 앱으로 처음 옮기고 패키지를 다시 만드는 명령은 다음과 같습니다.
 
@@ -154,3 +154,47 @@ python3 add_license.py --owner "사용자 이름"
 ```
 
 서버는 앱에 필요한 정적 파일만 허용하며 DB, 서버 코드와 Git 내부 파일을 제공하지 않습니다. 공유 프로젝트는 소유자 세션 또는 링크의 별도 공유 토큰이 있어야 열립니다.
+
+## Model Context Protocol (MCP) 연동
+
+FrisFrame은 AI 모델(예: Claude Desktop, Cursor 등)이 자연어 명령으로 프로젝트 데이터를 직접 제어하고 컷을 구성할 수 있도록 지원하는 표준 MCP 서버를 내장하고 있습니다.
+
+### MCP 서버 실행 및 테스트
+
+별도의 외부 라이브러리 설치 없이 파이썬 표준 라이브러리(Stdio 채널)만을 이용하여 가볍고 안전하게 실행됩니다.
+
+* **동작 검증 (스모크 테스트)**:
+  ```bash
+  python3 tests/mcp-server-smoke.py
+  ```
+* **제공하는 AI 도구(Tools)**:
+  - `list_projects`: 데이터베이스 내 프로젝트 목록 나열
+  - `get_project`: 특정 프로젝트 JSON 문서 로드
+  - `create_project`: 신규 프리비즈 프로젝트 생성
+  - `save_project`: 수정된 프로젝트 JSON 저장 및 백업 리비전 생성
+  - `create_cut`: 지시어 분석 기반 카메라 자동 가배치를 포함하여 스토리보드 컷 추가
+  - `update_camera_blocking`: 특정 컷의 3D 카메라 매개변수(위치, 높이, 각도, 화각) 미세 수정
+  - `add_actor_to_cut`: 3D 프리비즈 씬에 신규 배우 추가
+
+### Claude Desktop 연동 설정
+
+`~/Library/Application Support/Claude/claude_desktop_config.json` 설정 파일의 `mcpServers` 항목에 아래 내용을 추가합니다.
+
+```json
+{
+  "mcpServers": {
+    "frisframe": {
+      "command": "python3",
+      "args": [
+        "/Users/loways/Documents/영화작업용/stage-blocking-lab/mcp_server.py"
+      ],
+      "env": {
+        "PREVIS_DB_PATH": "/Users/loways/Documents/영화작업용/stage-blocking-lab/previs_projects.db"
+      }
+    }
+  }
+}
+```
+
+이제 Claude Desktop 등에서 *"FrisFrame 프로젝트 목록 보여줘"*, *"신규 컷 추가하고 카메라는 ELS 하이앵글로 배치해줘"*와 같은 명령어로 프리비즈 씬을 실시간으로 설계할 수 있습니다.
+
