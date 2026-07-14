@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import argparse
-import os
 import sqlite3
-from pathlib import Path
 import secrets
 import string
+
+from server import database_path, initialize_database, legacy_license_digest, license_digest
 
 def generate_key():
     # Format: FRIS-XXXX-XXXX-XXXX
@@ -20,38 +20,32 @@ def main():
     args = parser.parse_args()
 
     key = args.key or generate_key()
+    compact_key = "".join(character for character in key.upper() if character.isalnum())
+    if len(compact_key) < 14:
+        raise SystemExit("라이센스 키는 영문과 숫자를 합쳐 14자 이상이어야 합니다.")
     
-    root = Path(__file__).resolve().parent
-    db_path = os.environ.get("PREVIS_DB_PATH", str(root / "previs_projects.db"))
+    db_path = database_path()
     
     try:
+        initialize_database(db_path)
         conn = sqlite3.connect(db_path, timeout=10.0)
         cursor = conn.cursor()
-        
-        # Ensure licenses table exists
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS licenses (
-                key TEXT PRIMARY KEY,
-                owner TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active INTEGER DEFAULT 1
-            )
-        """)
-        
-        cursor.execute("SELECT 1 FROM licenses WHERE key = ?", (key,))
+        stored_key = license_digest(key)
+        legacy_key = legacy_license_digest(key)
+        cursor.execute("SELECT 1 FROM licenses WHERE key IN (?, ?)", (stored_key, legacy_key))
         if cursor.fetchone():
             print(f"Error: License key '{key}' already exists in the database.")
             conn.close()
             return
             
-        cursor.execute("INSERT INTO licenses (key, owner, is_active) VALUES (?, ?, 1)", (key, args.owner))
+        cursor.execute("INSERT INTO licenses (key, owner, is_active) VALUES (?, ?, 1)", (stored_key, args.owner))
         conn.commit()
         conn.close()
         
         print("\n" + "="*50)
-        print("🎉 새로운 라이센스가 성공적으로 생성되었습니다!")
-        print(f"🔑 라이센스 키: {key}")
-        print(f"👤 소유자: {args.owner}")
+        print("새로운 라이센스가 성공적으로 생성되었습니다.")
+        print(f"라이센스 키: {key}")
+        print(f"소유자: {args.owner}")
         print("="*50 + "\n")
         
     except Exception as e:

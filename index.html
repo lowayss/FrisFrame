@@ -3,29 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
     <title>FrisFrame</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260712-16" />
-    <script>
-      window.addEventListener('error', function(e) {
-        const consoleEl = document.getElementById('debugConsole');
-        if (consoleEl) {
-          consoleEl.style.display = 'block';
-          const div = document.createElement('div');
-          div.textContent = e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno;
-          document.getElementById('debugErrors').appendChild(div);
-        }
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        const consoleEl = document.getElementById('debugConsole');
-        if (consoleEl) {
-          consoleEl.style.display = 'block';
-          const div = document.createElement('div');
-          div.textContent = 'Promise rejected: ' + (e.reason?.message || e.reason);
-          document.getElementById('debugErrors').appendChild(div);
-        }
-      });
-    </script>
+    <link rel="stylesheet" href="./styles.css?v=20260714-02" />
+    <script src="./boot-errors.js?v=20260713-01"></script>
   </head>
   <body>
     <div id="debugConsole" style="position: fixed; top: 0; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: rgba(255, 0, 0, 0.95); color: white; z-index: 100000; font-family: monospace; font-size: 13px; padding: 15px; display: none; border-bottom: 2px solid #ff3333;">
@@ -47,6 +29,7 @@
             <i data-lucide="layout-dashboard" aria-hidden="true"></i>
             <span id="storyboardBtnLabel">스토리보드</span>
           </button>
+          <span class="workspace-divider" aria-hidden="true"></span>
           <div class="view-switch" id="viewButtons" aria-label="블로킹 보기 방식">
             <button data-view="2d" class="is-active" title="2D 평면도 (⌘2)">
               <i data-lucide="map" aria-hidden="true"></i><span>2D</span>
@@ -58,21 +41,22 @@
         </nav>
 
         <div class="toolbar" aria-label="주요 작업">
-          <button id="tutorialBtn" class="icon-btn" type="button" title="처음 사용 가이드" aria-label="처음 사용 가이드"><i data-lucide="circle-help">?</i></button>
           <div class="toolbar-history" aria-label="편집 기록">
             <button id="undoBtn" class="icon-btn" title="실행 취소" aria-label="실행 취소"><i data-lucide="undo-2">↶</i></button>
             <button id="redoBtn" class="icon-btn" title="다시 실행" aria-label="다시 실행"><i data-lucide="redo-2">↷</i></button>
           </div>
-          <span id="projectSaveState" class="project-save-state"><span aria-hidden="true"></span>변경됨</span>
-          <span class="toolbar-divider"></span>
-          <button id="sourceVideoBtn" class="text-btn" hidden>레퍼런스</button>
-          <button id="jsonBtn" class="text-btn toolbar-command" title="프로젝트 저장 준비 (⌘S)"><i data-lucide="save" aria-hidden="true"></i><span>저장</span></button>
           <details class="toolbar-menu project-menu" id="projectMenu">
-            <summary><i data-lucide="folder-kanban" aria-hidden="true"></i><span>프로젝트</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <summary><i data-lucide="folder-kanban" aria-hidden="true"></i><span>프로젝트</span><span id="projectSaveState" class="project-save-state"><span aria-hidden="true"></span>변경됨</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
             <div class="toolbar-menu-popover">
+              <button id="jsonBtn" class="text-btn" title="프로젝트 저장 (⌘S)"><i data-lucide="save" aria-hidden="true"></i><span>프로젝트 저장</span></button>
+              <span class="toolbar-menu-separator" aria-hidden="true"></span>
+              <button id="projectManagerBtn" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>프로젝트 관리</span></button>
+              <button id="projectVersionsBtn" class="text-btn"><i data-lucide="history" aria-hidden="true"></i><span>최근 저장본</span></button>
               <button id="newBtn" class="text-btn"><i data-lucide="file-plus-2" aria-hidden="true"></i><span>새 프로젝트</span></button>
               <button id="scenarioBtn" class="text-btn"><i data-lucide="scroll-text" aria-hidden="true"></i><span>시나리오·콘티</span></button>
-              <button id="importBtn" class="text-btn"><i data-lucide="folder-open" aria-hidden="true"></i><span>불러오기</span></button>
+              <span class="toolbar-menu-separator" aria-hidden="true"></span>
+              <button id="backupBtn" class="text-btn"><i data-lucide="file-down" aria-hidden="true"></i><span>JSON 백업 준비</span></button>
+              <button id="importBtn" class="text-btn"><i data-lucide="folder-open" aria-hidden="true"></i><span>JSON 백업 불러오기</span></button>
               <button id="shareBtn" class="text-btn"><i data-lucide="share-2" aria-hidden="true"></i><span>링크로 공유하기</span></button>
               <input id="importInput" type="file" accept="application/json,.json" hidden />
             </div>
@@ -80,9 +64,21 @@
           <details class="toolbar-menu" id="exportMenu">
             <summary><i data-lucide="share-2" aria-hidden="true"></i><span>내보내기</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
             <div class="toolbar-menu-popover">
+              <button id="blockingPlanBtn" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹 이미지</span></button>
               <button id="frameBtn" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
               <button id="framePairBtn" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝 프레임</span></button>
-              <button id="videoBtn" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>카메라 영상</span></button>
+              <button id="videoBtn" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>프리비즈 영상</span></button>
+            </div>
+          </details>
+          <details class="toolbar-menu help-menu" id="helpMenu">
+            <summary aria-label="도움말 메뉴"><i data-lucide="circle-help" aria-hidden="true"></i><span>도움말</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="toolbar-menu-popover">
+              <button id="manualBtn" class="text-btn" type="button" aria-haspopup="dialog" aria-controls="manualDialog" aria-expanded="false">
+                <i data-lucide="book-open" aria-hidden="true"></i><span>기능 매뉴얼</span><kbd>F1</kbd>
+              </button>
+              <button id="tutorialBtn" class="text-btn" type="button">
+                <i data-lucide="circle-play" aria-hidden="true"></i><span>처음 사용 가이드</span>
+              </button>
             </div>
           </details>
         </div>
@@ -142,10 +138,6 @@
               <textarea id="activeSceneSynopsis" rows="2" placeholder="이 씬에서 일어나는 일을 짧게 정리하세요."></textarea>
             </div>
             <div class="storyboard-board-actions">
-              <div class="storyboard-scope-switch" id="storyboardScopeSwitch" aria-label="스토리보드 범위">
-                <button type="button" data-storyboard-scope="scene" class="is-active">현재 씬</button>
-                <button type="button" data-storyboard-scope="project">전체 시나리오</button>
-              </div>
               <select id="storyboardStatusFilter" aria-label="컷 상태 필터">
                 <option value="all">전체 상태</option>
                 <option value="draft">초안</option>
@@ -156,7 +148,7 @@
               <details id="contactSheetMenu" class="storyboard-board-menu">
                 <summary><i data-lucide="layout-grid" aria-hidden="true"></i><span>이미지 묶기</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
                 <div class="storyboard-board-menu-popover">
-                  <span id="contactSheetScopeLabel">현재 씬 기준</span>
+                  <span id="contactSheetScopeLabel">전체 시나리오 기준</span>
                   <button type="button" data-contact-sheet-size="4"><i data-lucide="grid-2x2" aria-hidden="true"></i><span>4컷 · 2×2</span></button>
                   <button type="button" data-contact-sheet-size="6"><i data-lucide="layout-grid" aria-hidden="true"></i><span>6컷 · 3×2</span></button>
                   <button type="button" data-contact-sheet-size="12"><i data-lucide="grid-3x3" aria-hidden="true"></i><span>12컷 · 4×3</span></button>
@@ -257,14 +249,26 @@
             <span>깨끗한 출력</span>
             <input id="cleanExportToggle" type="checkbox" checked />
           </label>
-          <label class="toggle-row" id="blenderControlsRow" hidden>
-            <span>블렌더/에펙식 3D 조작</span>
-            <input id="blenderControlsToggle" type="checkbox" />
-          </label>
+          <button id="resetStageBtn" type="button" class="stage-reset-btn" title="현재 컷의 무대 배치와 키프레임 초기화">
+            <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+            <span>무대 리셋</span>
+          </button>
         </details>
 
         <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible open>
           <summary>카메라</summary>
+          <div class="lock-control-group" aria-label="카메라 편집 잠금">
+            <div class="lock-control-heading">
+              <span>편집 잠금</span>
+              <small id="cameraLockStatus">모두 편집 가능</small>
+            </div>
+            <div class="lock-chip-grid" id="cameraLockControls">
+              <button type="button" data-camera-lock="position" aria-pressed="false" title="카메라 위치 잠금"><i data-lucide="move" aria-hidden="true"></i><span>위치</span></button>
+              <button type="button" data-camera-lock="orientation" aria-pressed="false" title="팬·틸트 회전 잠금"><i data-lucide="rotate-cw" aria-hidden="true"></i><span>회전</span></button>
+              <button type="button" data-camera-lock="lens" aria-pressed="false" title="렌즈 초점거리 잠금"><i data-lucide="aperture" aria-hidden="true"></i><span>렌즈</span></button>
+              <button type="button" data-camera-lock="height" aria-pressed="false" title="카메라 높이 잠금"><i data-lucide="arrow-up-down" aria-hidden="true"></i><span>높이</span></button>
+            </div>
+          </div>
           <label class="range-row">
             <span>렌즈</span>
             <div class="range-val-container"><input id="focalValue" type="number" min="14" max="135" step="1" value="85" /><span>mm</span></div>
@@ -273,7 +277,7 @@
           <label class="range-row">
             <span>카메라 높이</span>
             <div class="range-val-container"><input id="cameraHeightValue" type="number" min="0.4" max="3" step="0.05" value="1.6" /><span>m</span></div>
-            <input id="cameraHeightSlider" type="range" min="0.4" max="3" step="0.05" value="1.6" />
+            <input id="cameraHeightSlider" type="range" min="0.4" max="3" step="0.01" value="1.6" />
           </label>
           <label class="range-row">
             <span>팬</span>
@@ -327,32 +331,42 @@
 
       <main class="workspace">
         <div class="canvas-wrap">
-          <canvas id="stageCanvas" aria-label="무대 블로킹 캔버스"></canvas>
+          <div id="stageViewport" class="stage-viewport" aria-label="확대 가능한 2D 무대 작업 영역">
+            <div id="stageCanvasHolder" class="stage-canvas-holder">
+              <canvas id="stageCanvas" aria-label="무대 블로킹 캔버스"></canvas>
+            </div>
+          </div>
+          <div id="stageZoomControls" class="stage-zoom-controls" aria-label="2D 무대 확대 및 축소">
+            <button id="stageZoomOutBtn" type="button" title="무대 축소" aria-label="무대 축소"><i data-lucide="minus" aria-hidden="true"></i></button>
+            <output id="stageZoomLabel" aria-live="polite">100%</output>
+            <button id="stageZoomInBtn" type="button" title="무대 확대" aria-label="무대 확대"><i data-lucide="plus" aria-hidden="true"></i></button>
+            <span aria-hidden="true"></span>
+            <button id="stageZoomFitBtn" type="button" title="무대를 화면에 맞춤" aria-label="무대를 화면에 맞춤"><i data-lucide="scan" aria-hidden="true"></i></button>
+          </div>
           <div id="threeWrap" class="three-wrap" hidden>
             <canvas id="threeCanvas" aria-label="3D 무대 블로킹 보기"></canvas>
             <div class="three-hud" id="threeHud">
-              <div class="three-hud-status">
-                <strong>3D 블로킹</strong>
-                <span id="threeHudMeta">16:9 · 위치 편집</span>
+              <div class="three-hud-primary">
+                <strong>3D 무대</strong>
+                <span id="threeSelectionLabel" class="three-selection-label">선택 없음</span>
+                <span id="threeHudMeta" class="three-hud-meta">16:9 · 대상 1 · 키 0</span>
               </div>
-              <div class="three-legend" aria-label="3D 요소 구분">
-                <span data-three-role="actor"><i></i>배우</span>
-                <span data-three-role="prop"><i></i>소품</span>
-                <span data-three-role="camera"><i></i>카메라</span>
-                <span data-three-role="path"><i></i>동선</span>
+              <div class="three-hud-controls">
+                <div class="three-editbar" aria-label="3D 대상 편집 방식">
+                  <span class="three-edit-label">대상 편집</span>
+                  <button type="button" data-three-mode="move" class="is-active" title="이동 모드 (G)"><kbd>G</kbd> 이동</button>
+                  <button type="button" data-three-mode="rotate" title="회전 모드 (R)"><kbd>R</kbd> 회전</button>
+                  <button type="button" data-three-mode="pose" title="배우 관절 포즈 편집 (P)"><kbd>P</kbd> 포즈</button>
+                </div>
+                <div class="three-shortcuts" aria-label="3D 시점 조작 단축키">
+                  <span title="대상 위에서는 편집, 무대나 빈 공간에서는 오빗"><kbd>LMB</kbd> 대상·오빗</span>
+                  <span><kbd>MMB</kbd> 오빗</span>
+                  <span title="우클릭 드래그로 무대 전체를 좌우·위아래 이동"><kbd>RMB</kbd> 화면 이동</span>
+                  <span><kbd>휠</kbd> 줌</span>
+                </div>
               </div>
-            </div>
-            <div class="three-editbar" aria-label="3D 편집 방식">
-              <button type="button" data-three-mode="move" class="is-active">이동</button>
-              <button type="button" data-three-mode="rotate">방향</button>
-              <button type="button" data-three-mode="view">시점</button>
-              <span id="threeSelectionLabel">선택 없음</span>
             </div>
             <div class="camera-frame" id="cameraFrame">
-              <div class="camera-frame-top">
-                <span>카메라 프레임</span>
-                <span id="cameraFrameMeta">85mm · H 1.6m · P 180° · T 0°</span>
-              </div>
               <canvas id="cameraFrameCanvas" aria-label="카메라 프레임 미리보기"></canvas>
             </div>
           </div>
@@ -364,10 +378,12 @@
               <button type="button" data-timeline-view="split">대상별</button>
             </div>
             <button id="addKeyBtn" class="text-btn" title="키프레임 추가 (K)"><span>키프레임 추가</span></button>
+            <button id="cameraHeightKeyBtn" class="text-btn camera-height-key-btn" type="button" title="현재 시간에 카메라 높이 키 추가 또는 갱신"><span>카메라 높이 키</span></button>
             <button id="updateKeyBtn" class="text-btn" title="선택 키 갱신 (Shift+K)"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>선택 키 갱신</span></button>
             <button id="deleteKeyBtn" class="text-btn"><i data-lucide="trash-2" aria-hidden="true"></i><span>삭제</span></button>
-          <button id="playBtn" class="icon-btn" title="동선 재생 (Space)" aria-label="동선 재생"><i data-lucide="play">▶</i></button>
-          <button id="stopBtn" class="icon-btn" title="정지" aria-label="정지"><i data-lucide="square">■</i></button>
+          <button id="playBtn" class="icon-btn" title="현재 위치부터 동선 재생 (Space)" aria-label="현재 위치부터 동선 재생"><i data-lucide="play">▶</i></button>
+          <button id="pauseBtn" class="icon-btn" title="현재 위치에서 일시정지 (Space)" aria-label="현재 위치에서 일시정지"><i data-lucide="pause">Ⅱ</i></button>
+          <button id="stopBtn" class="icon-btn" title="정지하고 처음으로 이동" aria-label="정지하고 처음으로 이동"><i data-lucide="square">■</i></button>
           </div>
           <div class="timeline-fields">
             <label class="compact-field source-field">
@@ -401,6 +417,10 @@
                 <option value="jib-down">지미집 하강</option>
               </select>
             </label>
+            <label class="compact-field instruction-field">
+              <span>지문</span>
+              <input id="keyInstructionInput" type="text" maxlength="80" placeholder="예: 웃으며 오른쪽으로 두 걸음" title="이 키에 도착하는 동안 표시할 짧은 행동 지문" />
+            </label>
             <label class="compact-field">
               <span>전체 시간</span>
               <input id="durationInput" type="number" min="1" max="60" step="1" value="15" />
@@ -425,6 +445,11 @@
           <summary>속성</summary>
           <div id="selectionEmpty" class="empty-state">배우, 소품, 카메라를 선택하세요.</div>
           <div id="propertiesForm" class="properties-form" hidden>
+            <button id="itemEditLockBtn" type="button" class="item-lock-button" aria-pressed="false" title="선택 대상의 위치, 방향, 크기와 모양 편집 잠금">
+              <i data-lucide="unlock" aria-hidden="true"></i>
+              <span>대상 편집 잠금</span>
+              <small id="itemEditLockStatus">편집 가능</small>
+            </button>
             <label class="stack-field">
               <span>이름</span>
               <input id="selectedName" type="text" />
@@ -497,6 +522,49 @@
               </div>
             </div>
 
+            <div id="actorPoseFields" class="actor-pose-editor" hidden>
+              <div class="actor-pose-heading">
+                <div><strong>간편 포즈 편집</strong><small>관절 드래그 · Shift 기울기 · Option 정밀 조절</small></div>
+                <span class="actor-pose-mode-badge">FK</span>
+              </div>
+              <label class="stack-field">
+                <span>관절</span>
+                <select id="actorPoseJointSelect" aria-label="편집할 배우 관절"></select>
+              </label>
+              <div class="actor-pose-axes">
+                <label>
+                  <span>앞·뒤</span>
+                  <input id="actorPoseAxisX" type="range" step="1" value="0" />
+                  <div class="range-val-container"><input id="actorPoseAxisXValue" type="number" step="1" value="0" /><span>°</span></div>
+                </label>
+                <label>
+                  <span>좌·우</span>
+                  <input id="actorPoseAxisY" type="range" step="1" value="0" />
+                  <div class="range-val-container"><input id="actorPoseAxisYValue" type="number" step="1" value="0" /><span>°</span></div>
+                </label>
+                <label>
+                  <span>기울기</span>
+                  <input id="actorPoseAxisZ" type="range" step="1" value="0" />
+                  <div class="range-val-container"><input id="actorPoseAxisZValue" type="number" step="1" value="0" /><span>°</span></div>
+                </label>
+              </div>
+              <div id="actorPoseCategoryTabs" class="actor-pose-category-tabs" aria-label="포즈 카테고리"></div>
+              <div id="actorPosePresets" class="actor-pose-presets" aria-label="배우 포즈 프리셋"></div>
+              <div id="actorPoseCustomSave" class="actor-pose-custom-save">
+                <input id="actorPoseCustomNameInput" type="text" placeholder="현재 포즈 이름" maxlength="20" aria-label="커스텀 포즈 이름" />
+                <button id="actorPoseCustomSaveBtn" type="button" class="text-btn"><i data-lucide="star" aria-hidden="true"></i><span>저장</span></button>
+              </div>
+              <div class="actor-pose-actions">
+                <button id="actorPoseCopyBtn" type="button" class="text-btn"><i data-lucide="copy" aria-hidden="true"></i><span>복사</span></button>
+                <button id="actorPosePasteBtn" type="button" class="text-btn"><i data-lucide="clipboard-paste" aria-hidden="true"></i><span>붙여넣기</span></button>
+                <button id="actorPoseResetBtn" type="button" class="text-btn"><i data-lucide="rotate-ccw" aria-hidden="true"></i><span>기본 포즈</span></button>
+                <button id="actorPoseMirrorBtn" type="button" class="text-btn"><i data-lucide="flip-horizontal-2" aria-hidden="true"></i><span>좌우 반전</span></button>
+                <button id="actorPoseRandomBtn" type="button" class="text-btn"><i data-lucide="dice-3" aria-hidden="true"></i><span>랜덤</span></button>
+                <button id="actorPoseKeyBtn" type="button" class="primary-btn"><i data-lucide="key-round" aria-hidden="true"></i><span>포즈 키 추가</span></button>
+              </div>
+              <p id="actorPoseHint" class="actor-pose-hint">포즈도 배우 키프레임에 함께 저장됩니다.</p>
+            </div>
+
             <div id="manualGroupFields" class="property-subgroup">
               <div class="manual-group-summary">
                 <span>묶음</span>
@@ -564,137 +632,254 @@
           </label>
         </details>
 
-        <details id="videoDraftPanel" class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed" hidden>
-          <summary>레퍼런스에서 초안</summary>
-          <p class="video-draft-copy">영상은 카메라·배우 동선을, 이미지는 인물·주요 오브젝트의 3D 배치 초안을 만듭니다.</p>
-          <label class="video-file-picker" for="referenceFile">
-            <span>영상 또는 이미지</span>
-            <strong id="videoFileLabel">파일 선택</strong>
-            <input id="referenceFile" type="file" accept="video/*,image/*" />
-          </label>
-          <div id="referencePreviewWrap" class="reference-preview-wrap" hidden>
-            <video id="referencePreview" class="reference-preview" controls muted playsinline></video>
-            <img id="referenceImagePreview" class="reference-preview" alt="레퍼런스 이미지 미리보기" hidden />
-            <canvas id="referenceOverlayCanvas" class="reference-overlay" aria-label="영상 분석 오버레이" hidden></canvas>
-          </div>
-          <div id="referenceFrameBar" class="reference-frame-bar" hidden>
-            <strong id="referenceFrameTime">0.0s</strong>
-            <button id="useReferenceTimeBtn" type="button" class="text-btn">프레임 시간 적용</button>
-          </div>
-          <div id="referenceRange" class="reference-range" hidden>
-            <div class="reference-range-head">
-              <span>분석 구간</span>
-              <strong id="referenceRangeText">0.0s - 0.0s</strong>
-            </div>
-            <div class="reference-range-actions">
-              <button id="setReferenceStartBtn" type="button" class="text-btn">현재를 시작점</button>
-              <button id="setReferenceEndBtn" type="button" class="text-btn">현재를 끝점</button>
-            </div>
-          </div>
-          <div class="video-analysis-fields">
-            <label class="stack-field trace-actor-field">
-              <span>최소 추적 배우</span>
-              <select id="traceActorCount">
-                <option value="1" selected>1명</option>
-                <option value="2">2명</option>
-                <option value="3">3명</option>
-                <option value="4">4명</option>
-                <option value="5">5명</option>
-                <option value="6">6명</option>
-                <option value="7">7명</option>
-                <option value="8">8명</option>
-              </select>
-            </label>
-            <label class="stack-field trace-actor-field">
-              <span>분석 정밀도</span>
-              <select id="analysisPrecision">
-                <option value="detailed" selected>정밀</option>
-                <option value="fast">빠르게</option>
-              </select>
-            </label>
-          </div>
-          <details class="mini-details analysis-calibration">
-            <summary>3D 공간 보정</summary>
-            <label class="toggle-row">
-              <span>분석 오버레이</span>
-              <input id="referenceOverlayToggle" type="checkbox" checked />
-            </label>
-            <label class="toggle-row">
-              <span>현재 배우 배치에서 시작</span>
-              <input id="calibrationAnchorToggle" type="checkbox" checked />
-            </label>
-            <label class="toggle-row">
-              <span>좌우 반전</span>
-              <input id="calibrationMirrorToggle" type="checkbox" />
-            </label>
-            <div class="calibration-direction">
-              <span>영상 오른쪽을 평면도의</span>
-              <div id="calibrationRotation" class="calibration-direction-buttons" aria-label="동선 방향">
-                <button type="button" data-calibration-rotation="0" class="is-active" title="오른쪽">→</button>
-                <button type="button" data-calibration-rotation="90" title="아래">↓</button>
-                <button type="button" data-calibration-rotation="180" title="왼쪽">←</button>
-                <button type="button" data-calibration-rotation="270" title="위">↑</button>
-              </div>
-            </div>
-            <label class="stack-field calibration-select">
-              <span>카메라 해석</span>
-              <select id="calibrationCameraInterpretation">
-                <option value="rotation">회전 중심</option>
-                <option value="balanced" selected>균형</option>
-                <option value="movement">이동 중심</option>
-              </select>
-            </label>
-            <label class="range-row calibration-range">
-              <span>동선 폭</span>
-              <strong id="calibrationLateralValue">80%</strong>
-              <input id="calibrationLateralSlider" type="range" min="0.3" max="1.2" step="0.05" value="0.8" />
-            </label>
-            <label class="range-row calibration-range">
-              <span>깊이 범위</span>
-              <strong id="calibrationDepthValue">66%</strong>
-              <input id="calibrationDepthSlider" type="range" min="0.2" max="1.2" step="0.05" value="0.65" />
-            </label>
-            <label class="range-row calibration-range">
-              <span>화면 크기로 깊이 보정</span>
-              <strong id="calibrationSizeDepthValue">10%</strong>
-              <input id="calibrationSizeDepthSlider" type="range" min="0" max="0.3" step="0.02" value="0.1" />
-            </label>
-            <label class="range-row calibration-range">
-              <span>카메라 이동량</span>
-              <strong id="calibrationCameraGainValue">110%</strong>
-              <input id="calibrationCameraGainSlider" type="range" min="0.25" max="2" step="0.05" value="1.1" />
-            </label>
-            <label class="range-row calibration-range">
-              <span>흔들림 정리</span>
-              <strong id="calibrationStabilizationValue">75%</strong>
-              <input id="calibrationStabilizationSlider" type="range" min="0" max="1" step="0.05" value="0.75" />
-            </label>
-            <button id="resetReferenceCalibrationBtn" type="button" class="text-btn calibration-reset">보정 초기화</button>
-          </details>
-          <div class="video-draft-actions">
-            <button id="analyzeReferenceBtn" type="button" class="primary-btn">초안 만들기</button>
-            <button id="clearReferenceBtn" type="button" class="text-btn">레퍼런스 해제</button>
-          </div>
-          <div id="referenceStatus" class="status-line reference-status">영상이 선택되지 않았습니다.</div>
-          <div id="referenceAnalysisSummary" class="reference-analysis-summary" hidden>
-            <div><span>카메라</span><strong id="cameraAnalysisScore"><span id="cameraMotionLabel">--</span><small id="cameraConfidenceValue">--</small></strong></div>
-            <div><span>배우 추적</span><strong id="actorAnalysisScore">--</strong></div>
-            <div><span>장면 전환</span><strong id="sceneCutCount">--</strong></div>
-            <p id="referenceAnalysisNote"></p>
-          </div>
-        </details>
-
         <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed">
           <summary>내보내기</summary>
-          <p class="export-panel-copy">3D 카메라 프레임에 보이는 결과를 그대로 출력합니다.</p>
+          <p class="export-panel-copy">2D 동선도와 3D 카메라 프레임을 이미지 또는 영상으로 준비합니다.</p>
           <div class="export-panel-actions">
+            <button id="blockingPlanPanelBtn" type="button" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹</span></button>
             <button id="framePanelBtn" type="button" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
             <button id="framePairPanelBtn" type="button" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝</span></button>
-            <button id="videoPanelBtn" type="button" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>카메라 영상</span></button>
+            <button id="videoPanelBtn" type="button" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>프리비즈 영상</span></button>
           </div>
         </details>
       </aside>
     </div>
+
+    <dialog id="manualDialog" class="manual-dialog" aria-labelledby="manualTitle">
+      <form method="dialog" class="manual-dialog-inner">
+        <header class="manual-header">
+          <div class="manual-title-block">
+            <span class="section-kicker">FrisFrame GUIDE</span>
+            <h2 id="manualTitle">기능 매뉴얼</h2>
+            <p>스토리보드부터 카메라 영상까지, 현재 구현된 작업 흐름과 규칙을 확인합니다.</p>
+          </div>
+          <label class="manual-search">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="manualSearchInput" type="search" placeholder="키프레임, 탑승, 렌즈, MP4 검색" autocomplete="off" />
+            <kbd>F1</kbd>
+          </label>
+          <button value="close" class="icon-btn manual-close" aria-label="설명서 닫기"><i data-lucide="x">×</i></button>
+        </header>
+
+        <div class="manual-layout">
+          <nav id="manualNav" class="manual-nav" aria-label="설명서 목차">
+            <button type="button" data-manual-nav="overview" class="is-active"><i data-lucide="compass" aria-hidden="true"></i><span>전체 흐름</span></button>
+            <button type="button" data-manual-nav="project"><i data-lucide="folder-kanban" aria-hidden="true"></i><span>프로젝트</span></button>
+            <button type="button" data-manual-nav="storyboard"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>스토리보드</span></button>
+            <button type="button" data-manual-nav="blocking"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹</span></button>
+            <button type="button" data-manual-nav="camera"><i data-lucide="camera" aria-hidden="true"></i><span>카메라</span></button>
+            <button type="button" data-manual-nav="timeline"><i data-lucide="git-branch" aria-hidden="true"></i><span>키프레임</span></button>
+            <button type="button" data-manual-nav="three"><i data-lucide="box" aria-hidden="true"></i><span>3D 프리비즈</span></button>
+            <button type="button" data-manual-nav="export"><i data-lucide="file-output" aria-hidden="true"></i><span>내보내기</span></button>
+            <button type="button" data-manual-nav="mounting"><i data-lucide="car-front" aria-hidden="true"></i><span>탑승·묶음</span></button>
+            <button type="button" data-manual-nav="shortcuts"><i data-lucide="keyboard" aria-hidden="true"></i><span>단축키·문제 해결</span></button>
+          </nav>
+
+          <main id="manualContent" class="manual-content" tabindex="0">
+            <div id="manualSearchSummary" class="manual-search-summary" aria-live="polite">10개 항목</div>
+
+            <article id="manual-overview" class="manual-section" data-manual-section="overview" data-manual-keywords="시작 처음 순서 워크플로 화면 구성">
+              <header><i data-lucide="compass" aria-hidden="true"></i><div><span>01</span><h3>전체 작업 흐름</h3><p>하나의 컷을 설계하고 결과를 확인하는 기본 순서입니다.</p></div></header>
+              <section class="manual-example" aria-labelledby="manualExampleTitle">
+                <div class="manual-example-visual" aria-label="배우가 카메라 앞으로 이동하는 5초 컷 예시">
+                  <div class="manual-example-stage">
+                    <div class="manual-example-grid" aria-hidden="true"></div>
+                    <div class="manual-example-cone" aria-hidden="true"></div>
+                    <div class="manual-example-camera" title="카메라"><i data-lucide="video" aria-hidden="true"></i></div>
+                    <div class="manual-example-path" aria-hidden="true"></div>
+                    <div class="manual-example-actor actor-start"><span>0초</span></div>
+                    <div class="manual-example-actor actor-end"><span>5초</span></div>
+                  </div>
+                  <div class="manual-example-frame">
+                    <span class="manual-frame-label">3D 카메라 프레임</span>
+                    <div class="manual-frame-safe" aria-hidden="true"></div>
+                    <div class="manual-frame-person" aria-hidden="true"><i data-lucide="user-round" aria-hidden="true"></i></div>
+                    <span class="manual-headroom-label">영화적 헤드룸</span>
+                  </div>
+                  <div class="manual-example-timeline" aria-label="0초와 5초에 키가 있는 타임라인 예시">
+                    <span class="manual-time-label">0초</span><span class="manual-time-label">5초</span>
+                    <div class="manual-time-line"><span class="manual-time-progress"></span><i class="manual-time-key key-start"></i><i class="manual-time-key key-end"></i></div>
+                    <span class="manual-time-caption">키 두 개가 있어야 이동합니다</span>
+                  </div>
+                </div>
+                <div class="manual-example-copy">
+                  <span class="manual-example-kicker">따라 하기 · 5초 이동 숏</span>
+                  <h4 id="manualExampleTitle">배우가 카메라 쪽으로 걸어오는 컷</h4>
+                  <ol>
+                    <li><b>0초</b> 배우와 카메라의 시작 위치를 잡고 첫 키를 추가합니다.</li>
+                    <li><b>5초</b> 배우를 카메라 쪽으로 옮긴 뒤 두 번째 키를 추가합니다.</li>
+                    <li><b>추적</b> 카메라의 피사체 추적을 배우로 설정해 얼굴을 유지합니다.</li>
+                    <li><b>검토</b> 재생하고 3D 카메라 프레임에서 헤드룸을 확인합니다.</li>
+                  </ol>
+                  <div class="manual-example-result"><i data-lucide="check-circle-2" aria-hidden="true"></i><span>2D 위치, 시간, 카메라 구도가 하나의 컷으로 연결됩니다.</span></div>
+                </div>
+              </section>
+              <ol class="manual-workflow">
+                <li><strong>프로젝트 구조</strong><span>시나리오·콘티에서 씬과 컷을 만들거나 스토리보드에서 직접 추가합니다.</span></li>
+                <li><strong>2D 배치</strong><span>배우, 소품, 차량과 카메라를 평면도에서 배치하고 방향을 정합니다.</span></li>
+                <li><strong>카메라 확정</strong><span>렌즈, 높이, 팬·틸트와 피사체 추적으로 영화적 구도를 잡습니다.</span></li>
+                <li><strong>동선 기록</strong><span>시간을 옮겨 키프레임을 추가하고 경로와 도착 방식을 정합니다.</span></li>
+                <li><strong>3D 검토</strong><span>3D 무대와 카메라 프레임에서 거리, 높이, 헤드룸과 움직임을 확인합니다.</span></li>
+                <li><strong>프리뷰 후 저장</strong><span>현재 프레임, 시작·끝 프레임 또는 MP4를 먼저 확인한 뒤 직접 저장합니다.</span></li>
+              </ol>
+              <div class="manual-callout info"><i data-lucide="info" aria-hidden="true"></i><p><strong>튜토리얼과 설명서의 차이</strong> 상단 `도움말`의 처음 사용 가이드는 화면을 따라가는 안내이고, 기능 매뉴얼은 필요한 내용을 검색해 확인하는 참고 문서입니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="tutorial"><i data-lucide="circle-play" aria-hidden="true"></i><span>처음 사용 가이드 시작</span></button><button type="button" data-manual-action="blocking-2d"><i data-lucide="map" aria-hidden="true"></i><span>2D 작업 열기</span></button></div>
+            </article>
+
+            <article id="manual-project" class="manual-section" data-manual-section="project" data-manual-keywords="새 프로젝트 저장 자동 저장 프로젝트 관리 목록 검색 이름 변경 복제 휴지통 복원 충돌 불러오기 json 백업 공유 링크 시나리오 콘티 씬 컷">
+              <header><i data-lucide="folder-kanban" aria-hidden="true"></i><div><span>02</span><h3>프로젝트와 시나리오·콘티</h3><p>여러 씬과 컷을 하나의 프로젝트 문서로 관리합니다.</p></div></header>
+              <div class="manual-storage-map" aria-label="프로젝트 저장 방식 비교">
+                <div><i data-lucide="save" aria-hidden="true"></i><strong>프로젝트 저장</strong><span>계속 편집할 작업본</span><small>내 프로젝트 목록과 자동저장</small></div>
+                <div><i data-lucide="file-json" aria-hidden="true"></i><strong>JSON 백업</strong><span>옮기거나 보관할 사본</span><small>프리뷰 뒤 직접 파일 저장</small></div>
+                <div><i data-lucide="share-2" aria-hidden="true"></i><strong>공유 링크</strong><span>다른 사람에게 보여줄 사본</span><small>원본 편집과 따로 유지</small></div>
+              </div>
+              <div class="manual-detail-grid">
+                <section><h4>프로젝트 시작과 목록</h4><ul><li>처음 시작할 때는 프로젝트 제목을 정해 새로 만들거나 기존 프로젝트를 먼저 엽니다.</li><li><b>프로젝트 저장</b>: 상단 `프로젝트` 메뉴에서 현재 작업을 즉시 저장합니다.</li><li><b>프로젝트 관리</b>: 최근 작업을 검색하고 열거나 이름 변경, 복제할 수 있습니다.</li><li><b>새 프로젝트</b>: 제목과 서버 저장이 완료된 뒤 기본 컷으로 시작합니다.</li><li>한 번 만든 프로젝트는 편집 후 자동 저장되며 다음 실행 때 마지막 프로젝트를 이어서 엽니다.</li></ul></section>
+                <section><h4>시나리오 구조 분석</h4><ul><li>`INT./EXT.`, 장면 제목과 `컷`, `액션`, `대사`, `렌즈`, `길이` 표기를 읽습니다.</li><li>적용 전 씬·컷 수와 경고를 검토할 수 있습니다.</li><li>`전체 시나리오 구조 교체`는 기존 씬 구조를 바꾸고, `뒤에 추가`는 기존 프로젝트 다음에 붙입니다.</li></ul></section>
+                <section><h4>백업과 웹 공유</h4><ul><li><b>JSON 백업 준비</b>는 서버 저장과 별개로 이동용 파일을 프리뷰합니다.</li><li>공유할 때 현재 프로젝트의 별도 사본과 링크가 생성됩니다.</li><li>공유 후 수정한 내용은 기존 링크에 자동 반영되지 않습니다.</li><li>JSON과 공유 링크 모두 자동으로 파일을 내려받지 않습니다.</li></ul></section>
+                <section><h4>저장 안전장치</h4><ul><li>`변경됨`, `저장 중`, `저장됨`, `저장 충돌`, `저장 실패`로 상태를 구분합니다.</li><li>다른 창에서 먼저 저장되면 자동 덮어쓰기 대신 충돌을 표시하고 현재 편집본을 새 프로젝트로 보존할 수 있습니다.</li><li>삭제는 휴지통을 거치며 복원할 수 있습니다. 영구 삭제는 휴지통 안에서만 가능합니다.</li><li>실행 취소 기록과 생성된 대표 프레임 이미지는 프로젝트 문서에 포함되지 않습니다.</li></ul></section>
+              </div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>프로젝트 교체</strong> 새 프로젝트, JSON 불러오기와 `전체 시나리오 구조 교체`는 현재 프로젝트 전체를 바꿀 수 있습니다. 저장하지 않은 변경과 확인 창의 씬·컷 영향을 읽고 진행하세요.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="scenario"><i data-lucide="scroll-text" aria-hidden="true"></i><span>시나리오·콘티 열기</span></button><button type="button" data-manual-action="project-menu"><i data-lucide="folder-open" aria-hidden="true"></i><span>프로젝트 메뉴 보기</span></button></div>
+            </article>
+
+            <article id="manual-storyboard" class="manual-section" data-manual-section="storyboard" data-manual-keywords="스토리보드 씬 컷 상태 초안 블로킹 검토 확정 연속성 이미지 묶기 4컷 6컷 12컷">
+              <header><i data-lucide="layout-dashboard" aria-hidden="true"></i><div><span>03</span><h3>스토리보드</h3><p>컷 순서, 내용, 진행 상태와 연속성을 한 화면에서 검토합니다.</p></div></header>
+              <div class="manual-detail-grid">
+                <section><h4>씬과 컷</h4><ul><li>왼쪽에서 씬을 선택하고 `+`로 씬을 추가합니다.</li><li>중앙의 컷 카드는 대표 카메라 프레임, 샷 크기, 렌즈, 길이와 키 개수를 보여줍니다.</li><li>컷을 두 번 클릭하거나 `블로킹 열기`를 누르면 해당 컷의 2D·3D 작업으로 이동합니다.</li></ul></section>
+                <section><h4>컷 정보</h4><ul><li>오른쪽에서 상태, 제목, 샷 크기, 액션, 대사, 연출 의도와 연속성 메모를 편집합니다.</li><li>상태는 `초안 → 블로킹 중 → 검토 필요 → 확정`으로 구분합니다.</li><li>`확인` 배지는 키 누락과 배우·소품 연속성 변화를 알려줍니다.</li></ul></section>
+                <section><h4>보기 범위</h4><ul><li>스토리보드는 항상 전체 시나리오의 모든 씬과 컷을 순서대로 표시합니다.</li><li>왼쪽 씬 목록을 누르면 전체 화면 안에서 해당 씬으로 이동합니다.</li><li>상태 필터로 초안이나 검토 대상만 모아 볼 수 있습니다.</li></ul></section>
+                <section><h4>카메라 자동 가배치</h4><ul><li>콘티/시나리오 텍스트를 불러오면 본문 속 카메라 키워드를 분석해 3D 씬을 자동으로 배치합니다.</li><li>`ECU`/`ELS` 등의 지시어로 카메라 거리와 화각(`focal`)을 결정합니다.</li><li>`정면`/`측면`/`후면` 및 `하이`/`로우`/`수직` 앵글 단어를 파싱해 카메라 좌표와 높이, 틸트를 알아서 조절합니다.</li></ul></section>
+                <section><h4>이미지 묶기</h4><ul><li>전체 시나리오와 상태 필터를 기준으로 4컷, 6컷, 12컷 시트를 만듭니다.</li><li>한 페이지면 PNG, 여러 페이지면 PNG 묶음 ZIP으로 준비됩니다.</li></ul></section>
+              </div>
+              <div class="manual-actions"><button type="button" data-manual-action="storyboard"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>스토리보드 열기</span></button></div>
+            </article>
+
+            <article id="manual-blocking" class="manual-section" data-manual-section="blocking" data-manual-keywords="2d 평면도 무대 배우 소품 방향 위치 크기 격자 화면비 드래그 미세 이동">
+              <header><i data-lucide="map" aria-hidden="true"></i><div><span>04</span><h3>2D 무대와 대상 배치</h3><p>탑뷰 평면도에서 카메라, 배우와 소품의 공간 관계를 설계합니다.</p></div></header>
+              <div class="manual-visual-strip" aria-label="2D 무대 조작 예시">
+                <div><i data-lucide="mouse-pointer-2" aria-hidden="true"></i><strong>대상을 드래그</strong><span>배우·소품·카메라 이동</span></div>
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+                <div><i data-lucide="rotate-cw" aria-hidden="true"></i><strong>방향 지정</strong><span>화살표가 바라보는 곳</span></div>
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+                <div><i data-lucide="scan" aria-hidden="true"></i><strong>전체 맞춤</strong><span>롱숏 동선을 한눈에 확인</span></div>
+              </div>
+              <div class="manual-detail-grid">
+                <section><h4>무대</h4><ul><li>16:9, 9:16, 4:3, 1:1, 3:4 화면비를 선택합니다.</li><li>무대의 긴 변은 36m이며 16:9 기준 약 36×20.3m입니다.</li><li>무대는 작업창보다 작아지지 않으며 100%에서 전체 영역이 보입니다.</li><li>휠로 최대 400%까지 확대하고, 확대된 빈 무대를 좌클릭 드래그해 보이는 영역을 이동합니다.</li><li>가운데 버튼 또는 `Space + 드래그`는 대상 위에서도 무대를 이동합니다.</li><li>오른쪽 위 맞춤 버튼은 무대 전체가 보이는 100% 배율로 돌아갑니다.</li><li>격자와 이름 표시, 카메라 시야 표시를 켜고 끌 수 있습니다.</li><li>공간 프리셋은 거실, 주방, 침실, 숲, 차 안의 기본 배치를 추가합니다.</li><li>`무대 리셋`은 현재 컷의 배치와 키프레임만 기본값으로 되돌립니다.</li></ul></section>
+                <section><h4>배우·소품 추가</h4><ul><li>이름을 입력해 배우를 추가하고, 소품은 유형을 선택한 뒤 추가합니다.</li><li>캔버스에서 대상을 드래그해 위치를 옮깁니다.</li><li>속성에서 이름, 색, 크기, 방향과 소품의 길이·높이·너비를 조정합니다.</li></ul></section>
+                <section><h4>방향과 동선 안내</h4><ul><li>방향 슬라이더나 8방향 버튼으로 배우와 소품이 바라보는 방향을 정합니다.</li><li>2D에서 `Shift`를 누른 채 드래그하면 이동과 함께 방향을 맞출 수 있습니다.</li><li>동선은 파랑(카메라), 청록(배우), 황색(소품)으로 구분하며 경로의 화살표가 진행 방향을 표시합니다.</li><li>현재 구간에는 선택한 도착 키의 지문이 화살표 옆에 표시됩니다.</li><li>빈 원은 시작, 밝은 점은 현재 위치, 십자 표적은 다음 도착점을 뜻합니다.</li><li>미세 이동 버튼과 방향키는 작은 위치 보정에 사용합니다.</li></ul></section>
+                <section><h4>카메라 표시</h4><ul><li>카메라 본체를 드래그하면 위치가 이동합니다.</li><li>카메라의 시야 영역은 현재 렌즈와 회전 방향을 반영합니다.</li><li>포커스 표시는 카메라가 향하는 지점을 뜻합니다.</li></ul></section>
+              </div>
+              <div class="manual-callout info"><i data-lucide="mouse-pointer-2" aria-hidden="true"></i><p><strong>선택과 동선 대상</strong> 캔버스에서 대상을 선택하면 타임라인의 활성 대상도 함께 바뀝니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="blocking-2d"><i data-lucide="map" aria-hidden="true"></i><span>2D 무대 열기</span></button><button type="button" data-manual-action="objects"><i data-lucide="users" aria-hidden="true"></i><span>배우·소품 패널 보기</span></button></div>
+            </article>
+
+            <article id="manual-three" class="manual-section" data-manual-section="three" data-manual-keywords="3d 프리비즈 이동 방향 시점 카메라 프레임 궤도 오빗 화면 이동 줌 배우 관절 포즈 fk">
+              <header><i data-lucide="box" aria-hidden="true"></i><div><span>05</span><h3>3D 프리비즈</h3><p>높이와 거리감을 포함한 무대 배치와 실제 카메라 프레임을 함께 검토합니다.</p></div></header>
+              <div class="manual-detail-grid">
+                <section><h4>대상 편집</h4><ul><li><b>G 이동</b>: 배우, 소품과 카메라를 바닥면에서 이동합니다.</li><li><b>R 회전</b>: 선택 대상을 회전하고 카메라는 팬 방향을 바꿉니다.</li><li><b>P 포즈</b>: 배우 관절을 드래그하거나 속성의 축 슬라이더로 자세를 만듭니다. 상하 드래그는 앞뒤, 좌우 드래그는 좌우 회전이며 `Shift`를 누르면 기울기, `Option`을 누르면 정밀 조절입니다.</li></ul></section>
+                <section><h4>간편 포즈 시스템</h4><ul><li><b>30+ 프리셋</b>: 기본, 이동, 앉기/눕기, 액션, 제스처 5개 카테고리 탭 제공.</li><li><b>복사 & 붙여넣기</b>: 현재 배우의 포즈를 복사해 다른 배우에게 그대로 붙여넣습니다.</li><li><b>⭐ 내 포즈</b>: 마음에 드는 커스텀 포즈에 이름을 붙여 보관하고 필요할 때 재활용합니다.</li><li><b>🎲 랜덤</b>: 클릭 시 관절 각도를 난수화해 다양하고 러프한 자세를 빠르게 잡아줍니다.</li></ul></section>
+                <section><h4>화면 읽기</h4><ul><li>배우, 소품, 카메라와 동선은 서로 다른 색으로 구분됩니다.</li><li>마네킹의 눈·코·입과 머리 방향으로 정면과 시선을 확인합니다.</li><li>오른쪽 아래 카메라 프레임은 표시값 없이 최종 구도만 보여줍니다.</li></ul></section>
+                <section><h4>항상 가능한 시점 조작</h4><ul><li><b>좌클릭</b>: 대상 위에서는 선택·편집하고, 무대 바닥이나 빈 공간에서는 오빗합니다.</li><li><b>가운데 버튼</b>도 오빗으로 동작합니다.</li><li><b>우클릭 드래그</b> 또는 <b>Shift + 가운데 버튼</b>으로 무대 전체를 화면의 좌우·위아래로 이동합니다.</li><li><b>휠</b>로 확대·축소하며, <b>Ctrl + 가운데 버튼</b>으로도 줌할 수 있습니다.</li></ul></section>
+                <section><h4>확인할 것</h4><ul><li>배우가 차량이나 소품과 실제로 겹치지 않는지 확인합니다.</li><li>카메라 높이 변화와 지미집·드론 경로는 측면 각도에서도 확인합니다.</li></ul></section>
+              </div>
+              <div class="manual-actions"><button type="button" data-manual-action="blocking-3d"><i data-lucide="box" aria-hidden="true"></i><span>3D 프리비즈 열기</span></button></div>
+            </article>
+
+            <article id="manual-camera" class="manual-section" data-manual-section="camera" data-manual-keywords="카메라 렌즈 초점거리 화각 높이 팬 틸트 회전 피사체 추적 얼굴 머리 헤드룸 포커스 잠금">
+              <header><i data-lucide="camera" aria-hidden="true"></i><div><span>06</span><h3>카메라와 구도</h3><p>렌즈와 카메라 자세를 정하고 얼굴·머리 기준의 영화적 구도를 만듭니다.</p></div></header>
+              <div class="manual-camera-compare" aria-label="헤드룸 구도 비교">
+                <figure class="is-poor"><div><span class="manual-compare-line"></span><i data-lucide="user-round" aria-hidden="true"></i></div><figcaption><i data-lucide="x" aria-hidden="true"></i><span>머리 위 공간이 너무 많음</span></figcaption></figure>
+                <figure class="is-good"><div><span class="manual-compare-line"></span><i data-lucide="user-round" aria-hidden="true"></i></div><figcaption><i data-lucide="check" aria-hidden="true"></i><span>눈높이를 위쪽 1/3선 부근에 배치</span></figcaption></figure>
+                <p><strong>피사체 추적</strong>은 배우의 바닥이 아니라 얼굴·머리를 향하고, 프레임 안에서는 과한 헤드룸을 줄입니다.</p>
+              </div>
+              <div class="manual-detail-grid">
+                <section><h4>렌즈</h4><ul><li>14–135mm 범위에서 직접 입력하거나 14, 24, 35, 50, 85, 135mm 프리셋을 선택합니다.</li><li>낮은 수치는 넓은 화각, 높은 수치는 좁은 화각과 압축된 공간감을 만듭니다.</li></ul></section>
+                <section><h4>높이·회전</h4><ul><li>카메라 높이는 0.4–3.0m 범위입니다.</li><li>팬은 좌우 회전, 틸트는 위아래 각도입니다.</li><li>`카메라 높이 키`는 같은 시간의 카메라 키가 있으면 높이만 갱신하고, 없으면 새 카메라 키를 만듭니다.</li></ul></section>
+                <section><h4>피사체 추적</h4><ul><li>배우나 소품을 선택하면 카메라 팬·틸트가 대상을 계속 향합니다.</li><li>배우는 발이 아니라 얼굴·머리 높이를 기준으로 계산합니다.</li><li>자동 구도는 과도한 헤드룸을 줄이는 영화적 화면 위치를 사용합니다.</li></ul></section>
+                <section><h4>카메라 잠금</h4><ul><li>위치, 회전, 렌즈, 높이를 각각 잠글 수 있습니다.</li><li>잠긴 값은 2D·3D 드래그와 키 갱신에서도 유지됩니다.</li><li>회전을 잠그면 피사체 추적이 해제됩니다.</li></ul></section>
+              </div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>추적과 수동 회전</strong> 피사체 추적 중에는 팬·틸트가 자동 계산되므로 수동 입력이 비활성화됩니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="camera"><i data-lucide="camera" aria-hidden="true"></i><span>카메라 설정 보기</span></button></div>
+            </article>
+
+            <article id="manual-timeline" class="manual-section" data-manual-section="timeline" data-manual-keywords="키프레임 타임라인 시간 듀레이션 fps 통합 대상별 드래그 이동 경로 도착 부드럽게 일정 속도 직전 유지 즉시 전환 원호 드론 지미집">
+              <header><i data-lucide="git-branch" aria-hidden="true"></i><div><span>07</span><h3>키프레임과 타임라인</h3><p>대상별 위치·방향과 카메라 값을 시간에 따라 기록합니다.</p></div></header>
+              <div class="manual-key-example" aria-label="키프레임 점을 드래그해 시간을 변경하는 예시">
+                <div class="manual-key-example-track"><span class="manual-key-span"></span><i style="--x: 0%"><b>1</b><small>0초</small></i><i style="--x: 42%"><b>2</b><small>3초</small></i><i style="--x: 100%"><b>3</b><small>7초</small></i></div>
+                <div class="manual-key-example-note"><i data-lucide="move-horizontal" aria-hidden="true"></i><span>점을 좌우로 끌면 키의 시간이 바뀝니다. 점을 선택하면 아래의 도착 방식과 경로가 그 키에 적용됩니다.</span></div>
+              </div>
+              <div class="manual-detail-grid">
+                <section><h4>키 만들기</h4><ul><li>`대상`에서 카메라, 배우, 소품 또는 전체를 선택합니다.</li><li>`현재 시간`을 정하고 `키프레임 추가`를 누르면 현재 배치가 새 키로 저장됩니다.</li><li>`선택 키 갱신`은 선택 키를 현재 배치와 시간으로 바꿉니다.</li><li>키가 없는 대상은 전체 시간 동안 현재 위치에 고정됩니다.</li></ul></section>
+                <section><h4>시간 이동</h4><ul><li>타임라인 점을 좌우로 드래그해 키 시간을 자유롭게 바꿉니다.</li><li>`통합`은 모든 키를 한 줄에, `대상별`은 소스마다 별도 트랙으로 표시합니다.</li><li>전체 시간을 바꾸면 키 시간이 같은 비율로 재배치됩니다.</li></ul></section>
+                <section><h4>재생 제어</h4><ul><li><b>재생</b>: 현재 타임라인 위치부터 이어서 재생합니다.</li><li><b>일시정지</b>: 현재 프레임과 시간을 그대로 유지합니다.</li><li><b>정지</b>: 재생을 끝내고 0초의 시작 프레임으로 돌아갑니다.</li><li>`Space`는 재생과 일시정지를 전환합니다.</li></ul></section>
+                <section><h4>도착 방식</h4><ul><li><b>부드럽게</b>: 출발·도착 속도를 완화합니다.</li><li><b>일정 속도</b>: 구간을 같은 속도로 이동합니다.</li><li><b>직전 유지</b>: 도착 순간까지 이전 값을 유지합니다.</li><li><b>즉시 전환</b>: 해당 시간에 위치와 값을 바로 바꿉니다.</li></ul></section>
+                <section><h4>공간 경로</h4><ul><li>직선, 수평·수직 직선, 좌우 원호와 자유 곡선을 선택할 수 있습니다.</li><li>카메라는 드론 비행과 지미집 상승·하강 경로도 사용할 수 있습니다.</li><li>자유 곡선은 2D 캔버스의 곡선 손잡이로 모양을 조정합니다.</li></ul></section>
+                <section><h4>화면 지문</h4><ul><li>키를 선택하고 `지문`에 `웃으며 오른쪽으로 두 걸음`처럼 짧은 행동 설명을 적습니다.</li><li>지문은 해당 키로 이동하는 구간의 화살표 옆에 표시됩니다.</li><li>비워 두면 위치 변화에 맞는 기본 지문을 자동으로 만듭니다.</li></ul></section>
+              </div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>트랙 숨기기</strong> 대상별 타임라인의 `×`는 표시만 감추는 것이 아니라 해당 대상의 키를 삭제하고 고정 상태로 바꿉니다. 잠긴 대상에서는 실행할 수 없습니다.</p></div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>소품의 동선 타임라인</strong> 소품 속성에서 이 옵션을 끄면 독립 타임라인에서 제외되고 기존 소품 키도 삭제됩니다.</p></div>
+              <div class="manual-callout info"><i data-lucide="lock" aria-hidden="true"></i><p><strong>잠금된 키</strong> 잠긴 대상의 키는 이동·갱신·삭제할 수 없고, 잠긴 키가 있으면 전체 시간 변경도 잠시 비활성화됩니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="timeline"><i data-lucide="git-branch" aria-hidden="true"></i><span>타임라인 보기</span></button></div>
+            </article>
+
+            <article id="manual-mounting" class="manual-section" data-manual-section="mounting" data-manual-keywords="차량 탑승 자동 수동 좌석 운전석 묶음 그룹 연동 자동차 버스 오토바이 편집 잠금">
+              <header><i data-lucide="car-front" aria-hidden="true"></i><div><span>08</span><h3>차량 탑승과 대상 묶음</h3><p>배우와 차량·소품을 함께 움직이도록 관계를 설정합니다.</p></div></header>
+              <div class="manual-detail-grid">
+                <section><h4>자동 탑승</h4><ul><li>배우를 선택하고 `탑승 방식 → 자동 탑승`을 선택합니다.</li><li>차량과 빈 좌석을 정하면 배우 위치와 방향이 차량 좌석에 자동으로 맞춰집니다.</li><li>차량 키프레임을 움직이면 탑승 배우도 함께 이동합니다.</li></ul></section>
+                <section><h4>수동 탑승</h4><ul><li>`수동 탑승`에서는 배우를 차량 위에 직접 배치하고 방향을 맞춥니다.</li><li>`겹친 대상 묶기`를 사용하면 차량과 배우를 하나의 변환 묶음으로 움직일 수 있습니다.</li><li>`해제`하면 현재 보이는 위치를 유지한 채 각 대상을 다시 분리합니다.</li></ul></section>
+                <section><h4>좌석 규칙</h4><ul><li>자동차·버스·오토바이 등 차량 유형에 정의된 좌석만 선택할 수 있습니다.</li><li>이미 사용 중인 좌석은 다른 배우에게 선택되지 않습니다.</li><li>차량을 일반 소품으로 바꾸거나 삭제하면 자동 탑승 관계가 해제됩니다.</li></ul></section>
+                <section><h4>묶음과 잠금</h4><ul><li>묶음 구성원이나 자동 탑승 배우 중 하나가 잠기면 연결된 변환 전체가 보호됩니다.</li><li>`대상 편집 잠금`을 해제하면 연결된 대상도 함께 편집 가능 상태로 바뀝니다.</li></ul></section>
+              </div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>탑승 방식 전환</strong> 자동 탑승과 수동 탑승을 바꾸면 해당 배우의 기존 독립 키프레임이 삭제됩니다.</p></div>
+              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>대상 묶기</strong> 묶음을 만들면 리더가 아닌 구성원의 기존 독립 키가 삭제됩니다. 묶음을 해제해도 삭제된 키는 자동 복원되지 않습니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="mounting"><i data-lucide="car-front" aria-hidden="true"></i><span>탑승 설정 보기</span></button></div>
+            </article>
+
+            <article id="manual-export" class="manual-section" data-manual-section="export" data-manual-keywords="내보내기 프리뷰 저장 다운로드 png zip mp4 h264 이미지 복사 붙여넣기 현재 프레임 시작 끝 자동 저장 금지">
+              <header><i data-lucide="file-output" aria-hidden="true"></i><div><span>09</span><h3>프리뷰와 내보내기</h3><p>2D 동선도와 3D 카메라 프레임을 확인한 뒤 필요한 파일만 직접 저장합니다.</p></div></header>
+              <div class="manual-preview-compare" aria-label="동선 재생과 내보내기 프리뷰 비교">
+                <div><i data-lucide="play" aria-hidden="true"></i><span><strong>동선 재생</strong><small>2D·3D 무대에서 움직임과 시간을 검토</small></span></div>
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+                <div><i data-lucide="panel-top" aria-hidden="true"></i><span><strong>내보내기 프리뷰</strong><small>실제 저장될 이미지·MP4를 최종 확인</small></span></div>
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+                <div><i data-lucide="download" aria-hidden="true"></i><span><strong>직접 저장</strong><small>확인한 결과만 사용자가 저장</small></span></div>
+              </div>
+              <div class="manual-detail-grid">
+                <section><h4>2D 블로킹 이미지</h4><ul><li>현재 재생 위치의 배우·카메라 배치와 전체 동선, 키 번호, 방향 화살표를 한 장의 PNG로 준비합니다.</li><li>AI 입력에서는 3D 가이드 영상과 함께 별도의 `@plan` 공간 참고 이미지로 사용합니다.</li></ul></section>
+                <section><h4>현재 프레임</h4><ul><li>현재 재생 위치의 카메라 프레임을 PNG로 준비합니다.</li><li>프리뷰의 `이미지 복사`로 클립보드에 넣어 다른 앱에 붙여넣을 수 있습니다.</li></ul></section>
+                <section><h4>시작·끝 프레임</h4><ul><li>정확히 0초와 전체 시간 끝의 프레임 두 장을 만듭니다.</li><li>두 이미지는 확인 후 ZIP으로 저장합니다.</li></ul></section>
+                <section><h4>프리비즈 영상</h4><ul><li>카메라 프레임만 렌더링하며 화살표, 지침, 앵커, 렌즈 정보 같은 화면 표식은 포함하지 않습니다.</li><li>출력은 H.264 MP4이며 생성 후 영상 플레이어에서 먼저 재생해 확인합니다.</li></ul></section>
+                <section><h4>스토리보드 시트</h4><ul><li>스토리보드의 `이미지 묶기`에서 4·6·12컷 시트를 준비합니다.</li><li>전체 시나리오와 현재 상태 필터가 그대로 적용됩니다.</li></ul></section>
+              </div>
+              <div class="manual-callout success"><i data-lucide="shield-check" aria-hidden="true"></i><p><strong>자동 다운로드 없음</strong> 모든 출력은 `내보내기 프리뷰`에서 확인하고 `이 프리뷰로 저장`을 직접 눌러야 파일로 저장됩니다.</p></div>
+              <div class="manual-actions"><button type="button" data-manual-action="export-menu"><i data-lucide="file-output" aria-hidden="true"></i><span>내보내기 메뉴 보기</span></button></div>
+            </article>
+
+            <article id="manual-shortcuts" class="manual-section" data-manual-section="shortcuts" data-manual-keywords="단축키 문제 해결 오류 재생 저장 실행 취소 f1 space k shift cmd ctrl alt">
+              <header><i data-lucide="keyboard" aria-hidden="true"></i><div><span>10</span><h3>단축키와 문제 해결</h3><p>반복 작업을 빠르게 실행하고 자주 생기는 혼동을 해결합니다.</p></div></header>
+              <div class="manual-shortcut-grid">
+                <div><kbd>F1</kbd><span>기능 설명서 열기</span></div><div><kbd>⌘/Ctrl + 1</kbd><span>스토리보드</span></div><div><kbd>⌘/Ctrl + 2</kbd><span>2D 블로킹</span></div><div><kbd>⌘/Ctrl + 3</kbd><span>3D 프리비즈</span></div><div><kbd>Space</kbd><span>동선 재생·일시정지</span></div><div><kbd>K</kbd><span>키프레임 추가</span></div><div><kbd>Shift + K</kbd><span>선택 키 갱신</span></div><div><kbd>[ / ]</kbd><span>이전·다음 키</span></div><div><kbd>⌘/Ctrl + S</kbd><span>프로젝트 저장</span></div><div><kbd>⌘/Ctrl + Z</kbd><span>실행 취소</span></div><div><kbd>Alt + ←/→</kbd><span>스토리보드 컷 순서</span></div><div><kbd>Esc</kbd><span>열린 창 닫기</span></div>
+              </div>
+              <div class="manual-troubleshooting">
+                <details open><summary>키를 추가했는데 움직이지 않아요</summary><p>같은 대상에 서로 다른 시간의 키가 최소 두 개 있어야 이동이 생깁니다. `대상` 선택과 키 시간을 확인하세요.</p></details>
+                <details><summary>전체 시간을 바꿀 수 없어요</summary><p>잠긴 대상의 키가 있으면 시간 비율 변경으로 키가 움직이지 않도록 전체 시간 입력이 비활성화됩니다. 해당 대상의 편집 잠금을 먼저 해제하세요.</p></details>
+                <details><summary>팬·틸트를 직접 바꿀 수 없어요</summary><p>피사체 추적이 켜져 있거나 카메라 회전이 잠겨 있습니다. 추적 대상을 `추적 안 함`으로 바꾸거나 회전 잠금을 해제하세요.</p></details>
+                <details><summary>MP4 준비가 실패해요</summary><p>FrisFrame 서버로 접속했는지, FFmpeg가 설치되어 있는지 확인하세요. MP4 대신 WebM으로 자동 변경되지는 않습니다.</p></details>
+              </div>
+              <div class="manual-actions"><button type="button" data-manual-action="tutorial"><i data-lucide="circle-play" aria-hidden="true"></i><span>처음 사용 가이드 시작</span></button></div>
+            </article>
+
+            <div id="manualEmptyState" class="manual-empty" hidden><i data-lucide="search-x" aria-hidden="true"></i><strong>검색 결과가 없습니다</strong><p>다른 메뉴 이름이나 작업 용어로 검색해 보세요.</p></div>
+          </main>
+        </div>
+
+        <footer class="manual-footer">
+          <span><i data-lucide="badge-info" aria-hidden="true"></i>설명서는 현재 구현된 기능을 기준으로 작성되었습니다.</span>
+          <button value="close" class="text-btn">닫기</button>
+        </footer>
+      </form>
+    </dialog>
 
     <dialog id="scenarioDialog" class="scenario-dialog">
       <form method="dialog" class="scenario-dialog-inner">
@@ -740,13 +925,99 @@
           <label class="compact-field">
             <span>적용 방식</span>
             <select id="scenarioApplyMode">
-              <option value="replace">현재 씬 구조 교체</option>
+              <option value="replace">전체 시나리오 구조 교체</option>
               <option value="append">기존 프로젝트 뒤에 추가</option>
             </select>
           </label>
           <button id="analyzeStructureBtn" type="button" class="text-btn"><i data-lucide="list-tree" aria-hidden="true"></i><span>구조 분석</span></button>
           <button id="applyStructureBtn" type="button" class="primary-btn" disabled><i data-lucide="check" aria-hidden="true"></i><span>구조 적용</span></button>
           <button value="close" class="text-btn">취소</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="projectLibraryDialog" class="project-library-dialog">
+      <form method="dialog" class="project-library-inner">
+        <header class="project-library-header">
+          <div>
+            <span class="section-kicker">FrisFrame</span>
+            <h2>프로젝트 관리</h2>
+            <p id="projectLibraryLead">프로젝트를 선택하거나 새로 만들어 작업을 시작하세요.</p>
+          </div>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <div class="project-library-tools">
+          <label class="project-library-search">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="projectLibrarySearch" type="search" placeholder="프로젝트 이름 검색" autocomplete="off" />
+          </label>
+          <div id="projectLibraryTabs" class="segmented project-library-tabs" aria-label="프로젝트 범위">
+            <button type="button" data-project-library-tab="active" class="is-active">내 프로젝트</button>
+            <button type="button" data-project-library-tab="trash">휴지통</button>
+          </div>
+          <button id="projectLibraryNewBtn" type="button" class="primary-btn"><i data-lucide="plus" aria-hidden="true"></i><span>새 프로젝트</span></button>
+        </div>
+        <div id="projectLibrarySummary" class="project-library-summary">프로젝트를 불러오는 중...</div>
+        <div id="projectLibraryList" class="project-library-list" aria-live="polite"></div>
+        <footer class="project-library-footer">
+          <span><i data-lucide="database" aria-hidden="true"></i>한 번 저장한 프로젝트는 편집 후 자동 저장됩니다.</span>
+          <button value="close" class="text-btn">닫기</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="projectCreateDialog" class="project-name-dialog">
+      <form method="dialog" class="project-name-inner">
+        <header>
+          <div>
+            <span class="section-kicker">새 작업</span>
+            <h2>프로젝트 만들기</h2>
+          </div>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <p class="project-name-copy">먼저 프로젝트 제목을 정하세요. 이 제목으로 목록과 상단 작업 표시줄에 저장됩니다.</p>
+        <label>
+          <span>프로젝트 제목</span>
+          <input id="projectCreateInput" type="text" maxlength="200" placeholder="예: 여름 캠페인 TVCF" autocomplete="off" />
+        </label>
+        <div id="projectCreateError" class="project-create-error" role="alert" hidden></div>
+        <footer>
+          <button value="close" class="text-btn">취소</button>
+          <button id="projectCreateSaveBtn" type="button" class="primary-btn"><i data-lucide="folder-plus" aria-hidden="true"></i><span>프로젝트 만들기</span></button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="projectRenameDialog" class="project-name-dialog">
+      <form method="dialog" class="project-name-inner">
+        <header>
+          <h2>프로젝트 이름 변경</h2>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <label>
+          <span>프로젝트 이름</span>
+          <input id="projectRenameInput" type="text" maxlength="200" autocomplete="off" />
+        </label>
+        <footer>
+          <button value="close" class="text-btn">취소</button>
+          <button id="projectRenameSaveBtn" type="button" class="primary-btn"><i data-lucide="check" aria-hidden="true"></i><span>이름 변경</span></button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="projectVersionsDialog" class="project-name-dialog project-versions-dialog">
+      <form method="dialog" class="project-name-inner">
+        <header>
+          <div>
+            <span class="section-kicker">복구 안전망</span>
+            <h2>최근 저장본</h2>
+          </div>
+          <button value="close" class="icon-btn" aria-label="닫기"><i data-lucide="x">×</i></button>
+        </header>
+        <p class="project-name-copy">현재 프로젝트의 이전 저장본을 최대 5개까지 보관합니다. 복원해도 지금 저장본이 이력에 다시 남습니다.</p>
+        <div id="projectVersionsList" class="project-versions-list" aria-live="polite"></div>
+        <footer>
+          <button value="close" class="text-btn">닫기</button>
         </footer>
       </form>
     </dialog>
@@ -785,10 +1056,13 @@
       </form>
     </dialog>
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="./video-analysis-core.js?v=20260711-14"></script>
+    <script src="./vendor/three.min.js?v=0.160.0"></script>
+    <script src="./vendor/lucide.min.js?v=0.468.0"></script>
+    <script src="./motion-core.js?v=20260713-01"></script>
+    <script src="./project-recovery-core.js?v=20260713-01"></script>
     <script src="./storyboard-core.js?v=20260711-03"></script>
-    <script src="./app.js?v=20260712-16"></script>
+    <script src="./manual-guide-core.js?v=20260713-01"></script>
+    <script src="./pose-core.js?v=20260714-01"></script>
+    <script src="./app.js?v=20260714-02"></script>
   </body>
 </html>

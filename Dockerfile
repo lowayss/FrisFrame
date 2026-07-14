@@ -15,6 +15,9 @@ EXPOSE 8766
 # Define environment variables
 ENV HOST=0.0.0.0
 ENV PORT=8766
+ENV ENABLE_LICENSE_CHECK=true
+ENV FRISFRAME_REQUIRE_ORIGIN=true
+ENV FRISFRAME_SECURE_COOKIES=true
 
 # Run the server
 CMD ["python3", "server.py"]

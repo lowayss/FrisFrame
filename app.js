@@ -1,5 +1,8 @@
 const canvas = document.querySelector("#stageCanvas");
 let ctx = canvas.getContext("2d");
+const stageViewport = document.querySelector("#stageViewport");
+const stageCanvasHolder = document.querySelector("#stageCanvasHolder");
+const stageZoomControls = document.querySelector("#stageZoomControls");
 
 const colors = [
   "#ff6262",
@@ -125,34 +128,45 @@ const aspectMap = {
 const MAX_TIMELINE_DURATION = 60;
 const MAX_FOCUS_HEIGHT = 4;
 const CINEMATIC_FACE_SCREEN_Y = 0.3;
-const analysisCore = window.PrevisVideoAnalysisCore;
-if (!analysisCore) throw new Error("영상 분석 엔진을 불러오지 못했습니다.");
+const motionCore = window.FrisFrameMotionCore;
+if (!motionCore) throw new Error("동선 계산 엔진을 불러오지 못했습니다.");
+const projectRecoveryCore = window.FrisFrameProjectRecoveryCore;
+if (!projectRecoveryCore) throw new Error("프로젝트 복구 엔진을 불러오지 못했습니다.");
 const storyboardCore = window.StoryboardCore;
 if (!storyboardCore) throw new Error("스토리보드 구성 엔진을 불러오지 못했습니다.");
-const PROJECT_SCHEMA_VERSION = 5;
+const poseCore = window.FrisFramePoseCore;
+if (!poseCore) throw new Error("배우 포즈 엔진을 불러오지 못했습니다.");
+const PROJECT_SCHEMA_VERSION = 6;
 const SERVICE_NAME = "FrisFrame";
+const LAST_MANAGED_PROJECT_KEY = "frisframe:last-managed-project";
+const PROJECT_RECOVERY_KEY_PREFIX = "frisframe:project-recovery:v1:";
 const {
-  assignTrackCandidates,
-  accumulateCameraTransforms,
-  classifyCameraMotion,
-  compensatedMotionFeatures,
-  estimateGlobalFrameMotion,
-  fitFrameSize,
-  findMotionRegions,
-  inferSustainedActorCount,
-  mapActorScreenPose,
-  mapReferenceDelta,
-  projectScreenToStage3D,
-  resolveDraftDuration,
+  activeMotionSegment,
   circularArcPoint,
   constrainPathEndpoint,
+  finiteNumber,
+  motionSegments,
   normalizePathMode,
   normalizeTransition,
+  poseFieldsChanged,
   samplePlanarPath,
-  smoothCameraTransforms,
-  stabilizeDetection,
   transitionProgress,
-} = analysisCore;
+} = motionCore;
+const {
+  classifyRecovery,
+  createRecoveryRecord,
+  parseRecoveryRecord,
+} = projectRecoveryCore;
+const {
+  JOINT_DEFINITIONS,
+  PRESET_CATEGORIES,
+  PRESET_LABELS: POSE_PRESET_LABELS,
+  defaultBodyPose,
+  interpolateBodyPose,
+  mirrorBodyPose,
+  presetBodyPose,
+  sanitizeBodyPose,
+} = poseCore;
 
 const keyTransitionLabels = {
   smooth: "부드럽게",
@@ -175,20 +189,8 @@ const pathModeLabels = {
 
 const actorPathModes = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"];
 const cameraPathModes = [...actorPathModes, "drone", "jib-up", "jib-down"];
-
-const cameraMotionLabels = {
-  static: "고정",
-  pan: "팬/틸트",
-  zoom: "줌/돌리",
-  handheld: "핸드헬드",
-  mixed: "복합 이동",
-};
-
-const cameraInterpretationMix = {
-  rotation: 0.12,
-  balanced: 0.45,
-  movement: 0.85,
-};
+const CAMERA_GUIDE_FIELDS = ["x", "y", "height", "panDeg", "tiltDeg", "focal", "trackingTargetId"];
+const ITEM_GUIDE_FIELDS = ["x", "y", "facing", "size", "scaleX", "scaleY", "scaleZ", "visible"];
 
 const previsModes = {
   "camera-only": {
@@ -236,7 +238,9 @@ const exportPresets = {
   kling: "Kling",
 };
 
-const defaultState = () => ({
+const defaultState = () => {
+  const actorId = uid();
+  return ({
   version: 4,
   sceneTitle: "새 블로킹",
   sceneIntent:
@@ -247,71 +251,13 @@ const defaultState = () => ({
     selectedLayers: ["camera", "pose", "depth", "ai-depth", "edges", "masks"],
     exportPresets: ["seedance", "blender"],
   },
-  motionPrevis: {
-    imported: false,
-    importedAt: "",
-    sourceName: "",
-    frameCount: 0,
-    cameraMoveFrames: 0,
-    sampleFps: 0,
-    qualityReport: null,
-    poseDiagnostics: [],
-    files: {},
-    shotBible: [],
-    analysisSettings: null,
-  },
-  reference: {
-    id: "",
-    kind: "none",
-    name: "",
-    url: "",
-    type: "",
-    size: 0,
-    duration: 0,
-    start: 0,
-    end: 0,
-    precision: "detailed",
-    showOverlay: true,
-    calibration: {
-      anchorToCurrent: true,
-      mirrorX: false,
-      rotation: 0,
-      lateralScale: 0.8,
-      depthScale: 0.65,
-      sizeDepthWeight: 0.1,
-      cameraGain: 1.1,
-      cameraInterpretation: "balanced",
-      stabilizationStrength: 0.75,
-    },
-    notes: "",
-    analysis: {
-      status: "idle",
-      keyCount: 0,
-      actorCount: 1,
-      motionScore: 0,
-      tracking: "motion",
-      detectedFrames: 0,
-      sampleCount: 0,
-      cameraConfidence: 0,
-      cameraMotionType: "static",
-      cameraPan: 0,
-      cameraZoom: 0,
-      cameraJitter: 0,
-      actorConfidence: 0,
-      mappingConfidence: 0,
-      detectedActorCount: 0,
-      detectedObjectCount: 0,
-      sceneCuts: 0,
-      cutTimes: [],
-    },
-  },
   aspect: "16:9",
   spacePresetId: "",
   showGrid: true,
   showNames: false,
   showCamera: true,
   cleanExport: true,
-  blenderControls: false,
+  blenderControls: true,
   camera: {
     x: 0.92,
     y: 0.48,
@@ -323,10 +269,17 @@ const defaultState = () => ({
     tiltDeg: -6,
     focal: 85,
     trackingTargetId: "",
+    locks: {
+      position: false,
+      orientation: false,
+      lens: false,
+      height: false,
+    },
   },
   items: [
     {
-      id: uid(),
+      id: actorId,
+      continuityId: uid(),
       type: "actor",
       name: "수아",
       x: 0.32,
@@ -335,24 +288,11 @@ const defaultState = () => ({
       color: "#ff6262",
       shape: "circle",
       facing: 0,
+      bodyPose: defaultBodyPose(),
       placementMode: "manual",
       mountId: "",
       seatIndex: 0,
-    },
-    {
-      id: uid(),
-      type: "prop",
-      name: "테이블",
-      x: 0.5,
-      y: 0.62,
-      size: 1.05,
-      color: "#65d66f",
-      shape: "triangle",
-      facing: 270,
-      assetType: "dining-table",
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
+      editLocked: false,
     },
   ],
   groups: [],
@@ -360,13 +300,14 @@ const defaultState = () => ({
     duration: 15,
     fps: 24,
     playhead: 0,
-    activeSource: "all",
+    activeSource: actorId,
     timelineView: "combined",
     selectedKeyId: null,
     hiddenSources: [],
     keyframes: [],
   },
-});
+  });
+};
 
 let state = defaultState();
 let selected = { kind: "item", id: state.items[0].id };
@@ -377,10 +318,25 @@ let activeSceneId = "";
 let activeCutId = "";
 let workspaceMode = "blocking";
 let storyboardStatusFilter = "all";
-let storyboardScope = "scene";
+const storyboardScope = "project";
 let structureDraft = null;
 let storyboardThumbnailRun = 0;
 let projectSaveStatus = "changed";
+let managedProjectId = "";
+let managedProjectRevision = 0;
+let managedProjectUpdatedAt = "";
+let managedSavedFingerprint = "";
+let managedAutosaveTimer = null;
+let managedRecoveryTimer = null;
+let managedRecoveryWarningShown = false;
+let managedSaveInFlight = false;
+let managedSaveConflict = false;
+let suppressManagedAutosave = false;
+let projectLibraryTab = "active";
+let projectLibraryItems = [];
+let pendingProjectRenameId = "";
+let projectVersionItems = [];
+let pendingProjectCreationMode = "blank";
 let appToastTimer = null;
 let projectHistory = [];
 let projectFuture = [];
@@ -396,20 +352,26 @@ let curveHandleDrag = null;
 let pathSnapGuide = null;
 let timelineDrag = null;
 let stageRect = { x: 0, y: 0, w: 1, h: 1 };
+const STAGE_ZOOM_MIN = 1;
+const STAGE_ZOOM_MAX = 4;
+const STAGE_WORLD_LONG_EDGE = 36;
+const STAGE_GRID_STEP_METERS = 1.5;
+const THREE_ORBIT_RADIUS_MIN = 12;
+const THREE_ORBIT_RADIUS_MAX = 39;
+let stageZoom = 1;
+let stagePanDrag = null;
+let stageSpaceHeld = false;
+let stageSpacePanUsed = false;
 let preview = null;
 let viewMode = "2d";
 let threeView = null;
 let threeDrag = null;
 let threeEditMode = "move";
-let referenceClipBlob = null;
-let referenceClipUrl = "";
-let referenceAnalysisBusy = false;
-let referenceAnalysisMessage = "";
-let referenceAnalysisStage = "";
-let referenceAnalysisCache = null;
-let referenceAnalysisGeneration = 0;
-const personDetectors = {};
-const personDetectorPromises = {};
+let selectedPoseActorId = state.items[0].id;
+let selectedPoseJoint = "chest";
+let selectedPoseCategory = "";
+let poseClipboard = null;
+const CUSTOM_POSES_KEY = "frisframe:custom-poses";
 let pendingExport = null;
 let evaluatedViewState = null;
 let mediaExportBusy = false;
@@ -417,94 +379,15 @@ let mediaExportProgress = "";
 let tutorialOpen = false;
 let tutorialIndex = 0;
 let tutorialPositionFrame = null;
+let manualActiveSection = "overview";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
 const TUTORIAL_STORAGE_KEY = "previs-blocking-tutorial-v1";
-const tutorialSteps = [
-  {
-    title: `${SERVICE_NAME} 시작하기`,
-    body: "이 도구는 컷마다 배우·소품·카메라의 위치와 움직임을 설계하고, 2D 평면도와 3D 프리비즈로 확인하는 작업 공간입니다. 안내를 따라가면 한 컷을 만드는 전체 순서를 익힐 수 있습니다.",
-    tryText: "프로젝트 내용은 바뀌지 않습니다. 다음을 눌러 주요 작업 영역을 차례로 살펴보세요.",
-  },
-  {
-    selector: "#storyboardBtn",
-    title: "1. 씬과 컷 정리",
-    body: "스토리보드에서는 시나리오를 씬과 컷으로 나누고, 각 컷의 액션·대사·샷 크기·연출 의도를 기록합니다. 원하는 컷에서 ‘블로킹 열기’를 누르면 지금 보는 무대 편집 화면으로 들어옵니다.",
-    tryText: "여러 컷을 만들 때는 먼저 스토리보드에서 순서를 정한 뒤 각 컷의 블로킹을 작업하세요.",
-  },
-  {
-    selector: "#aspectButtons",
-    highlightClosest: "details",
-    openDetails: true,
-    title: "2. 무대와 화면비",
-    body: "무대에서 최종 영상의 화면비를 정합니다. 격자는 거리와 정렬을 판단할 때 쓰고, 이름 표시는 복잡할 때 끌 수 있습니다. ‘깨끗한 출력’을 켜면 편집용 표시가 결과 이미지에서 빠집니다.",
-    tryText: "일반 영화·광고는 16:9, 세로 숏폼은 9:16부터 시작하면 편합니다.",
-  },
-  {
-    selector: "#actorForm",
-    highlightClosest: "details",
-    openDetails: true,
-    title: "3. 배우 추가",
-    body: "배우 이름을 입력하고 추가하면 무대와 목록에 배우가 생깁니다. 배우를 선택한 뒤 오른쪽 속성에서 색, 크기, 바라보는 방향과 미세 위치를 조절할 수 있습니다.",
-    tryText: "배우 목록의 항목을 누른 다음 무대 위 마크를 드래그해 첫 위치를 잡아보세요.",
-  },
-  {
-    selector: "#propForm",
-    highlightClosest: "details",
-    openDetails: true,
-    title: "4. 소품과 공간 추가",
-    body: "자동차·가구·가전·나무 같은 소품을 직접 추가하거나, 거실·주방·침실 같은 공간 프리셋을 한 번에 배치할 수 있습니다. 소품마다 길이·높이·너비를 따로 바꿀 수 있습니다.",
-    tryText: "빠르게 시작하려면 공간 프리셋을 넣고 필요 없는 요소만 삭제하세요.",
-  },
-  {
-    selector: "#stageCanvas",
-    cardWidth: 280,
-    title: "5. 2D 평면도에서 블로킹",
-    body: "가운데 무대는 위에서 내려다본 평면도입니다. 배우·소품·카메라를 드래그해 위치를 정하고, 선택 대상의 방향 핸들이나 오른쪽 방향 슬라이더로 시선을 조절합니다. 카메라의 부채꼴은 현재 화각입니다.",
-    tryText: "먼저 인물 간 거리와 시선축을 잡고, 그다음 카메라 위치를 정하면 구도가 덜 꼬입니다.",
-  },
-  {
-    selector: "#cameraHeightSlider",
-    highlightClosest: "details",
-    openDetails: true,
-    title: "6. 카메라와 피사체 추적",
-    body: "렌즈는 화각, 높이는 카메라의 수직 위치, 팬은 좌우 회전, 틸트는 위아래 각도입니다. 피사체 추적을 선택하면 배우의 얼굴·머리 위치를 기준으로 팬과 틸트가 자동 조정됩니다.",
-    tryText: "카메라 높이를 바꾼 뒤 3D 카메라 프레임에서 헤드룸과 내려다보는 각도를 확인하세요.",
-  },
-  {
-    selector: "#actorPlacementFields",
-    fallbackSelector: "#propertiesPanel",
-    prepare: "actor-properties",
-    title: "7. 차량 탑승",
-    body: "배우를 선택하면 ‘탑승 방식’이 나타납니다. 자동 탑승은 차량과 좌석을 고르면 바로 결합됩니다. 수동 탑승은 배우를 차량 위에 겹친 뒤 ‘겹친 대상 묶기’를 누릅니다. 두 방식 모두 차량 트랙 하나로 함께 움직입니다.",
-    tryText: "자동은 좌석이 정확할 때, 수동은 자유로운 자세나 특수한 배치가 필요할 때 사용하세요.",
-  },
-  {
-    selector: ".timeline",
-    title: "8. 키프레임으로 동선 만들기",
-    body: "대상을 고르고 현재 시간 0초에 첫 키를 추가합니다. 대상을 새 위치로 옮긴 뒤 현재 시간을 바꾸고 두 번째 키를 추가하면 동선이 만들어집니다. ‘현재 시간’은 키가 놓일 순간이고 ‘전체 시간’은 컷 전체 길이입니다.",
-    tryText: "타임라인의 점은 좌우로 드래그해 시간을 바꿀 수 있습니다. 도착 방식과 경로도 선택한 키에서 조정하세요.",
-  },
-  {
-    selector: "#viewButtons",
-    title: "9. 3D 프리비즈 확인",
-    body: "3D에서는 배우·소품·카메라의 높이와 방향을 입체적으로 확인합니다. 이동·방향 모드로 대상을 편집하고, 오른쪽 아래 카메라 프레임에서 실제 렌즈에 들어오는 구도를 확인합니다.",
-    tryText: "2D에서 동선을 만든 뒤 3D로 전환해 충돌, 높이, 헤드룸을 점검하세요.",
-  },
-  {
-    selector: "#exportMenu",
-    title: "10. 저장과 내보내기",
-    body: "저장은 편집 가능한 프로젝트 파일을 준비합니다. 내보내기에서는 현재 프레임, 시작·끝 프레임, 카메라 영상을 먼저 프리뷰로 확인한 뒤 직접 내보냅니다. 작업 중 자동 다운로드는 발생하지 않습니다.",
-    tryText: "결과를 만들기 전 2D 동선 재생과 3D 카메라 프레임을 한 번씩 확인하세요.",
-  },
-  {
-    title: "기본 작업 순서",
-    body: "컷 선택 → 화면비 설정 → 배우·소품 배치 → 카메라 구도 → 첫 키 추가 → 위치와 시간을 바꿔 다음 키 추가 → 동선 재생 → 3D 확인 → 프리뷰 검토 → 저장·내보내기 순서로 작업하면 됩니다.",
-    tryText: "상단의 물음표 버튼을 누르면 이 튜토리얼을 언제든 다시 볼 수 있습니다.",
-  },
-];
+const manualGuideCore = window.FrisFrameManualGuideCore;
+if (!manualGuideCore) throw new Error("매뉴얼 모듈을 불러오지 못했습니다.");
+const tutorialSteps = manualGuideCore.buildTutorialSteps(SERVICE_NAME);
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -633,7 +516,7 @@ function createCut(blocking = defaultState(), metadata = {}) {
   cut.status = ["draft", "blocking", "review", "approved"].includes(metadata.status)
     ? metadata.status
     : cut.status;
-  cut.thumbnailTime = clamp(Number(metadata.thumbnailTime || 0), 0, documentState.motion?.duration || 60);
+  cut.thumbnailTime = clamp(finiteNumber(metadata.thumbnailTime, 0), 0, documentState.motion?.duration || 60);
   cut.sourceText = String(metadata.sourceText || "");
   cut.createdAt = String(metadata.createdAt || isoNow());
   cut.updatedAt = String(metadata.updatedAt || cut.createdAt);
@@ -711,6 +594,7 @@ function pushProjectHistory() {
   projectHistory.push(captureProjectSnapshot());
   if (projectHistory.length > 20) projectHistory.shift();
   projectFuture = [];
+  syncHistoryButtons();
 }
 
 function restoreProjectSnapshot(json) {
@@ -807,7 +691,11 @@ function migrateLegacyBlocking(blockingInput) {
 }
 
 function projectFromPayload(payload) {
-  if (payload?.schemaVersion === PROJECT_SCHEMA_VERSION || payload?.project) {
+  const schemaVersion = Number(payload?.schemaVersion || 0);
+  if (schemaVersion > PROJECT_SCHEMA_VERSION) {
+    throw new Error(`이 프로젝트는 더 새로운 FrisFrame 형식(v${schemaVersion})입니다. 현재 버전에서는 열 수 없습니다.`);
+  }
+  if (payload?.project) {
     return sanitizeProjectDocument(payload.project || payload);
   }
   const legacy = payload?.state || payload;
@@ -840,7 +728,7 @@ function saveCurrentCutRuntime() {
 function switchProjectCut(sceneId, cutId, options = {}) {
   const target = findProjectCut(sceneId, cutId);
   if (!target.scene || !target.cut) return false;
-  stopPreview();
+  cancelPreview();
   syncActiveCutDocument(false);
   saveCurrentCutRuntime();
   drag = null;
@@ -866,7 +754,6 @@ function switchProjectCut(sceneId, cutId, options = {}) {
 }
 
 function loadProjectDocument(nextProject) {
-  clearReferenceClipRuntime();
   clearStoryboardThumbnailCache();
   cutRuntime.clear();
   projectHistory = [];
@@ -927,18 +814,104 @@ function remapBlockingIds(blockingInput) {
 
 function createContinuityBlocking(template = state) {
   const fresh = defaultState();
+  const duration = template.motion?.duration || 15;
+  const endState = interpolateRenderStateAtTime(template, duration);
   fresh.aspect = template.aspect;
+  fresh.spacePresetId = template.spacePresetId || "";
   fresh.showGrid = template.showGrid;
   fresh.showNames = template.showNames;
   fresh.showCamera = template.showCamera;
   fresh.cleanExport = template.cleanExport;
-  fresh.camera = clone(template.camera);
-  fresh.items = clone(template.items);
-  fresh.motion.duration = template.motion?.duration || 15;
+  fresh.camera = clone(endState.camera);
+  fresh.items = clone(endState.items);
+  fresh.groups = clone(template.groups || []);
+  fresh.motion.duration = duration;
   fresh.motion.fps = template.motion?.fps || 24;
   fresh.sceneTitle = "새 컷";
   fresh.sceneIntent = "";
   return remapBlockingIds(fresh);
+}
+
+function draftCameraFromText(draft, actorX = 0.32, actorY = 0.46) {
+  const combined = [draft.title, draft.action, draft.dialogue, draft.camera, draft.intent]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  // 1. Determine distance & focal preset
+  let distance = 0.60;
+  let focal = 50;
+
+  if (/익스트림\s*클로즈|extreme\s*close|ecu|초근접/.test(combined)) {
+    distance = 0.22;
+    focal = 100;
+  } else if (/클로즈|close[ -]?up|cu/.test(combined)) {
+    distance = 0.35;
+    focal = 85;
+  } else if (/바스트|medium\s*close|mcu/.test(combined)) {
+    distance = 0.50;
+    focal = 50;
+  } else if (/미디엄|medium|ms/.test(combined)) {
+    distance = 0.70;
+    focal = 35;
+  } else if (/풀\s*샷|full\s*shot|fs/.test(combined)) {
+    distance = 1.00;
+    focal = 28;
+  } else if (/와이드|wide|롱\s*샷|long\s*shot|ws|els|익스트림\s*롱/.test(combined)) {
+    distance = 1.40;
+    focal = 21;
+  }
+
+  // 2. Determine angle direction
+  let angleRad = Math.PI; // default: looking left (from right side of actor)
+  if (/측면|옆면|profile|lateral|side/.test(combined)) {
+    angleRad = -Math.PI / 2; // looking from below (Y+)
+  } else if (/후면|뒷모습|뒤쪽|rear|back/.test(combined)) {
+    angleRad = 0; // looking from left (X-)
+  } else if (/정면|앞모습|front|frontal/.test(combined)) {
+    angleRad = Math.PI; // looking from right (X+)
+  }
+
+  // 3. Height & Tilt
+  let height = 1.6;
+  let focusHeight = 1.1;
+  let tiltDeg = -6;
+
+  if (/수직|버티컬|vertical|overhead|탑샷/.test(combined)) {
+    height = 4.2;
+    focusHeight = 0;
+    tiltDeg = -88;
+  } else if (/하이|high/.test(combined)) {
+    height = 3.0;
+    focusHeight = 0.8;
+    tiltDeg = -25;
+  } else if (/로우|낮은|low|바닥|ground/.test(combined)) {
+    height = 0.4;
+    focusHeight = 1.3;
+    tiltDeg = 15;
+  }
+
+  const cameraX = actorX + Math.cos(angleRad) * distance;
+  const cameraY = actorY + Math.sin(angleRad) * distance;
+
+  return {
+    x: Math.min(1.99, Math.max(0.01, cameraX)),
+    y: Math.min(1.99, Math.max(0.01, cameraY)),
+    aimX: actorX,
+    aimY: actorY,
+    height,
+    focusHeight,
+    tiltDeg,
+    focal: draft.focal ? clamp(Number(draft.focal), 14, 135) : focal,
+    panDeg: Math.round((radToDeg(angleRad + Math.PI) + 360) % 360),
+    trackingTargetId: "",
+    locks: {
+      position: false,
+      orientation: false,
+      lens: false,
+      height: false,
+    }
+  };
 }
 
 function createCutFromTextDraft(draft) {
@@ -946,7 +919,11 @@ function createCutFromTextDraft(draft) {
   blocking.sceneTitle = draft.title || "새 컷";
   blocking.sceneIntent = [draft.intent, draft.camera].filter(Boolean).join("\n");
   if (draft.duration) blocking.motion.duration = clamp(Number(draft.duration), 1, MAX_TIMELINE_DURATION);
-  if (draft.focal) blocking.camera.focal = clamp(Number(draft.focal), 14, 135);
+  
+  // Apply visual-guided smart camera layout
+  const firstActor = blocking.items.find((item) => item.type === "actor") || { x: 0.32, y: 0.46 };
+  blocking.camera = draftCameraFromText(draft, firstActor.x, firstActor.y);
+
   return createCut(blocking, {
     title: draft.title,
     action: draft.action,
@@ -975,7 +952,51 @@ function cutIssueList(cut) {
   const keys = cut.blocking?.motion?.keyframes || [];
   if (!keys.length) issues.push("키프레임 없음");
   if (!keys.some((keyframe) => keyframe.source === "camera")) issues.push("카메라 키 없음");
+  issues.push(...continuityIssuesForCut(cut));
   return issues;
+}
+
+function continuityIssuesForCut(cut) {
+  const location = project?.scenes?.map((scene) => ({ scene, index: scene.cuts.indexOf(cut) }))
+    .find((entry) => entry.index >= 0);
+  if (!location || location.index === 0) return [];
+  const previousCut = location.scene.cuts[location.index - 1];
+  return continuityIssues(previousCut?.blocking, cut?.blocking);
+}
+
+function continuityIssues(previousBlocking, currentBlocking) {
+  if (!previousBlocking || !currentBlocking) return [];
+  const previous = interpolateRenderStateAtTime(previousBlocking, previousBlocking.motion?.duration || 0);
+  const current = interpolateRenderStateAtTime(currentBlocking, 0);
+  const issues = [];
+  if (previous.aspect !== current.aspect) issues.push(`연속성: 화면비 ${previous.aspect} → ${current.aspect}`);
+  const currentByIdentity = new Map(current.items.map((item) => [continuityIdentity(item), item]));
+  previous.items.forEach((before) => {
+    const after = currentByIdentity.get(continuityIdentity(before));
+    if (!after) {
+      if (before.type === "actor") issues.push(`연속성: @${before.name}이 다음 컷에서 사라짐`);
+      return;
+    }
+    if (before.type === "prop" && before.assetType !== after.assetType) {
+      issues.push(`연속성: ${before.name} 소품 종류가 바뀜`);
+    }
+    if (before.color !== after.color) issues.push(`연속성: ${before.name} 색상이 바뀜`);
+    if (before.type === "actor" && (before.mountId ? "mounted" : "free") !== (after.mountId ? "mounted" : "free")) {
+      issues.push(`연속성: @${before.name} 탑승 상태가 바뀜`);
+    }
+    const beforePose = resolvedItemPose(before, previous);
+    const afterPose = resolvedItemPose(after, current);
+    const size = stageWorldSize(current);
+    const jump = Math.hypot((beforePose.x - afterPose.x) * size.width, (beforePose.y - afterPose.y) * size.depth);
+    if (before.type === "actor" && jump > 0.75) issues.push(`연속성: @${before.name} 위치가 ${jump.toFixed(1)}m 이동`);
+    const facingChange = Math.abs((((afterPose.facing - beforePose.facing) % 360) + 540) % 360 - 180);
+    if (before.type === "actor" && facingChange > 45) issues.push(`연속성: @${before.name} 방향이 ${Math.round(facingChange)}° 바뀜`);
+  });
+  return issues.slice(0, 8);
+}
+
+function continuityIdentity(item) {
+  return String(item.continuityId || `${item.type}:${String(item.name || "").trim().toLowerCase()}`);
 }
 
 function snapshot() {
@@ -1002,6 +1023,7 @@ function restore(json) {
   const cut = currentCut();
   if (cut) cut.blocking = state;
   selected = selectedExists(selected) ? selected : { kind: "camera" };
+  setProjectSaveStatus("changed");
   syncUi();
   draw();
   syncProjectChrome();
@@ -1054,15 +1076,15 @@ function applyResponsivePanelDefaults() {
 }
 
 function sanitizeState() {
-  state.version = 4;
+  state.version = 5;
   state.spacePresetId = environmentPresets[state.spacePresetId] ? state.spacePresetId : "";
   state.previs = state.previs || {};
   state.previs.mode = previsModes[state.previs.mode] ? state.previs.mode : "full-scene";
   state.previs.target = previsTargets[state.previs.target] ? state.previs.target : "hybrid";
   state.previs.selectedLayers = normalizeSelection(state.previs.selectedLayers, controlLayers, ["camera", "pose", "depth", "ai-depth", "edges", "masks"]);
   state.previs.exportPresets = normalizeSelection(state.previs.exportPresets, exportPresets, ["seedance", "blender"]);
-  state.reference = sanitizeReference(state.reference);
-  state.motionPrevis = sanitizeMotionPrevis(state.motionPrevis);
+  delete state.reference;
+  delete state.motionPrevis;
   state.items = (state.items || []).map((item) => sanitizeItemPose(item));
   sanitizeAutoMountRelationships(state);
   state.groups = sanitizeManualGroups(state.groups, state);
@@ -1070,19 +1092,20 @@ function sanitizeState() {
   state.groups = sanitizeManualGroups(state.groups, state);
   const cameraOrientation = cameraOrientationFromLegacy(state.camera, state);
   state.camera = {
-    x: clamp(Number(state.camera?.x ?? 0.92), 0.02, 0.98),
-    y: clamp(Number(state.camera?.y ?? 0.48), 0.02, 0.98),
-    height: clamp(Number(state.camera?.height ?? 1.6), 0.4, 3),
+    x: clamp(finiteNumber(state.camera?.x, 0.92), 0.02, 0.98),
+    y: clamp(finiteNumber(state.camera?.y, 0.48), 0.02, 0.98),
+    height: clamp(finiteNumber(state.camera?.height, 1.6), 0.4, 3),
     panDeg: normalizePanDeg(Number.isFinite(Number(state.camera?.panDeg)) ? state.camera.panDeg : cameraOrientation.panDeg),
     tiltDeg: clamp(Number.isFinite(Number(state.camera?.tiltDeg)) ? Number(state.camera.tiltDeg) : cameraOrientation.tiltDeg, -60, 60),
-    focal: clamp(Number(state.camera?.focal ?? 85), 14, 135),
+    focal: clamp(finiteNumber(state.camera?.focal, 85), 14, 135),
     trackingTargetId: sanitizeTrackingTargetId(state.camera?.trackingTargetId, state),
+    locks: sanitizeCameraLocks(state.camera?.locks),
   };
   syncCameraDerivedAim(state.camera, state);
   state.motion = state.motion || {};
-  state.motion.duration = clamp(Number(state.motion.duration ?? 15), 1, MAX_TIMELINE_DURATION);
-  state.motion.fps = clamp(Number(state.motion.fps ?? 24), 12, 60);
-  state.motion.playhead = clamp(Number(state.motion.playhead ?? 0), 0, state.motion.duration);
+  state.motion.duration = clamp(finiteNumber(state.motion.duration, 15), 1, MAX_TIMELINE_DURATION);
+  state.motion.fps = clamp(finiteNumber(state.motion.fps, 24), 12, 60);
+  state.motion.playhead = clamp(finiteNumber(state.motion.playhead, 0), 0, state.motion.duration);
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources);
   state.motion.timelineView = state.motion.timelineView === "split" ? "split" : "combined";
   state.motion.keyframes = normalizeKeyframes(state.motion.keyframes)
@@ -1122,107 +1145,82 @@ function sanitizeState() {
   state.aspect = aspectMap[state.aspect] ? state.aspect : "16:9";
 }
 
+function sanitizeCameraLocks(locks = {}) {
+  return {
+    position: locks?.position === true,
+    orientation: locks?.orientation === true,
+    lens: locks?.lens === true,
+    height: locks?.height === true,
+  };
+}
+
+function cameraFieldLocked(field, renderState = state) {
+  return sanitizeCameraLocks(renderState.camera?.locks)[field] === true;
+}
+
+function itemEditLocked(itemOrId, renderState = state) {
+  const item = typeof itemOrId === "string"
+    ? renderState.items?.find((entry) => entry.id === itemOrId)
+    : itemOrId;
+  return item?.editLocked === true;
+}
+
+function affectedTransformItems(itemId, renderState = state) {
+  const item = renderState.items?.find((entry) => entry.id === itemId);
+  if (!item) return [];
+  const ids = new Set([item.id]);
+  const group = groupForItem(item.id, renderState);
+  group?.members?.forEach((member) => ids.add(member.itemId));
+  if (isVehicleProp(item)) {
+    renderState.items
+      .filter((entry) => entry.type === "actor" && entry.placementMode === "auto" && entry.mountId === item.id)
+      .forEach((entry) => ids.add(entry.id));
+  }
+  return renderState.items.filter((entry) => ids.has(entry.id));
+}
+
+function itemTransformLocked(itemId, renderState = state) {
+  return affectedTransformItems(itemId, renderState).some((item) => itemEditLocked(item, renderState));
+}
+
+function sourceEditLocked(sourceId, renderState = state) {
+  return sourceId !== "camera" && itemTransformLocked(sourceId, renderState);
+}
+
+function sourceSpatialLocked(sourceId, renderState = state) {
+  return sourceId === "camera" ? cameraFieldLocked("position", renderState) : sourceEditLocked(sourceId, renderState);
+}
+
+function hasLockedTimelineSources(renderState = state) {
+  return (renderState.motion?.keyframes || []).some((keyframe) => sourceEditLocked(keyframe.source, renderState));
+}
+
+function mergeLockedCameraPose(nextPose, previousPose = {}) {
+  const locks = sanitizeCameraLocks(state.camera?.locks);
+  const next = { ...nextPose };
+  if (locks.position) {
+    next.x = previousPose.x;
+    next.y = previousPose.y;
+  }
+  if (locks.orientation) {
+    next.panDeg = previousPose.panDeg;
+    next.tiltDeg = previousPose.tiltDeg;
+    next.trackingTargetId = previousPose.trackingTargetId;
+  }
+  if (locks.lens) next.focal = previousPose.focal;
+  if (locks.height) next.height = previousPose.height;
+  next.locks = locks;
+  return sanitizeCameraPose(next);
+}
+
+function notifyEditLocked(label = "대상") {
+  notifyApp(`${label} 편집 잠금을 해제한 뒤 수정하세요.`);
+}
+
 function normalizeSelection(values, catalog, fallback) {
   const selectedValues = Array.isArray(values) ? values : fallback;
   const normalized = selectedValues.filter((value, index, list) => catalog[value] && list.indexOf(value) === index);
   return normalized.length ? normalized : [...fallback];
-}
-
-function sanitizeReference(reference = {}) {
-  const duration = Math.max(0, Number(reference.duration || 0));
-  const start = clamp(Number(reference.start || 0), 0, duration || 600);
-  const endRaw = Number(reference.end || 0);
-  const end = endRaw > 0 ? clamp(endRaw, start, duration || 600) : duration;
-  return {
-    id: String(reference.id || ""),
-    kind: ["video", "image"].includes(reference.kind)
-      ? reference.kind
-      : String(reference.type || "").startsWith("image/")
-        ? "image"
-        : reference.name
-          ? "video"
-          : "none",
-    name: String(reference.name || ""),
-    url: String(reference.url || ""),
-    type: String(reference.type || ""),
-    size: Math.max(0, Number(reference.size || 0)),
-    duration,
-    start,
-    end,
-    precision: reference.precision === "fast" ? "fast" : "detailed",
-    showOverlay: reference.showOverlay !== false,
-    calibration: sanitizeReferenceCalibration(reference.calibration),
-    notes: String(reference.notes || ""),
-    analysis: {
-      status: ["idle", "ready", "working", "review"].includes(reference.analysis?.status)
-        ? reference.analysis.status
-        : "idle",
-      keyCount: clamp(Number(reference.analysis?.keyCount ?? 0), 0, 40),
-      actorCount: clamp(Number(reference.analysis?.actorCount ?? 1), 1, 8),
-      motionScore: clamp(Number(reference.analysis?.motionScore ?? 0), 0, 100),
-      tracking: reference.analysis?.tracking === "vision" ? "vision" : "motion",
-      detectedFrames: clamp(Number(reference.analysis?.detectedFrames ?? 0), 0, 80),
-      sampleCount: clamp(Number(reference.analysis?.sampleCount ?? 0), 0, 80),
-      cameraConfidence: clamp(Number(reference.analysis?.cameraConfidence ?? 0), 0, 100),
-      cameraMotionType: cameraMotionLabels[reference.analysis?.cameraMotionType] ? reference.analysis.cameraMotionType : "static",
-      cameraPan: clamp(Number(reference.analysis?.cameraPan ?? 0), 0, 1),
-      cameraZoom: clamp(Number(reference.analysis?.cameraZoom ?? 0), 0, 1),
-      cameraJitter: clamp(Number(reference.analysis?.cameraJitter ?? 0), 0, 1),
-      actorConfidence: clamp(Number(reference.analysis?.actorConfidence ?? 0), 0, 100),
-      mappingConfidence: clamp(Number(reference.analysis?.mappingConfidence ?? 0), 0, 100),
-      detectedActorCount: clamp(Number(reference.analysis?.detectedActorCount ?? 0), 0, 8),
-      detectedObjectCount: clamp(Number(reference.analysis?.detectedObjectCount ?? 0), 0, 24),
-      sceneCuts: clamp(Number(reference.analysis?.sceneCuts ?? 0), 0, 20),
-      cutTimes: Array.isArray(reference.analysis?.cutTimes)
-        ? reference.analysis.cutTimes.map(Number).filter(Number.isFinite).map((time) => clamp(time, 0, MAX_TIMELINE_DURATION)).slice(0, 20)
-        : [],
-    },
-  };
-}
-
-function sanitizeProvenance(provenance) {
-  if (!isPlainObject(provenance) || provenance.type !== "reference") return null;
-  return {
-    type: "reference",
-    referenceId: String(provenance.referenceId || ""),
-    detectionId: String(provenance.detectionId || ""),
-  };
-}
-
-function sanitizeReferenceCalibration(calibration = {}) {
-  const rotation = [0, 90, 180, 270].includes(Number(calibration.rotation))
-    ? Number(calibration.rotation)
-    : 0;
-  return {
-    anchorToCurrent: calibration.anchorToCurrent !== false,
-    mirrorX: Boolean(calibration.mirrorX),
-    rotation,
-    lateralScale: clamp(Number(calibration.lateralScale ?? 0.8), 0.3, 1.2),
-    depthScale: clamp(Number(calibration.depthScale ?? 0.65), 0.2, 1.2),
-    sizeDepthWeight: clamp(Number(calibration.sizeDepthWeight ?? 0.1), 0, 0.3),
-    cameraGain: clamp(Number(calibration.cameraGain ?? 1.1), 0.25, 2),
-    cameraInterpretation: cameraInterpretationMix[calibration.cameraInterpretation] != null
-      ? calibration.cameraInterpretation
-      : "balanced",
-    stabilizationStrength: clamp(Number(calibration.stabilizationStrength ?? 0.75), 0, 1),
-  };
-}
-
-function sanitizeMotionPrevis(importData = {}) {
-  const files = isPlainObject(importData.files) ? importData.files : {};
-  return {
-    imported: Boolean(importData.imported),
-    importedAt: String(importData.importedAt || ""),
-    sourceName: String(importData.sourceName || ""),
-    frameCount: Math.max(0, Number(importData.frameCount || 0)),
-    cameraMoveFrames: Math.max(0, Number(importData.cameraMoveFrames || 0)),
-    sampleFps: Math.max(0, Number(importData.sampleFps || 0)),
-    qualityReport: isPlainObject(importData.qualityReport) ? importData.qualityReport : null,
-    poseDiagnostics: Array.isArray(importData.poseDiagnostics) ? importData.poseDiagnostics.map(String).slice(0, 24) : [],
-    files,
-    shotBible: Array.isArray(importData.shotBible) ? importData.shotBible.slice(0, 24) : [],
-    analysisSettings: isPlainObject(importData.analysisSettings) ? importData.analysisSettings : null,
-  };
 }
 
 function isPlainObject(value) {
@@ -1285,6 +1283,18 @@ function isSourceHidden(sourceId, renderState = state) {
   return Boolean(renderState.motion?.hiddenSources?.includes(sourceId));
 }
 
+function keyframeCountForSources(sourceIds, renderState = state) {
+  const sourceSet = new Set(Array.isArray(sourceIds) ? sourceIds : [sourceIds]);
+  return (renderState.motion?.keyframes || []).filter((keyframe) => sourceSet.has(keyframe.source)).length;
+}
+
+function confirmKeyframeRemoval(sourceIds, actionLabel, detail = "") {
+  const count = keyframeCountForSources(sourceIds);
+  if (!count) return true;
+  const suffix = detail ? `\n${detail}` : "";
+  return confirm(`${actionLabel}\n키프레임 ${count}개가 삭제됩니다.${suffix}\n이 작업은 실행 취소할 수 있습니다.`);
+}
+
 function showSourceTimeline(sourceId) {
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources)
     .filter((entry) => entry !== sourceId);
@@ -1292,12 +1302,17 @@ function showSourceTimeline(sourceId) {
 
 function hideSourceTimeline(sourceId) {
   if (!sourceExists(sourceId)) return;
+  if (sourceEditLocked(sourceId)) {
+    notifyEditLocked(sourceLabel(sourceId));
+    return false;
+  }
   state.motion.hiddenSources = [...new Set([...normalizeHiddenSources(state.motion.hiddenSources), sourceId])];
   state.motion.keyframes = state.motion.keyframes.filter((keyframe) => keyframe.source !== sourceId);
   if (state.motion.activeSource === sourceId) state.motion.activeSource = "all";
   if (!selectedKeyframeExists(state.motion.selectedKeyId)) {
     state.motion.selectedKeyId = state.motion.keyframes[0]?.id || null;
   }
+  return true;
 }
 
 function sourceDefinition(sourceId, renderState = state) {
@@ -1373,11 +1388,44 @@ function captureSourceKeyframe(sourceId, time = state.motion?.playhead ?? 0, lab
     id: uid(),
     source: sourceId,
     label: label || nextSourceKeyLabel(sourceId),
+    note: "",
     time: clamp(Number(time), 0, duration),
     transition: "smooth",
     segment: motionSegmentForPathMode(pathMode, sourceId),
     pose,
   };
+}
+
+function captureCameraHeightKeyframe() {
+  if (cameraFieldLocked("height")) {
+    notifyEditLocked("카메라 높이");
+    return;
+  }
+  materializeEvaluatedViewForEditing("camera");
+  setActiveSource("camera");
+  selectSourceOnStage("camera");
+  const requestedTime = readTimelineTimeInput(state.motion.playhead);
+  const existing = keysForSource("camera").find((keyframe) => Math.abs(keyframe.time - requestedTime) < 0.05);
+  if (existing) {
+    existing.pose = sanitizeCameraPose({ ...existing.pose, height: state.camera.height });
+    state.motion.selectedKeyId = existing.id;
+    state.motion.playhead = existing.time;
+    commit();
+    notifyApp(`${existing.time.toFixed(1)}초 카메라 키의 높이만 갱신했습니다.`);
+    return;
+  }
+  const time = availableKeyTime(requestedTime, "camera", { maxTime: MAX_TIMELINE_DURATION });
+  ensureDurationCovers(time);
+  const pathMode = $("#keyPathSelect")?.value || "straight";
+  const keyframe = captureSourceKeyframe("camera", time, undefined, pathMode);
+  if (!keyframe) return;
+  applyPathModeToKeyframe(keyframe, pathMode);
+  state.motion.keyframes.push(keyframe);
+  state.motion.selectedKeyId = keyframe.id;
+  state.motion.playhead = keyframe.time;
+  state.motion.keyframes = sortKeyframes(state.motion.keyframes);
+  commit();
+  notifyApp(`${keyframe.time.toFixed(1)}초에 카메라 높이 키를 추가했습니다.`);
 }
 
 function captureAllSourceKeyframes(time = state.motion?.playhead ?? 0) {
@@ -1406,21 +1454,22 @@ function normalizeSourceKeyframe(keyframe, index = 0) {
     id: keyframe.id || uid(),
     source: keyframe.source,
     label: keyframe.label || `키 ${index + 1}`,
-    time: clamp(Number(keyframe.time ?? 0), 0, state.motion.duration),
+    note: String(keyframe.note || "").trim().slice(0, 80),
+    time: clamp(finiteNumber(keyframe.time, 0), 0, state.motion.duration),
     transition: normalizeTransition(keyframe.transition),
     segment: sanitizeMotionSegment(keyframe.segment || keyframe.path, keyframe.source),
     pose: sanitizeSourcePose(keyframe.source, keyframe.pose || keyframe),
-    provenance: sanitizeProvenance(keyframe.provenance),
   };
 }
 
 function splitLegacyKeyframe(keyframe, index = 0) {
-  const time = clamp(Number(keyframe.time ?? 0), 0, state.motion.duration);
+  const time = clamp(finiteNumber(keyframe.time, 0), 0, state.motion.duration);
   const keys = [];
   keys.push({
     id: uid(),
     source: "camera",
     label: keyframe.label || `키 ${index + 1}`,
+    note: String(keyframe.note || "").trim().slice(0, 80),
     time,
     transition: normalizeTransition(keyframe.transition),
     segment: motionSegmentForPathMode("straight", "camera"),
@@ -1432,6 +1481,7 @@ function splitLegacyKeyframe(keyframe, index = 0) {
       id: uid(),
       source: item.id,
       label: keyframe.label || `키 ${index + 1}`,
+      note: String(keyframe.note || "").trim().slice(0, 80),
       time,
       transition: normalizeTransition(keyframe.transition),
       segment: motionSegmentForPathMode("straight", item.id),
@@ -1482,7 +1532,7 @@ function sanitizeMotionSegment(segment, sourceId = "camera") {
   const normalized = motionSegmentForPathMode(pathModeForSegment(segment, sourceId), sourceId);
   if (normalized.plan.kind === "arc") {
     const fallback = normalized.plan.bulge;
-    normalized.plan.bulge = clamp(Number(segment?.plan?.bulge ?? fallback), -0.49, 0.49) || fallback;
+    normalized.plan.bulge = clamp(finiteNumber(segment?.plan?.bulge, fallback), -0.49, 0.49) || fallback;
   }
   if (normalized.plan.kind === "bezier") {
     const control = segment?.plan?.control;
@@ -1492,7 +1542,7 @@ function sanitizeMotionSegment(segment, sourceId = "camera") {
   }
   if (normalized.elevation.kind === "jib-arc") {
     const fallback = normalized.elevation.bulge;
-    normalized.elevation.bulge = clamp(Number(segment?.elevation?.bulge ?? fallback), -0.49, 0.49) || fallback;
+    normalized.elevation.bulge = clamp(finiteNumber(segment?.elevation?.bulge, fallback), -0.49, 0.49) || fallback;
   }
   return normalized;
 }
@@ -1509,6 +1559,7 @@ function preserveItemStructure(pose, definition) {
   return {
     ...pose,
     id: definition.id,
+    continuityId: definition.continuityId || "",
     type: definition.type,
     name: definition.name,
     assetType: definition.assetType,
@@ -1516,6 +1567,7 @@ function preserveItemStructure(pose, definition) {
     mountId: definition.mountId || "",
     seatIndex: Number(definition.seatIndex || 0),
     motionEnabled: definition.motionEnabled !== false,
+    editLocked: definition.editLocked === true,
   };
 }
 
@@ -1523,13 +1575,14 @@ function sanitizeCameraPose(camera) {
   if (!camera) return clone(state.camera);
   const orientation = cameraOrientationFromLegacy(camera, state);
   const sanitized = {
-    x: clamp(Number(camera.x ?? state.camera.x), 0.02, 0.98),
-    y: clamp(Number(camera.y ?? state.camera.y), 0.02, 0.98),
-    height: clamp(Number(camera.height ?? state.camera.height ?? 1.6), 0.4, 3),
+    x: clamp(finiteNumber(camera.x, state.camera.x), 0.02, 0.98),
+    y: clamp(finiteNumber(camera.y, state.camera.y), 0.02, 0.98),
+    height: clamp(finiteNumber(camera.height, state.camera.height ?? 1.6), 0.4, 3),
     panDeg: normalizePanDeg(Number.isFinite(Number(camera.panDeg)) ? camera.panDeg : orientation.panDeg),
     tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, -60, 60),
-    focal: clamp(Number(camera.focal ?? state.camera.focal), 14, 135),
+    focal: clamp(finiteNumber(camera.focal, state.camera.focal), 14, 135),
     trackingTargetId: sanitizeTrackingTargetId(camera.trackingTargetId ?? state.camera.trackingTargetId, state),
+    locks: sanitizeCameraLocks(camera.locks ?? state.camera.locks),
   };
   return syncCameraDerivedAim(sanitized, state);
 }
@@ -1561,6 +1614,10 @@ function trackingOrientation(item, camera = state.camera, renderState = state) {
 }
 
 function applyCameraTracking(renderState) {
+  if (cameraFieldLocked("orientation", renderState)) {
+    if (renderState.camera) renderState.camera.trackingTargetId = "";
+    return renderState;
+  }
   const targetId = sanitizeTrackingTargetId(renderState.camera?.trackingTargetId, renderState);
   if (!targetId) {
     if (renderState.camera) renderState.camera.trackingTargetId = "";
@@ -1587,26 +1644,27 @@ function sanitizeItemPose(item) {
   const assetType = type === "prop" && propCatalog[item.assetType] ? item.assetType : "generic";
   return {
     id: item.id || uid(),
+    continuityId: String(item.continuityId || ""),
     type,
     name: item.name || (type === "prop" ? propCatalog[assetType].label : "배우"),
-    x: clamp(Number(item.x ?? 0.5), 0.02, 0.98),
-    y: clamp(Number(item.y ?? 0.5), 0.02, 0.98),
-    size: clamp(Number(item.size ?? 1), 0.25, 4),
+    x: clamp(finiteNumber(item.x, 0.5), 0.02, 0.98),
+    y: clamp(finiteNumber(item.y, 0.5), 0.02, 0.98),
+    size: clamp(finiteNumber(item.size, 1), 0.25, 4),
     color: item.color || colors[0],
     shape: item.shape || "circle",
-    facing: Number(item.facing ?? 0) % 360,
+    facing: finiteNumber(item.facing, 0) % 360,
+    bodyPose: type === "actor" ? sanitizeBodyPose(item.bodyPose) : null,
     assetType,
-    scaleX: clamp(Number(item.scaleX ?? 1), 0.25, 3.5),
-    scaleY: clamp(Number(item.scaleY ?? 1), 0.25, 3.5),
-    scaleZ: clamp(Number(item.scaleZ ?? 1), 0.25, 3.5),
+    scaleX: clamp(finiteNumber(item.scaleX, 1), 0.25, 3.5),
+    scaleY: clamp(finiteNumber(item.scaleY, 1), 0.25, 3.5),
+    scaleZ: clamp(finiteNumber(item.scaleZ, 1), 0.25, 3.5),
     placementMode: type === "actor" && (item.placementMode === "auto" || item.mountId) ? "auto" : "manual",
     mountId: type === "actor" ? String(item.mountId || "") : "",
-    seatIndex: type === "actor" ? Math.max(0, Math.round(Number(item.seatIndex || 0))) : 0,
+    seatIndex: type === "actor" ? Math.max(0, Math.round(finiteNumber(item.seatIndex, 0))) : 0,
     motionEnabled: item.motionEnabled !== false,
+    editLocked: item.editLocked === true,
     presetInstanceId: String(item.presetInstanceId || ""),
     visible: item.visible !== false,
-    provenance: sanitizeProvenance(item.provenance),
-    detectionConfidence: item.detectionConfidence == null ? null : clamp(Number(item.detectionConfidence), 0, 1),
   };
 }
 
@@ -1822,6 +1880,7 @@ function createManualGroup(itemIds, preferredLeaderId = "", renderState = state)
   const members = [...new Set(itemIds)]
     .map((itemId) => renderState.items.find((item) => item.id === itemId))
     .filter(Boolean)
+    .filter((item) => !sourceEditLocked(item.id, renderState))
     .filter((item) => !groupForItem(item.id, renderState));
   if (members.length < 2) return null;
   const leader = members.find((item) => isVehicleProp(item))
@@ -1882,7 +1941,9 @@ function applyKeyframeToStage(keyframe) {
 function applySourcePose(sourceId, pose) {
   if (sourceId === "camera") {
     const trackingTargetId = state.camera.trackingTargetId || "";
+    const locks = sanitizeCameraLocks(state.camera.locks);
     state.camera = sanitizeCameraPose(pose);
+    state.camera.locks = locks;
     state.camera.trackingTargetId = sanitizeTrackingTargetId(trackingTargetId, state);
     applyCameraTracking(state);
     return;
@@ -1892,14 +1953,90 @@ function applySourcePose(sourceId, pose) {
   state.items[itemIndex] = { ...state.items[itemIndex], ...sanitizeSourcePose(sourceId, pose) };
 }
 
-function resizeCanvas() {
+function updateStageZoomControls() {
+  const label = $("#stageZoomLabel");
+  if (label) label.textContent = `${Math.round(stageZoom * 100)}%`;
+  const outButton = $("#stageZoomOutBtn");
+  const inButton = $("#stageZoomInBtn");
+  if (outButton) outButton.disabled = stageZoom <= STAGE_ZOOM_MIN + 0.001;
+  if (inButton) inButton.disabled = stageZoom >= STAGE_ZOOM_MAX - 0.001;
+  stageViewport?.classList.toggle("is-zoomed", stageZoom > STAGE_ZOOM_MIN + 0.001);
+}
+
+function layoutStageCanvas({ preserveCenter = true } = {}) {
+  if (!stageViewport || !stageCanvasHolder || stageViewport.hidden || viewMode !== "2d") return;
+  const viewportWidth = stageViewport.clientWidth;
+  const viewportHeight = stageViewport.clientHeight;
+  if (viewportWidth < 1 || viewportHeight < 1) return;
+  const oldScrollWidth = Math.max(1, stageViewport.scrollWidth);
+  const oldScrollHeight = Math.max(1, stageViewport.scrollHeight);
+  const centerX = (stageViewport.scrollLeft + viewportWidth / 2) / oldScrollWidth;
+  const centerY = (stageViewport.scrollTop + viewportHeight / 2) / oldScrollHeight;
+  const ratio = aspectMap[state.aspect] || 16 / 9;
+  const fitWidth = Math.max(240, Math.min(viewportWidth, viewportHeight * ratio));
+  const fitHeight = fitWidth / ratio;
+  const canvasWidth = Math.max(240, Math.round(fitWidth * stageZoom));
+  const canvasHeight = Math.max(180, Math.round(fitHeight * stageZoom));
+  const holderWidth = Math.max(viewportWidth, canvasWidth);
+  const holderHeight = Math.max(viewportHeight, canvasHeight);
+  stageCanvasHolder.style.width = `${holderWidth}px`;
+  stageCanvasHolder.style.height = `${holderHeight}px`;
+  canvas.style.width = `${canvasWidth}px`;
+  canvas.style.height = `${canvasHeight}px`;
+  canvas.style.left = `${Math.round((holderWidth - canvasWidth) / 2)}px`;
+  canvas.style.top = `${Math.round((holderHeight - canvasHeight) / 2)}px`;
+  if (preserveCenter) {
+    stageViewport.scrollLeft = centerX * holderWidth - viewportWidth / 2;
+    stageViewport.scrollTop = centerY * holderHeight - viewportHeight / 2;
+  }
+  updateStageZoomControls();
+}
+
+function resizeCanvas(options = {}) {
+  if (options.layout !== false) layoutStageCanvas({ preserveCenter: options.preserveCenter !== false });
   const rect = canvas.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) {
+    resizeThreeView();
+    return;
+  }
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   canvas.width = Math.max(1, Math.floor(rect.width * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   draw();
   resizeThreeView();
+}
+
+function setStageZoom(nextZoom, anchor = null) {
+  const next = clamp(Number(nextZoom), STAGE_ZOOM_MIN, STAGE_ZOOM_MAX);
+  if (Math.abs(next - stageZoom) < 0.001) return;
+  const viewportRect = stageViewport.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  const anchorX = anchor ? clamp(anchor.clientX - viewportRect.left, 0, viewportRect.width) : viewportRect.width / 2;
+  const anchorY = anchor ? clamp(anchor.clientY - viewportRect.top, 0, viewportRect.height) : viewportRect.height / 2;
+  const normalizedX = canvasRect.width
+    ? clamp((viewportRect.left + anchorX - canvasRect.left) / canvasRect.width, 0, 1)
+    : 0.5;
+  const normalizedY = canvasRect.height
+    ? clamp((viewportRect.top + anchorY - canvasRect.top) / canvasRect.height, 0, 1)
+    : 0.5;
+  stageZoom = next;
+  layoutStageCanvas({ preserveCenter: false });
+  resizeCanvas({ layout: false });
+  stageViewport.scrollLeft = canvas.offsetLeft + normalizedX * canvas.clientWidth - anchorX;
+  stageViewport.scrollTop = canvas.offsetTop + normalizedY * canvas.clientHeight - anchorY;
+}
+
+function centerStageOnContent(renderState = state) {
+  if (!stageViewport || stageViewport.hidden || viewMode !== "2d") return;
+  const points = [renderState.camera, ...(renderState.items || []).filter((item) => item.visible !== false)];
+  if (!points.length) return;
+  const xs = points.map((point) => clamp(Number(point.x ?? 0.5), 0, 1));
+  const ys = points.map((point) => clamp(Number(point.y ?? 0.5), 0, 1));
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  stageViewport.scrollLeft = canvas.offsetLeft + centerX * canvas.clientWidth - stageViewport.clientWidth / 2;
+  stageViewport.scrollTop = canvas.offsetTop + centerY * canvas.clientHeight - stageViewport.clientHeight / 2;
 }
 
 function computeStageRect(width = canvas.clientWidth, height = canvas.clientHeight, aspect = state.aspect) {
@@ -1954,7 +2091,7 @@ function drawStage(renderState, rect, options = {}) {
   ctx.fillStyle = "#0d1116";
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
 
-  if (renderState.showGrid && !(clean && renderState.cleanExport)) drawGrid(rect);
+  if (renderState.showGrid && !(clean && renderState.cleanExport)) drawGrid(rect, renderState);
   if (renderState.showCamera) drawCameraCone(renderState.camera, rect, clean);
   if (!(clean && renderState.cleanExport)) drawMotionPaths(renderState, rect);
 
@@ -1975,8 +2112,8 @@ function drawStage(renderState, rect, options = {}) {
 
 function stageWorldSize(renderState = state) {
   const ratio = aspectMap[renderState.aspect] || 16 / 9;
-  if (ratio >= 1) return { width: 24, depth: 24 / ratio };
-  return { width: 24 * ratio, depth: 24 };
+  if (ratio >= 1) return { width: STAGE_WORLD_LONG_EDGE, depth: STAGE_WORLD_LONG_EDGE / ratio };
+  return { width: STAGE_WORLD_LONG_EDGE * ratio, depth: STAGE_WORLD_LONG_EDGE };
 }
 
 function mapToWorld(point, renderState = state, y = 0) {
@@ -2004,7 +2141,6 @@ function initThreeView() {
   const hudMeta = $("#threeHudMeta");
   const frameWrap = $("#cameraFrame");
   const frameCanvas = $("#cameraFrameCanvas");
-  const frameMeta = $("#cameraFrameMeta");
   const THREE = window.THREE;
   if (!THREE) {
     if (hudMeta) hudMeta.textContent = "3D 엔진을 불러오지 못했습니다";
@@ -2014,7 +2150,7 @@ function initThreeView() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#111820");
-  scene.fog = new THREE.Fog("#111820", 18, 42);
+  scene.fog = new THREE.Fog("#111820", 24, 64);
 
   const camera3d = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
   const renderer = new THREE.WebGLRenderer({
@@ -2047,10 +2183,10 @@ function initThreeView() {
   keyLight.position.set(5, 8, 4);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(1024, 1024);
-  keyLight.shadow.camera.left = -10;
-  keyLight.shadow.camera.right = 10;
-  keyLight.shadow.camera.top = 10;
-  keyLight.shadow.camera.bottom = -10;
+  keyLight.shadow.camera.left = -18;
+  keyLight.shadow.camera.right = 18;
+  keyLight.shadow.camera.top = 18;
+  keyLight.shadow.camera.bottom = -18;
   scene.add(keyLight);
   const fillLight = new THREE.DirectionalLight("#7ec8ff", 0.72);
   fillLight.position.set(-4, 4, -6);
@@ -2072,22 +2208,21 @@ function initThreeView() {
     world,
     frameWrap,
     frameCanvas,
-    frameMeta,
     frameCamera,
     frameRenderer,
     cameraRigHelper: null,
     raycaster,
-    orbit: { theta: -0.62, phi: 0.68, radius: 14.2, target: new THREE.Vector3(0, 0.15, 0) },
+    orbit: { theta: -0.62, phi: 0.68, radius: 21.3, target: new THREE.Vector3(0, 0.15, 0) },
     lastState: null,
   };
 
   canvas3d.addEventListener("pointerdown", beginThreeDrag);
   canvas3d.addEventListener("pointermove", updateThreeDrag);
   canvas3d.addEventListener("pointerup", endThreeDrag);
-  canvas3d.addEventListener("pointercancel", endThreeDrag);
+  canvas3d.addEventListener("pointercancel", cancelThreeDrag);
   canvas3d.addEventListener("wheel", zoomThreeView, { passive: false });
   canvas3d.addEventListener("contextmenu", (event) => {
-    if (state.blenderControls) event.preventDefault();
+    event.preventDefault();
   });
   resizeThreeView();
   return true;
@@ -2174,12 +2309,8 @@ function renderThreeView(renderState = state, force = false, frameOptions = {}) 
   updateThreeCamera(renderState);
   if (threeView.hudMeta) {
     const keyCount = renderState.motion?.keyframes?.length || 0;
-    const modeLabel = threeEditMode === "rotate"
-      ? "방향 편집"
-      : threeEditMode === "view"
-        ? "시점 탐색"
-        : "위치 편집";
-    threeView.hudMeta.textContent = renderState.aspect + " · 대상 " + renderState.items.length + " · 키 " + keyCount + " · " + modeLabel;
+    const stageSize = stageWorldSize(renderState);
+    threeView.hudMeta.textContent = `${renderState.aspect} · 무대 ${Math.round(stageSize.width)}×${Math.round(stageSize.depth)}m · 대상 ${renderState.items.length} · 키 ${keyCount}`;
   }
   threeView.renderer.render(threeView.scene, threeView.camera);
   renderCameraFramePreview(renderState, frameOptions);
@@ -2192,16 +2323,18 @@ function makeStageGrid(size) {
   const minorMaterial = new THREE.LineBasicMaterial({ color: "#66727d", transparent: true, opacity: 0.2 });
   const majorMaterial = new THREE.LineBasicMaterial({ color: "#91a0ac", transparent: true, opacity: 0.38 });
   const centerMaterial = new THREE.LineBasicMaterial({ color: "#d7e2e8", transparent: true, opacity: 0.46 });
-  const xStep = size.width / 16;
-  const zStep = size.depth / 9;
-  for (let i = 0; i <= 16; i += 1) {
+  const xDivisions = Math.max(8, Math.round(size.width / STAGE_GRID_STEP_METERS));
+  const zDivisions = Math.max(6, Math.round(size.depth / STAGE_GRID_STEP_METERS));
+  const xStep = size.width / xDivisions;
+  const zStep = size.depth / zDivisions;
+  for (let i = 0; i <= xDivisions; i += 1) {
     const x = -size.width / 2 + xStep * i;
     group.add(lineFromPoints([
       new THREE.Vector3(x, 0.025, -size.depth / 2),
       new THREE.Vector3(x, 0.025, size.depth / 2),
-    ], i === 8 ? centerMaterial : i % 4 === 0 ? majorMaterial : minorMaterial));
+    ], i === Math.round(xDivisions / 2) ? centerMaterial : i % 4 === 0 ? majorMaterial : minorMaterial));
   }
-  for (let i = 0; i <= 9; i += 1) {
+  for (let i = 0; i <= zDivisions; i += 1) {
     const z = -size.depth / 2 + zStep * i;
     group.add(lineFromPoints([
       new THREE.Vector3(-size.width / 2, 0.025, z),
@@ -2244,7 +2377,11 @@ function makeThreeItem(item, renderState) {
 
   let body;
   if (item.type === "actor") {
-    body = renderItem.autoMounted ? makeThreeSeatedActorModel(scale, color) : makeThreeActorModel(scale, color);
+    body = makeThreeActorModel(scale, color, actorBodyPoseForRender(renderItem), {
+      showPoseHandles: threeEditMode === "pose" && selected?.kind === "item" && selected.id === item.id,
+      selectedJoint: selectedPoseActorId === item.id ? selectedPoseJoint : "",
+    });
+    if (renderItem.autoMounted) body.position.y = -0.79 * scale;
   } else {
     body = makeThreePropModel(item, color);
     body.scale.set(
@@ -2258,6 +2395,9 @@ function makeThreeItem(item, renderState) {
     if (object.isMesh) {
       object.castShadow = true;
       object.userData.editor = itemEditor;
+      if (item.type === "actor" && object.userData.jointId) {
+        object.userData.poseJoint = { actorId: item.id, jointId: object.userData.jointId };
+      }
     }
   });
 
@@ -2547,60 +2687,150 @@ function makeThreeSeatedActorModel(scale, color) {
   return group;
 }
 
-function makeThreeActorModel(scale, color) {
+function actorBodyPoseForRender(actor) {
+  const pose = sanitizeBodyPose(actor?.bodyPose);
+  if (!actor?.autoMounted) return pose;
+  const seated = presetBodyPose("sit");
+  ["chest", "head", "upperArmL", "lowerArmL", "upperArmR", "lowerArmR"].forEach((jointId) => {
+    seated[jointId] = pose[jointId];
+  });
+  return sanitizeBodyPose(seated);
+}
+
+function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options = {}) {
   const THREE = window.THREE;
   const model = new THREE.Group();
-  model.name = "humanoid-v1";
+  model.name = "humanoid-rig-v2";
   const base = new THREE.Color(color);
   const light = base.clone().lerp(new THREE.Color("#ffffff"), 0.16);
   const dark = base.clone().lerp(new THREE.Color("#101417"), 0.28);
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: base, roughness: 0.66, metalness: 0.02 });
   const chestMaterial = new THREE.MeshStandardMaterial({ color: light, roughness: 0.62, metalness: 0.02 });
   const jointMaterial = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.7, metalness: 0.01 });
+  const eyeWhiteMaterial = new THREE.MeshStandardMaterial({ color: "#f4eee6", roughness: 0.44, metalness: 0 });
+  const pupilMaterial = new THREE.MeshStandardMaterial({ color: "#151a1c", roughness: 0.35, metalness: 0.02 });
+  const mouthMaterial = new THREE.MeshStandardMaterial({ color: "#642b35", roughness: 0.68, metalness: 0 });
+  const pose = sanitizeBodyPose(bodyPose);
 
-  const addMesh = (geometry, material, position, rotation = null, name = "") => {
+  const addMesh = (parent, geometry, material, position, rotation = null, name = "", jointId = "") => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(position[0] * scale, position[1] * scale, position[2] * scale);
     if (rotation) mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
     mesh.name = name;
-    model.add(mesh);
+    if (jointId) mesh.userData.jointId = jointId;
+    parent.add(mesh);
     return mesh;
   };
-  const cylinder = (top, bottom, height, material, position, rotation, name) => addMesh(
+  const cylinder = (parent, top, bottom, height, material, position, rotation, name, jointId = "") => addMesh(
+    parent,
     new THREE.CylinderGeometry(top * scale, bottom * scale, height * scale, 16),
     material,
     position,
     rotation,
     name,
+    jointId,
   );
-  const joint = (radius, position, name) => addMesh(
+  const joint = (parent, radius, position, name, jointId) => addMesh(
+    parent,
     new THREE.SphereGeometry(radius * scale, 14, 10),
     jointMaterial,
     position,
     null,
     name,
+    jointId,
   );
+  const rotateJoint = (group, jointId) => {
+    const rotation = { ...(pose[jointId] || { x: 0, y: 0, z: 0 }) };
+    if (jointId === "lowerArmL" || jointId === "lowerArmR") {
+      rotation.x = -rotation.x;
+    }
+    group.rotation.set(degToRad(rotation.x), degToRad(rotation.y), degToRad(rotation.z), "XYZ");
+    group.userData.jointId = jointId;
+    return group;
+  };
+  const addPoseHandle = (parent, radius, jointId) => {
+    if (!options.showPoseHandles) return;
+    const selectedJoint = options.selectedJoint === jointId;
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * scale, 12, 8),
+      new THREE.MeshBasicMaterial({
+        color: selectedJoint ? "#fff4df" : "#efa857",
+        transparent: true,
+        opacity: selectedJoint ? 0.82 : 0.42,
+        wireframe: true,
+        depthTest: false,
+      }),
+    );
+    marker.scale.setScalar(selectedJoint ? 1.55 : 1.28);
+    marker.renderOrder = 30;
+    marker.userData.previewHidden = true;
+    marker.userData.jointId = jointId;
+    parent.add(marker);
+  };
+  const addBone = (parent, length, topRadius, bottomRadius, material, name) => {
+    cylinder(parent, topRadius, bottomRadius, length, material, [0, -length / 2, 0], null, name);
+  };
 
-  addMesh(new THREE.BoxGeometry(0.34 * scale, 0.2 * scale, 0.22 * scale), jointMaterial, [0, 0.84, 0], null, "pelvis");
-  cylinder(0.19, 0.17, 0.28, bodyMaterial, [0, 1.05, 0], null, "abdomen");
-  cylinder(0.24, 0.19, 0.42, chestMaterial, [0, 1.36, 0], null, "chest");
-  cylinder(0.07, 0.075, 0.1, jointMaterial, [0, 1.62, 0], null, "neck");
-  addMesh(new THREE.SphereGeometry(0.16 * scale, 20, 14), chestMaterial, [0, 1.78, 0], null, "head");
-  addMesh(new THREE.SphereGeometry(0.035 * scale, 10, 8), jointMaterial, [0, 1.78, 0.153], null, "face-direction");
+  addMesh(model, new THREE.BoxGeometry(0.34 * scale, 0.2 * scale, 0.22 * scale), jointMaterial, [0, 0.84, 0], null, "pelvis");
+
+  const torso = rotateJoint(new THREE.Group(), "chest");
+  torso.position.set(0, 0.84 * scale, 0);
+  model.add(torso);
+  joint(torso, 0.09, [0, 0, 0], "chestJoint", "chest");
+  addPoseHandle(torso, 0.09, "chest");
+  cylinder(torso, 0.19, 0.17, 0.28, bodyMaterial, [0, 0.2, 0], null, "abdomen");
+  cylinder(torso, 0.24, 0.19, 0.42, chestMaterial, [0, 0.5, 0], null, "chest");
+  cylinder(torso, 0.07, 0.075, 0.1, jointMaterial, [0, 0.77, 0], null, "neck");
+
+  const head = rotateJoint(new THREE.Group(), "head");
+  head.position.set(0, 0.86 * scale, 0);
+  torso.add(head);
+  joint(head, 0.07, [0, 0, 0], "headJoint", "head");
+  addPoseHandle(head, 0.08, "head");
+  const skull = addMesh(head, new THREE.SphereGeometry(0.16 * scale, 24, 18), chestMaterial, [0, 0.11, 0], null, "head");
+  skull.scale.set(0.92, 1.08, 0.96);
+  [-1, 1].forEach((side) => {
+    addMesh(head, new THREE.SphereGeometry(0.034 * scale, 14, 10), eyeWhiteMaterial, [side * 0.057, 0.145, 0.139], null, `eyeWhite${side}`);
+    addMesh(head, new THREE.SphereGeometry(0.015 * scale, 12, 8), pupilMaterial, [side * 0.057, 0.145, 0.168], null, `pupil${side}`);
+  });
+  addMesh(head, new THREE.ConeGeometry(0.026 * scale, 0.07 * scale, 12), chestMaterial, [0, 0.092, 0.17], [Math.PI / 2, 0, 0], "nose");
+  addMesh(head, new THREE.BoxGeometry(0.075 * scale, 0.012 * scale, 0.012 * scale), mouthMaterial, [0, 0.035, 0.156], null, "mouth");
 
   [-1, 1].forEach((side) => {
     const suffix = side < 0 ? "L" : "R";
-    joint(0.075, [side * 0.27, 1.48, 0], `shoulder${suffix}`);
-    cylinder(0.065, 0.075, 0.36, bodyMaterial, [side * 0.29, 1.27, 0], [0, 0, side * -0.08], `upperArm${suffix}`);
-    joint(0.058, [side * 0.31, 1.07, 0], `elbow${suffix}`);
-    cylinder(0.052, 0.06, 0.34, bodyMaterial, [side * 0.33, 0.87, 0], [0, 0, side * -0.05], `lowerArm${suffix}`);
-    joint(0.062, [side * 0.35, 0.67, 0], `hand${suffix}`);
+    const upperArmId = `upperArm${suffix}`;
+    const lowerArmId = `lowerArm${suffix}`;
+    const shoulder = rotateJoint(new THREE.Group(), upperArmId);
+    shoulder.position.set(side * 0.27 * scale, 0.63 * scale, 0);
+    torso.add(shoulder);
+    joint(shoulder, 0.075, [0, 0, 0], `shoulder${suffix}`, upperArmId);
+    addPoseHandle(shoulder, 0.075, upperArmId);
+    addBone(shoulder, 0.36, 0.065, 0.075, bodyMaterial, upperArmId);
 
-    joint(0.085, [side * 0.105, 0.76, 0], `hip${suffix}`);
-    cylinder(0.09, 0.105, 0.38, bodyMaterial, [side * 0.105, 0.56, 0], null, `upperLeg${suffix}`);
-    joint(0.07, [side * 0.105, 0.35, 0], `knee${suffix}`);
-    cylinder(0.065, 0.075, 0.3, bodyMaterial, [side * 0.105, 0.18, 0], null, `lowerLeg${suffix}`);
-    addMesh(new THREE.BoxGeometry(0.15 * scale, 0.09 * scale, 0.26 * scale), jointMaterial, [side * 0.105, 0.045, 0.07], null, `foot${suffix}`);
+    const elbow = rotateJoint(new THREE.Group(), lowerArmId);
+    elbow.position.set(0, -0.38 * scale, 0);
+    shoulder.add(elbow);
+    joint(elbow, 0.058, [0, 0, 0], `elbow${suffix}`, lowerArmId);
+    addPoseHandle(elbow, 0.06, lowerArmId);
+    addBone(elbow, 0.34, 0.052, 0.06, bodyMaterial, lowerArmId);
+    joint(elbow, 0.062, [0, -0.36, 0], `hand${suffix}`, lowerArmId);
+
+    const upperLegId = `upperLeg${suffix}`;
+    const lowerLegId = `lowerLeg${suffix}`;
+    const hip = rotateJoint(new THREE.Group(), upperLegId);
+    hip.position.set(side * 0.105 * scale, 0.76 * scale, 0);
+    model.add(hip);
+    joint(hip, 0.085, [0, 0, 0], `hip${suffix}`, upperLegId);
+    addPoseHandle(hip, 0.085, upperLegId);
+    addBone(hip, 0.38, 0.09, 0.105, bodyMaterial, upperLegId);
+
+    const knee = rotateJoint(new THREE.Group(), lowerLegId);
+    knee.position.set(0, -0.4 * scale, 0);
+    hip.add(knee);
+    joint(knee, 0.07, [0, 0, 0], `knee${suffix}`, lowerLegId);
+    addPoseHandle(knee, 0.07, lowerLegId);
+    addBone(knee, 0.3, 0.065, 0.075, bodyMaterial, lowerLegId);
+    addMesh(knee, new THREE.BoxGeometry(0.15 * scale, 0.09 * scale, 0.26 * scale), jointMaterial, [0, -0.34, 0.07], null, `foot${suffix}`);
   });
   return model;
 }
@@ -2803,12 +3033,6 @@ function renderCameraFramePreview(renderState = state, options = {}) {
   threeView.frameCamera.lookAt(lookTarget);
   threeView.frameCamera.updateProjectionMatrix();
 
-  if (threeView.frameMeta) {
-    const trackingTarget = renderState.items.find((item) => item.id === camera.trackingTargetId);
-    const trackingLabel = trackingTarget ? ` · @${trackingTarget.name} 추적` : "";
-    threeView.frameMeta.textContent = `${camera.focal}mm · H ${Number(camera.height ?? 1.6).toFixed(1)}m · P ${Math.round(camera.panDeg)}° · T ${Math.round(camera.tiltDeg)}°${trackingLabel}`;
-  }
-
   const hidden = [];
   threeView.world.traverse((object) => {
     if (object.userData?.previewHidden && object.visible) {
@@ -2874,6 +3098,202 @@ function drawThreeMotionPaths(renderState, world) {
   });
 }
 
+function guideKeysForSource(renderState, sourceId) {
+  return sortKeyframes(renderState.motion?.keyframes || []).filter((keyframe) => keyframe.source === sourceId);
+}
+
+function guideMotionEntry(renderState, source, time) {
+  const fields = source.id === "camera" ? CAMERA_GUIDE_FIELDS : ITEM_GUIDE_FIELDS;
+  const keys = guideKeysForSource(renderState, source.id);
+  const segments = motionSegments(keys, fields);
+  return {
+    source,
+    keys,
+    segments,
+    hasMotion: segments.length > 0,
+    activeSegment: activeMotionSegment(keys, time, fields),
+  };
+}
+
+function analyzeBlockingGuide(renderState = state) {
+  const time = clamp(Number(renderState.motion?.playhead || 0), 0, renderState.motion?.duration || 0);
+  const sources = visibleSourceDefinitions(renderState);
+  const cameraEntry = guideMotionEntry(renderState, sources.find((source) => source.id === "camera") || {
+    id: "camera", type: "camera", name: "카메라", color: "#69c9ff",
+  }, time);
+  const itemEntries = sources
+    .filter((source) => source.id !== "camera")
+    .map((source) => guideMotionEntry(renderState, source, time));
+  const trackingTargetId = sanitizeTrackingTargetId(renderState.camera?.trackingTargetId, renderState);
+  const trackingEntry = itemEntries.find((entry) => entry.source.id === trackingTargetId);
+  const trackingActive = Boolean(
+    trackingTargetId
+    && trackingEntry?.activeSegment
+    && !sanitizeCameraLocks(renderState.camera?.locks).orientation,
+  );
+  const trackingHasMotion = Boolean(
+    trackingTargetId
+    && trackingEntry?.hasMotion
+    && !sanitizeCameraLocks(renderState.camera?.locks).orientation,
+  );
+  const activeItems = itemEntries.filter((entry) => entry.activeSegment);
+  const cameraActive = Boolean(cameraEntry.activeSegment || trackingActive);
+  const cameraHasMotion = Boolean(cameraEntry.hasMotion || trackingHasMotion);
+  const itemHasMotion = itemEntries.some((entry) => entry.hasMotion);
+  return {
+    time,
+    cameraEntry,
+    itemEntries,
+    activeItems,
+    cameraActive,
+    cameraHasMotion,
+    itemHasMotion,
+    trackingActive,
+    trackingHasMotion,
+    mixed: cameraActive && activeItems.length > 0,
+    noMotionKeys: !cameraHasMotion && !itemHasMotion,
+  };
+}
+
+function guideDirectionFromSegment(segment, camera, renderState) {
+  if (!segment) return "MOVING";
+  const size = stageWorldSize(renderState);
+  const dx = (Number(segment.end.pose?.x) - Number(segment.start.pose?.x)) * size.width;
+  const dz = (Number(segment.end.pose?.y) - Number(segment.start.pose?.y)) * size.depth;
+  if (Math.hypot(dx, dz) < 0.01) return "TURNING";
+  const heading = degToRad(camera.panDeg || 0);
+  const forward = dx * Math.cos(heading) + dz * Math.sin(heading);
+  const right = dx * -Math.sin(heading) + dz * Math.cos(heading);
+  if (Math.abs(forward) >= Math.abs(right)) return forward < 0 ? "TOWARD CAMERA" : "AWAY FROM CAMERA";
+  return right > 0 ? "MOVE RIGHT" : "MOVE LEFT";
+}
+
+function cameraGuideLabel(analysis, renderState) {
+  if (analysis.trackingActive) return "CAM: TRACKING";
+  const segment = analysis.cameraEntry.activeSegment;
+  if (!segment) return analysis.cameraHasMotion ? "CAM: HOLD" : "CAM: LOCKED";
+  const from = segment.start.pose || {};
+  const to = segment.end.pose || {};
+  const size = stageWorldSize(renderState);
+  const dx = (Number(to.x) - Number(from.x)) * size.width;
+  const dz = (Number(to.y) - Number(from.y)) * size.depth;
+  if (Math.hypot(dx, dz) > 0.01) {
+    const heading = degToRad(Number(from.panDeg ?? renderState.camera.panDeg ?? 0));
+    const forward = dx * Math.cos(heading) + dz * Math.sin(heading);
+    const right = dx * -Math.sin(heading) + dz * Math.cos(heading);
+    if (Math.abs(forward) >= Math.abs(right)) return forward > 0 ? "CAM: DOLLY IN" : "CAM: DOLLY OUT";
+    return right > 0 ? "CAM: TRUCK RIGHT" : "CAM: TRUCK LEFT";
+  }
+  if (Math.abs(Number(to.height) - Number(from.height)) > 0.01) {
+    return Number(to.height) > Number(from.height) ? "CAM: CRANE UP" : "CAM: CRANE DOWN";
+  }
+  if (Math.abs(Number(to.panDeg) - Number(from.panDeg)) > 0.1) return "CAM: PAN";
+  if (Math.abs(Number(to.tiltDeg) - Number(from.tiltDeg)) > 0.1) {
+    return Number(to.tiltDeg) > Number(from.tiltDeg) ? "CAM: TILT UP" : "CAM: TILT DOWN";
+  }
+  if (Math.abs(Number(to.focal) - Number(from.focal)) > 0.1) {
+    return Number(to.focal) > Number(from.focal) ? "CAM: ZOOM IN" : "CAM: ZOOM OUT";
+  }
+  return "CAM: MOVING";
+}
+
+function subjectGuideLabel(analysis, renderState) {
+  if (!analysis.activeItems.length) return "SUBJ: HOLD";
+  if (analysis.activeItems.length > 1) return `SUBJ: ${analysis.activeItems.length} MOVING`;
+  const entry = analysis.activeItems[0];
+  const name = String(entry.source.name || "SUBJECT").trim().toUpperCase();
+  const direction = guideDirectionFromSegment(entry.activeSegment, renderState.camera, renderState);
+  return `SUBJ: ${name} · ${direction}`;
+}
+
+function guideDirectionInstruction(segment, camera, renderState) {
+  const direction = guideDirectionFromSegment(segment, camera, renderState);
+  return {
+    "TOWARD CAMERA": "카메라 쪽으로 이동",
+    "AWAY FROM CAMERA": "카메라에서 멀어짐",
+    "MOVE RIGHT": "화면 오른쪽으로 이동",
+    "MOVE LEFT": "화면 왼쪽으로 이동",
+    TURNING: "제자리에서 방향 전환",
+    MOVING: "이동",
+  }[direction] || "이동";
+}
+
+function cameraGuideInstruction(analysis, renderState) {
+  const custom = String(analysis.cameraEntry.activeSegment?.end?.note || "").trim();
+  if (custom) return `카메라 · ${custom}`;
+  const label = cameraGuideLabel(analysis, renderState);
+  return {
+    "CAM: TRACKING": "카메라 · 피사체 추적",
+    "CAM: DOLLY IN": "카메라 · 달리 인",
+    "CAM: DOLLY OUT": "카메라 · 달리 아웃",
+    "CAM: TRUCK RIGHT": "카메라 · 오른쪽 트럭",
+    "CAM: TRUCK LEFT": "카메라 · 왼쪽 트럭",
+    "CAM: CRANE UP": "카메라 · 크레인 업",
+    "CAM: CRANE DOWN": "카메라 · 크레인 다운",
+    "CAM: PAN": "카메라 · 팬",
+    "CAM: TILT UP": "카메라 · 틸트 업",
+    "CAM: TILT DOWN": "카메라 · 틸트 다운",
+    "CAM: ZOOM IN": "카메라 · 줌 인",
+    "CAM: ZOOM OUT": "카메라 · 줌 아웃",
+    "CAM: MOVING": "카메라 · 이동",
+  }[label] || "카메라 · 고정";
+}
+
+function sourceGuideInstruction(entry, renderState) {
+  const name = String(entry?.source?.name || "대상").trim();
+  const custom = String(entry?.activeSegment?.end?.note || "").trim();
+  const action = custom || guideDirectionInstruction(entry?.activeSegment, renderState.camera, renderState);
+  return `@${name} · ${action}`;
+}
+
+function storyboardNoteLines(context, text, maxWidth) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  if (lines.length <= 2) return lines;
+  return [lines[0], `${lines.slice(1).join(" ").slice(0, 30)}…`];
+}
+
+function drawStoryboardNote(context, text, x, y, color, scale, align = "left") {
+  const fontSize = Math.round(20 * scale);
+  const lineHeight = Math.round(25 * scale);
+  context.save();
+  context.font = `800 ${fontSize}px "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif`;
+  context.textAlign = align;
+  context.textBaseline = "top";
+  context.lineJoin = "round";
+  const maxWidth = Math.max(150 * scale, 285 * scale);
+  const lines = storyboardNoteLines(context, text, maxWidth);
+  lines.forEach((line, index) => {
+    const lineY = y + index * lineHeight;
+    context.strokeStyle = "rgba(2, 7, 9, 0.92)";
+    context.lineWidth = Math.max(4, 6 * scale);
+    context.strokeText(line, x, lineY);
+    context.fillStyle = index === 0 ? "#f4fbfa" : color;
+    context.fillText(line, x, lineY);
+  });
+  const width = Math.max(...lines.map((line) => context.measureText(line).width), 0);
+  const left = align === "right" ? x - width : x;
+  context.strokeStyle = color;
+  context.lineWidth = Math.max(1.5, 2 * scale);
+  context.beginPath();
+  context.moveTo(left, y + lines.length * lineHeight + 2 * scale);
+  context.lineTo(left + Math.min(width, 72 * scale), y + lines.length * lineHeight + 2 * scale);
+  context.stroke();
+  context.restore();
+  return { width, height: lines.length * lineHeight };
+}
+
 function makeThreePathDirectionMarker(curve, progress, color) {
   const THREE = window.THREE;
   const point = curve.getPointAt(progress);
@@ -2928,27 +3348,60 @@ function updateThreeCamera(renderState = state) {
 
 function beginThreeDrag(event) {
   if (!threeView?.ready) return;
+  delete threeView.canvas.dataset.navMode;
 
-  const isBlenderActive = state.blenderControls;
   let forceNav = null; // "orbit", "pan", "zoom"
-  
-  if (isBlenderActive) {
-    if (event.button === 1) { // Middle button
-      forceNav = event.shiftKey ? "pan" : (event.ctrlKey ? "zoom" : "orbit");
-    } else if (event.button === 2) { // Right button
-      forceNav = "zoom";
-    } else if (event.button === 0) { // Left button
-      if (event.shiftKey) {
-        forceNav = "pan";
-      } else if (event.ctrlKey || event.altKey) {
-        forceNav = "zoom";
-      }
-    }
+
+  if (event.button === 1) {
+    forceNav = event.shiftKey ? "pan" : (event.ctrlKey ? "zoom" : "orbit");
+  } else if (event.button === 2) {
+    forceNav = "pan";
+  } else if (event.button !== 0) {
+    return;
   }
 
-  const editor = (forceNav || threeEditMode === "view") ? null : pickThreeEditor(event);
+  const editor = forceNav ? null : pickThreeEditor(event);
   if (editor) {
-    materializeEvaluatedViewForEditing();
+    if (editor.kind === "poseJoint") {
+      const actor = state.items.find((item) => item.id === editor.actorId && item.type === "actor");
+      if (!actor || sourceEditLocked(actor.id)) {
+        if (actor) notifyEditLocked(actor.name);
+        return;
+      }
+      const editStartState = clone(state);
+      materializeEvaluatedViewForEditing(actor.id);
+      const current = state.items.find((item) => item.id === actor.id);
+      current.bodyPose = sanitizeBodyPose(current.bodyPose);
+      selected = { kind: "item", id: actor.id };
+      selectedPoseActorId = actor.id;
+      selectedPoseJoint = editor.jointId;
+      setActiveSource(actor.id);
+      selectKeyForSource(actor.id);
+      threeDrag = {
+        kind: "pose",
+        pointerId: event.pointerId,
+        actorId: actor.id,
+        jointId: editor.jointId,
+        x: event.clientX,
+        y: event.clientY,
+        startRotation: clone(current.bodyPose[editor.jointId]),
+        startState: editStartState,
+        changed: false,
+      };
+      threeView.canvas.setPointerCapture(event.pointerId);
+      syncUi(false);
+      renderThreeView(state, true);
+      return;
+    }
+    if (threeEditMode === "pose" && editor.kind === "item") {
+      const actor = state.items.find((item) => item.id === editor.id && item.type === "actor");
+      if (actor) {
+        selectActorPoseJoint(actor.id, selectedPoseActorId === actor.id ? selectedPoseJoint : "chest");
+      } else {
+        notifyApp("포즈 편집은 배우를 선택했을 때 사용할 수 있습니다.");
+      }
+      return;
+    }
     selected = editor;
     const sourceId = selectedSourceId();
     if (sourceId) {
@@ -2956,6 +3409,17 @@ function beginThreeDrag(event) {
       selectKeyForSource(sourceId);
     }
     const editItemId = editor.kind === "item" ? transformLeaderIdForItem(editor.id, state) : editor.id;
+    const locked = editor.kind === "camera"
+      ? cameraFieldLocked(threeEditMode === "rotate" ? "orientation" : "position")
+      : sourceEditLocked(editItemId);
+    if (locked) {
+      notifyEditLocked(editor.kind === "camera" ? "카메라" : sourceLabel(editItemId));
+      syncUi(false);
+      renderThreeView(evaluatedViewState || state, true);
+      return;
+    }
+    const editStartState = clone(state);
+    materializeEvaluatedViewForEditing(editItemId);
     const pose = editor.kind === "item"
       ? state.items.find((item) => item.id === editItemId)
       : state.camera;
@@ -2967,7 +3431,7 @@ function beginThreeDrag(event) {
       pointerId: event.pointerId,
       editor,
       editItemId,
-      startState: clone(state),
+      startState: editStartState,
       startPoint: pointerStage,
       grabOffset: { x: pose.x - pointerStage.x, y: pose.y - pointerStage.y },
       changed: false,
@@ -2977,8 +3441,11 @@ function beginThreeDrag(event) {
     renderThreeView(evaluatedViewState || state, true);
     return;
   }
-  
-  const dragKind = forceNav || "orbit";
+
+  // Left-drag edits a picked object; on the floor or empty space it orbits.
+  if (!forceNav) forceNav = "orbit";
+
+  const dragKind = forceNav;
   threeDrag = {
     kind: dragKind,
     pointerId: event.pointerId,
@@ -2989,6 +3456,7 @@ function beginThreeDrag(event) {
     radius: threeView.orbit.radius,
     targetStart: (threeView.orbit.target || new window.THREE.Vector3(0, 0.15, 0)).clone()
   };
+  threeView.canvas.dataset.navMode = dragKind;
   threeView.canvas.setPointerCapture(event.pointerId);
 }
 
@@ -2996,6 +3464,10 @@ function updateThreeDrag(event) {
   if (!threeDrag || event.pointerId !== threeDrag.pointerId || !threeView?.ready) return;
   if (threeDrag.kind === "edit") {
     updateThreeEditorDrag(event);
+    return;
+  }
+  if (threeDrag.kind === "pose") {
+    updateThreePoseDrag(event);
     return;
   }
   
@@ -3020,7 +3492,7 @@ function updateThreeDrag(event) {
     threeView.orbit.target.copy(newTarget);
   } else if (threeDrag.kind === "zoom") {
     const factor = dy * 0.02;
-    threeView.orbit.radius = clamp(threeDrag.radius + factor, 8, 26);
+    threeView.orbit.radius = clamp(threeDrag.radius + factor, THREE_ORBIT_RADIUS_MIN, THREE_ORBIT_RADIUS_MAX);
   }
   
   renderThreeView(threeView.lastState || state, true);
@@ -3028,16 +3500,29 @@ function updateThreeDrag(event) {
 
 function endThreeDrag(event) {
   if (!threeDrag || event.pointerId !== threeDrag.pointerId) return;
-  const didEdit = threeDrag.kind === "edit" && threeDrag.changed;
+  const didEdit = ["edit", "pose"].includes(threeDrag.kind) && threeDrag.changed;
   threeView?.canvas.releasePointerCapture?.(event.pointerId);
+  if (threeView?.canvas) delete threeView.canvas.dataset.navMode;
   threeDrag = null;
   if (didEdit) commit();
+}
+
+function cancelThreeDrag(event) {
+  if (!threeDrag || event.pointerId !== threeDrag.pointerId) return;
+  const cancelled = threeDrag;
+  threeView?.canvas.releasePointerCapture?.(event.pointerId);
+  if (threeView?.canvas) delete threeView.canvas.dataset.navMode;
+  threeDrag = null;
+  if (["edit", "pose"].includes(cancelled.kind) && cancelled.startState) {
+    restoreUncommittedState(cancelled.startState);
+    renderThreeView(state, true);
+  }
 }
 
 function zoomThreeView(event) {
   if (!threeView?.ready) return;
   event.preventDefault();
-  threeView.orbit.radius = clamp(threeView.orbit.radius + event.deltaY * 0.004, 8, 26);
+  threeView.orbit.radius = clamp(threeView.orbit.radius + event.deltaY * 0.006, THREE_ORBIT_RADIUS_MIN, THREE_ORBIT_RADIUS_MAX);
   renderThreeView(threeView.lastState || state, true);
 }
 
@@ -3049,11 +3534,35 @@ function pickThreeEditor(event) {
   for (const hit of hits) {
     let object = hit.object;
     while (object && object !== threeView.world) {
+      if (threeEditMode === "pose" && object.userData?.poseJoint) {
+        return { kind: "poseJoint", ...clone(object.userData.poseJoint) };
+      }
       if (object.userData?.editor) return clone(object.userData.editor);
       object = object.parent;
     }
   }
   return null;
+}
+
+function updateThreePoseDrag(event) {
+  const actor = state.items.find((item) => item.id === threeDrag.actorId && item.type === "actor");
+  const definition = JOINT_DEFINITIONS[threeDrag.jointId];
+  if (!actor || !definition) return;
+  actor.bodyPose = sanitizeBodyPose(actor.bodyPose);
+  const rotation = actor.bodyPose[threeDrag.jointId];
+  const dx = event.clientX - threeDrag.x;
+  const dy = event.clientY - threeDrag.y;
+  const sensitivity = event.altKey ? 0.18 : 0.42;
+  rotation.x = clamp(threeDrag.startRotation.x - dy * sensitivity, definition.x[0], definition.x[1]);
+  if (event.shiftKey) {
+    rotation.z = clamp(threeDrag.startRotation.z + dx * sensitivity, definition.z[0], definition.z[1]);
+  } else {
+    rotation.y = clamp(threeDrag.startRotation.y + dx * sensitivity, definition.y[0], definition.y[1]);
+  }
+  actor.bodyPose = sanitizeBodyPose(actor.bodyPose);
+  threeDrag.changed = true;
+  syncUi(false);
+  renderThreeView(state, true);
 }
 
 function threePointer(event) {
@@ -3123,11 +3632,29 @@ function renderThreeEditControls() {
   if (!label) return;
   const item = selectedItem();
   if (item) {
-    label.textContent = "선택: " + item.name;
+    const poseLabel = threeEditMode === "pose" && item.type === "actor"
+      ? ` · ${JOINT_DEFINITIONS[selectedPoseJoint]?.label || "관절"}`
+      : "";
+    label.textContent = "선택: " + item.name + poseLabel;
   } else if (selected?.kind === "camera") {
     label.textContent = "선택: 카메라";
   } else {
     label.textContent = "대상을 선택하세요";
+  }
+}
+
+function setThreeEditMode(mode, { announce = false } = {}) {
+  if (!["move", "rotate", "pose"].includes(mode)) return;
+  threeEditMode = mode;
+  if (mode === "pose") {
+    const actor = selectedItem();
+    if (actor?.type === "actor") selectedPoseActorId = actor.id;
+  }
+  renderThreeEditControls();
+  if (viewMode === "3d") renderThreeView(evaluatedViewState || state, true);
+  if (announce) {
+    const labels = { move: "3D 이동 편집", rotate: "3D 회전 편집", pose: "3D 배우 포즈 편집" };
+    notifyApp(labels[mode]);
   }
 }
 
@@ -3139,10 +3666,11 @@ function drawMotionPaths(renderState, rect) {
   visibleSourceDefinitions(renderState).forEach((source) => {
     const keys = keyframes.filter((keyframe) => keyframe.source === source.id);
     if (!keys.length) return;
+    const guideColor = blockingGuideColor(source);
     if (keys.length > 1) {
       const sampled = sampleMotionPathPoses(renderState, source.id, keys).map((pose) => toCanvas(pose, rect));
-      ctx.strokeStyle = hexToRgba(source.color, source.id === "camera" ? 0.58 : 0.48);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = hexToRgba(guideColor, source.id === "camera" ? 0.72 : 0.64);
+      ctx.lineWidth = source.id === "camera" ? 2.4 : 2.2;
       ctx.setLineDash(source.id === "camera" ? [3, 5] : [5, 6]);
       ctx.beginPath();
       sampled.forEach((point, index) => {
@@ -3151,12 +3679,27 @@ function drawMotionPaths(renderState, rect) {
       });
       ctx.stroke();
       ctx.setLineDash([]);
+      drawPlanPathArrows(sampled, guideColor, rect);
+      drawPlanAnchor(toCanvas(keys[0].pose, rect), "start", guideColor, rect);
+      drawPlanAnchor(toCanvas(keys[keys.length - 1].pose, rect), "destination", guideColor, rect);
+    }
+
+    const motionEntry = guideMotionEntry(renderState, source, Number(renderState.motion?.playhead || 0));
+    if (motionEntry.activeSegment) {
+      const currentPose = source.id === "camera"
+        ? renderState.camera
+        : resolvedItemPose(renderState.items.find((item) => item.id === source.id), renderState);
+      if (currentPose) {
+        drawPlanAnchor(toCanvas(motionEntry.activeSegment.end.pose, rect), "destination", guideColor, rect);
+        drawPlanAnchor(toCanvas(currentPose, rect), "current", guideColor, rect);
+        drawPlanMotionInstruction(source, motionEntry, currentPose, renderState, rect, guideColor);
+      }
     }
     keys.forEach((keyframe, index) => {
       drawPathOrderBadge(
         toCanvas(keyframe.pose, rect),
         index + 1,
-        source.color,
+        guideColor,
         keyframe.id === renderState.motion?.selectedKeyId,
         rect,
       );
@@ -3164,6 +3707,134 @@ function drawMotionPaths(renderState, rect) {
   });
   drawSelectedFreeCurveHandle(renderState, keyframes, rect);
   drawPathSnapGuide(rect);
+  ctx.restore();
+}
+
+function blockingGuideColor(source) {
+  if (source?.id === "camera" || source?.type === "camera") return "#69c9ff";
+  if (source?.type === "prop") return "#ffc66d";
+  return "#56dfd0";
+}
+
+function pointAlongPlanPath(points, progress) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const segments = [];
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (length < 0.01) continue;
+    segments.push({ start, end, length, from: total });
+    total += length;
+  }
+  if (!segments.length || total < 0.01) return null;
+  const target = clamp(Number(progress), 0, 1) * total;
+  const segment = segments.find((entry) => target <= entry.from + entry.length) || segments[segments.length - 1];
+  const local = clamp((target - segment.from) / segment.length, 0, 1);
+  return {
+    x: segment.start.x + (segment.end.x - segment.start.x) * local,
+    y: segment.start.y + (segment.end.y - segment.start.y) * local,
+    angle: Math.atan2(segment.end.y - segment.start.y, segment.end.x - segment.start.x),
+    total,
+  };
+}
+
+function drawPlanPathArrows(points, color, rect) {
+  const path = pointAlongPlanPath(points, 0.5);
+  if (!path) return;
+  const progressPoints = path.total > Math.min(rect.w, rect.h) * 0.42
+    ? [0.24, 0.5, 0.76]
+    : [0.52];
+  const size = clamp(Math.min(rect.w, rect.h) * 0.018, 8, 14);
+  progressPoints.forEach((progress) => {
+    const marker = pointAlongPlanPath(points, progress);
+    if (!marker) return;
+    ctx.save();
+    ctx.translate(marker.x, marker.y);
+    ctx.rotate(marker.angle);
+    const trace = () => {
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.8, 0);
+      ctx.lineTo(size * 0.75, 0);
+      ctx.moveTo(size * 0.75, 0);
+      ctx.lineTo(size * 0.12, -size * 0.56);
+      ctx.moveTo(size * 0.75, 0);
+      ctx.lineTo(size * 0.12, size * 0.56);
+    };
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(5, 9, 12, 0.94)";
+    ctx.lineWidth = Math.max(4, size * 0.38);
+    trace();
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, size * 0.2);
+    trace();
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawPlanMotionInstruction(source, entry, currentPose, renderState, rect, color) {
+  if (!entry?.activeSegment || !currentPose) return;
+  const current = toCanvas(currentPose, rect);
+  const destination = toCanvas(entry.activeSegment.end.pose, rect);
+  const dx = destination.x - current.x;
+  const dy = destination.y - current.y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  const normalX = -dy / distance;
+  const normalY = dx / distance;
+  const x = clamp((current.x + destination.x) / 2 + normalX * 24, rect.x + 26, rect.x + rect.w - 26);
+  const y = clamp((current.y + destination.y) / 2 + normalY * 24, rect.y + 82, rect.y + rect.h - 64);
+  const text = source.id === "camera"
+    ? cameraGuideInstruction({
+      cameraEntry: entry,
+      trackingActive: false,
+      cameraHasMotion: entry.hasMotion,
+    }, renderState)
+    : sourceGuideInstruction(entry, renderState);
+  drawStoryboardNote(ctx, text, x, y, color, clamp(Math.min(rect.w / 1200, rect.h / 680), 0.58, 0.78), x > rect.x + rect.w * 0.72 ? "right" : "left");
+}
+
+function drawPlanAnchor(point, kind, color, rect) {
+  const radius = clamp(Math.min(rect.w, rect.h) * (kind === "destination" ? 0.015 : 0.012), 7, 12);
+  ctx.save();
+  ctx.translate(point.x, point.y);
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(2, radius * 0.26);
+  ctx.strokeStyle = "rgba(5, 9, 12, 0.92)";
+  ctx.beginPath();
+  ctx.arc(0, 0, radius + 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  if (kind === "current") {
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#f4ffff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    if (kind === "destination") {
+      const arm = radius + 6;
+      ctx.beginPath();
+      ctx.moveTo(-arm, 0);
+      ctx.lineTo(arm, 0);
+      ctx.moveTo(0, -arm);
+      ctx.lineTo(0, arm);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -3267,9 +3938,10 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function drawGrid(rect) {
-  const cols = 16;
-  const rows = 9;
+function drawGrid(rect, renderState = state) {
+  const stageSize = stageWorldSize(renderState);
+  const cols = Math.max(8, Math.round(stageSize.width / STAGE_GRID_STEP_METERS));
+  const rows = Math.max(6, Math.round(stageSize.depth / STAGE_GRID_STEP_METERS));
   ctx.save();
   ctx.strokeStyle = "rgba(127, 159, 187, 0.18)";
   ctx.lineWidth = 1;
@@ -3462,7 +4134,7 @@ function drawItem(item, rect, renderState, clean) {
   }
   ctx.restore();
 
-  if (renderState.showNames && isActive && !(clean && renderState.cleanExport)) {
+  if (renderState.showNames && (isActive || renderState.planReferenceExport) && !(clean && renderState.cleanExport)) {
     drawLabel(`@${item.name}`, point.x, point.y + radius + 21);
   }
 
@@ -3671,8 +4343,9 @@ function drawFooter(renderState, rect) {
   ctx.textBaseline = "bottom";
   const actors = renderState.items.filter((item) => item.type === "actor").length;
   const props = renderState.items.filter((item) => item.type === "prop").length;
+  const size = stageWorldSize(renderState);
   ctx.fillText(
-    `${renderState.aspect} · 배우 ${actors} · 소품 ${props} · ${renderState.camera.focal}mm · H ${Number(renderState.camera.height ?? 1.6).toFixed(1)}m · P ${Math.round(renderState.camera.panDeg)}° · T ${Math.round(renderState.camera.tiltDeg)}°`,
+    `${renderState.aspect} · 무대 ${size.width.toFixed(0)}×${size.depth.toFixed(1)}m · 배우 ${actors} · 소품 ${props} · ${renderState.camera.focal}mm · H ${Number(renderState.camera.height ?? 1.6).toFixed(1)}m · P ${Math.round(renderState.camera.panDeg)}° · T ${Math.round(renderState.camera.tiltDeg)}°`,
     rect.x + rect.w / 2,
     rect.y + rect.h - 12,
   );
@@ -3743,10 +4416,16 @@ function hitTestFreeCurveHandle(point, renderState = evaluatedViewState || state
 
 function beginKeyBadgePress(event, hit, point) {
   event.preventDefault();
+  if (sourceSpatialLocked(hit.keyframe.source)) {
+    selectKeyframe(hit.keyframe.id);
+    notifyEditLocked(sourceLabel(hit.keyframe.source));
+    return;
+  }
   const press = {
     keyframeId: hit.keyframe.id,
     pointerId: event.pointerId,
     point,
+    startState: clone(state),
     timer: 0,
   };
   press.timer = window.setTimeout(() => activateKeyBadgeDrag(press), 280);
@@ -3769,6 +4448,7 @@ function activateKeyBadgeDrag(press) {
     pointerId: press.pointerId,
     offset: { x: press.point.x - posePoint.x, y: press.point.y - posePoint.y },
     changed: false,
+    startState: press.startState,
   };
   keyBadgePress = null;
   syncUi();
@@ -3836,7 +4516,12 @@ function finishKeyBadgeInteraction(event) {
 
 function beginCurveHandleDrag(event, hit) {
   event.preventDefault();
-  curveHandleDrag = { keyframeId: hit.keyframeId, pointerId: event.pointerId, changed: false };
+  curveHandleDrag = {
+    keyframeId: hit.keyframeId,
+    pointerId: event.pointerId,
+    changed: false,
+    startState: clone(state),
+  };
   canvas.setPointerCapture(event.pointerId);
 }
 
@@ -3849,11 +4534,86 @@ function updateCurveHandleDrag(point) {
   draw();
 }
 
+function beginStagePan(event) {
+  stagePanDrag = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    scrollLeft: stageViewport.scrollLeft,
+    scrollTop: stageViewport.scrollTop,
+  };
+  if (stageSpaceHeld) stageSpacePanUsed = true;
+  stageViewport.classList.add("is-panning");
+  stageViewport.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function updateStagePan(event) {
+  if (!stagePanDrag || stagePanDrag.pointerId !== event.pointerId) return;
+  stageViewport.scrollLeft = stagePanDrag.scrollLeft - (event.clientX - stagePanDrag.clientX);
+  stageViewport.scrollTop = stagePanDrag.scrollTop - (event.clientY - stagePanDrag.clientY);
+  event.preventDefault();
+}
+
+function endStagePan(event) {
+  if (!stagePanDrag || stagePanDrag.pointerId !== event.pointerId) return;
+  stageViewport.releasePointerCapture?.(event.pointerId);
+  stagePanDrag = null;
+  stageViewport.classList.remove("is-panning");
+  event.preventDefault();
+}
+
+function stagePointHasEditableTarget(event) {
+  if (event.target !== canvas) return false;
+  const point = pointerPoint(event);
+  return Boolean(
+    hitTestFreeCurveHandle(point)
+    || hitTestPathBadge(point)
+    || hitTest(point)
+  );
+}
+
+stageViewport.addEventListener("pointerdown", (event) => {
+  const blankCanvasPan = event.button === 0
+    && stageZoom > STAGE_ZOOM_MIN + 0.001
+    && event.target === canvas
+    && !stagePointHasEditableTarget(event);
+  const shouldPan = event.button === 1
+    || (event.button === 0 && stageSpaceHeld)
+    || blankCanvasPan;
+  if (shouldPan) beginStagePan(event);
+}, true);
+stageViewport.addEventListener("pointermove", updateStagePan);
+stageViewport.addEventListener("pointerup", endStagePan);
+stageViewport.addEventListener("pointercancel", endStagePan);
+stageViewport.addEventListener("auxclick", (event) => {
+  if (event.button === 1) event.preventDefault();
+});
+stageViewport.addEventListener("wheel", (event) => {
+  if (viewMode !== "2d") return;
+  event.preventDefault();
+  const factor = clamp(Math.exp(-event.deltaY * 0.0015), 0.82, 1.22);
+  setStageZoom(stageZoom * factor, event);
+}, { passive: false });
+
+$("#stageZoomOutBtn").addEventListener("click", () => setStageZoom(stageZoom - 0.25));
+$("#stageZoomInBtn").addEventListener("click", () => setStageZoom(stageZoom + 0.25));
+$("#stageZoomFitBtn").addEventListener("click", () => {
+  setStageZoom(1);
+  requestAnimationFrame(() => centerStageOnContent());
+});
+
 canvas.addEventListener("pointerdown", (event) => {
   syncPlayheadFromTimeInput();
   const point = pointerPoint(event);
   const curveHandle = hitTestFreeCurveHandle(point);
   if (curveHandle) {
+    const curveKey = state.motion.keyframes.find((entry) => entry.id === curveHandle.keyframeId);
+    if (curveKey && sourceSpatialLocked(curveKey.source)) {
+      notifyEditLocked(sourceLabel(curveKey.source));
+      return;
+    }
     beginCurveHandleDrag(event, curveHandle);
     return;
   }
@@ -3864,20 +4624,26 @@ canvas.addEventListener("pointerdown", (event) => {
   }
   const hit = hitTest(point);
   if (hit) {
-    materializeEvaluatedViewForEditing();
     selected = hit;
     const sourceId = selectedSourceId();
     if (sourceId) {
       setActiveSource(sourceId);
       selectKeyForSource(sourceId);
     }
-    drag = {
+    const editItemId = hit.kind === "item" ? transformLeaderIdForItem(hit.id, state) : hit.id;
+    const locked = hit.kind === "camera"
+      ? cameraFieldLocked("position")
+      : sourceEditLocked(editItemId);
+    const editStartState = clone(state);
+    if (!locked) materializeEvaluatedViewForEditing(editItemId);
+    drag = locked ? null : {
       selection: clone(hit),
-      editItemId: hit.kind === "item" ? transformLeaderIdForItem(hit.id, state) : hit.id,
-      startState: clone(state),
+      editItemId,
+      startState: editStartState,
       pointerId: event.pointerId,
     };
-    canvas.setPointerCapture(event.pointerId);
+    if (drag) canvas.setPointerCapture(event.pointerId);
+    else notifyEditLocked(hit.kind === "camera" ? "카메라 위치" : sourceLabel(editItemId));
   } else {
     selected = { kind: "camera" };
   }
@@ -3939,14 +4705,17 @@ canvas.addEventListener("pointerup", (event) => {
   commit();
 });
 
-canvas.addEventListener("pointercancel", () => {
+canvas.addEventListener("pointercancel", (event) => {
+  const cancelledState = drag?.startState || keyBadgeDrag?.startState || curveHandleDrag?.startState || null;
   if (keyBadgePress) clearTimeout(keyBadgePress.timer);
   keyBadgePress = null;
   keyBadgeDrag = null;
   curveHandleDrag = null;
   pathSnapGuide = null;
   drag = null;
-  draw();
+  canvas.releasePointerCapture?.(event.pointerId);
+  if (cancelledState) restoreUncommittedState(cancelledState);
+  else draw();
 });
 
 function dragFacingIfNeeded(event, item, point) {
@@ -3960,10 +4729,15 @@ function faceItemTowardPoint(item, point) {
 }
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "F1") {
+    event.preventDefault();
+    toggleManual();
+    return;
+  }
   const command = event.metaKey || event.ctrlKey;
   if (command && event.key.toLowerCase() === "s") {
-    if (document.querySelector("dialog[open]")) notifyApp("열린 창을 닫은 뒤 프로젝트 저장을 준비하세요.");
-    else exportJson();
+    if (document.querySelector("dialog[open]")) notifyApp("열린 창을 닫은 뒤 프로젝트를 저장하세요.");
+    else saveManagedProject({ interactive: true });
     event.preventDefault();
     return;
   }
@@ -3985,13 +4759,27 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (workspaceMode === "blocking" && viewMode === "3d" && !command && ["g", "r", "p"].includes(event.key.toLowerCase())) {
+    const shortcutModes = { g: "move", r: "rotate", p: "pose" };
+    setThreeEditMode(shortcutModes[event.key.toLowerCase()], { announce: true });
+    event.preventDefault();
+    return;
+  }
   if (workspaceMode === "storyboard" && event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
     moveProjectCut(activeCutId, event.key === "ArrowLeft" ? -1 : 1);
     event.preventDefault();
     return;
   }
   if (workspaceMode === "blocking" && event.code === "Space") {
-    preview ? stopPreview() : playPreview();
+    if (viewMode === "2d") {
+      if (!event.repeat) {
+        stageSpaceHeld = true;
+        stageSpacePanUsed = false;
+        stageViewport.classList.add("is-space-ready");
+      }
+    } else {
+      preview ? pausePreview() : playPreview();
+    }
     event.preventDefault();
     return;
   }
@@ -4034,10 +4822,31 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+document.addEventListener("keyup", (event) => {
+  if (event.code !== "Space" || !stageSpaceHeld) return;
+  stageSpaceHeld = false;
+  stageViewport.classList.remove("is-space-ready");
+  if (!stageSpacePanUsed && workspaceMode === "blocking" && viewMode === "2d") {
+    preview ? pausePreview() : playPreview();
+  }
+  stageSpacePanUsed = false;
+  event.preventDefault();
+});
+
+window.addEventListener("blur", () => {
+  stageSpaceHeld = false;
+  stageSpacePanUsed = false;
+  stagePanDrag = null;
+  stageViewport.classList.remove("is-space-ready", "is-panning");
+});
+
 function syncUi(updateInputs = true) {
   $$("#viewButtons button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === viewMode);
   });
+  syncWorkspaceNavigationState();
+  syncHistoryButtons();
+  syncPlaybackControls();
   $$("#aspectButtons button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.aspect === state.aspect);
   });
@@ -4045,8 +4854,6 @@ function syncUi(updateInputs = true) {
   $("#namesToggle").checked = state.showNames;
   $("#cameraToggle").checked = state.showCamera;
   $("#cleanExportToggle").checked = state.cleanExport;
-  $("#blenderControlsToggle").checked = state.blenderControls;
-  $("#blenderControlsRow").hidden = viewMode !== "3d";
   $("#focalSlider").value = state.camera.focal;
   $("#focalValue").value = state.camera.focal;
   $("#cameraHeightSlider").value = state.camera.height;
@@ -4055,12 +4862,23 @@ function syncUi(updateInputs = true) {
   $("#cameraPanValue").value = Math.round(state.camera.panDeg);
   $("#cameraTiltSlider").value = state.camera.tiltDeg;
   $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
-  $("#cameraPanSlider").disabled = Boolean(state.camera.trackingTargetId);
-  $("#cameraTiltSlider").disabled = Boolean(state.camera.trackingTargetId);
+  renderCameraLockControls();
+  $("#focalSlider").disabled = cameraFieldLocked("lens");
+  $("#focalValue").disabled = cameraFieldLocked("lens");
+  $("#cameraHeightSlider").disabled = cameraFieldLocked("height");
+  $("#cameraHeightValue").disabled = cameraFieldLocked("height");
+  $("#cameraHeightKeyBtn").disabled = cameraFieldLocked("height");
+  $("#cameraPanSlider").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
+  $("#cameraPanValue").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
+  $("#cameraTiltSlider").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
+  $("#cameraTiltValue").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
+  $("#trackingTargetSelect").disabled = cameraFieldLocked("orientation");
   $$("#focalPresets button").forEach((button) => {
     button.classList.toggle("is-active", Number(button.dataset.focal) === Number(state.camera.focal));
+    button.disabled = cameraFieldLocked("lens");
   });
   $("#durationInput").value = state.motion.duration;
+  $("#durationInput").disabled = hasLockedTimelineSources();
   $("#fpsInput").value = state.motion.fps;
   $("#keyTimeInput").max = MAX_TIMELINE_DURATION;
   $("#sceneTitle").value = state.sceneTitle;
@@ -4069,7 +4887,6 @@ function syncUi(updateInputs = true) {
     button.classList.toggle("is-active", button.dataset.timelineView === state.motion.timelineView);
   });
   $(".canvas-wrap").style.setProperty("--stage-ratio", aspectMap[state.aspect] || 16 / 9);
-  renderReferenceControls(updateInputs);
   $$("[data-environment-preset]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.environmentPreset === state.spacePresetId);
   });
@@ -4079,10 +4896,30 @@ function syncUi(updateInputs = true) {
   renderProperties(updateInputs);
   renderSourceSelect();
   renderKeyStatus(updateInputs);
-  renderPrevisQuality();
-  renderPipelineSteps();
   renderThreeEditControls();
   syncProjectChrome();
+}
+
+function renderCameraLockControls() {
+  const locks = sanitizeCameraLocks(state.camera?.locks);
+  const labels = { position: "위치", orientation: "회전", lens: "렌즈", height: "높이" };
+  const lockedLabels = Object.keys(labels).filter((field) => locks[field]).map((field) => labels[field]);
+  $("#cameraLockStatus").textContent = lockedLabels.length ? `${lockedLabels.join(" · ")} 잠김` : "모두 편집 가능";
+  $$("#cameraLockControls [data-camera-lock]").forEach((button) => {
+    const locked = locks[button.dataset.cameraLock] === true;
+    button.classList.toggle("is-locked", locked);
+    button.setAttribute("aria-pressed", String(locked));
+    const icon = button.querySelector("i, svg");
+    if (icon) icon.setAttribute("data-lucide", locked ? "lock" : cameraLockIcon(button.dataset.cameraLock));
+  });
+  refreshLucideIcons();
+}
+
+function cameraLockIcon(field) {
+  if (field === "position") return "move";
+  if (field === "orientation") return "rotate-cw";
+  if (field === "lens") return "aperture";
+  return "arrow-up-down";
 }
 
 const storyboardStatusLabels = {
@@ -4104,12 +4941,101 @@ function refreshLucideIcons() {
 }
 
 function setProjectSaveStatus(status) {
-  projectSaveStatus = ["changed", "prepared", "saved"].includes(status) ? status : "changed";
+  const requestedStatus = ["changed", "prepared", "saving", "saved", "conflict", "error"].includes(status) ? status : "changed";
+  projectSaveStatus = requestedStatus === "changed" && managedSaveConflict ? "conflict" : requestedStatus;
+  if (projectSaveStatus === "saved" && managedProjectId && project) {
+    managedSavedFingerprint = captureProjectSnapshot();
+  }
   const element = $("#projectSaveState");
   if (!element) return;
-  const labels = { changed: "변경됨", prepared: "저장 준비", saved: "저장 완료" };
+  const labels = {
+    changed: "변경됨",
+    prepared: "백업 준비",
+    saving: "저장 중",
+    saved: "저장됨",
+    conflict: "저장 충돌",
+    error: "저장 실패",
+  };
   element.dataset.status = projectSaveStatus;
   element.lastChild.textContent = labels[projectSaveStatus];
+  if ($("#jsonBtn")) $("#jsonBtn").disabled = projectSaveStatus === "saving";
+  if (projectSaveStatus === "changed" && managedProjectId && !suppressManagedAutosave) {
+    scheduleManagedAutosave();
+    scheduleManagedProjectRecovery();
+  } else if (projectSaveStatus === "conflict") {
+    cancelManagedAutosave();
+    scheduleManagedProjectRecovery();
+  } else if (projectSaveStatus !== "changed") {
+    cancelManagedAutosave();
+  }
+}
+
+function cancelManagedAutosave() {
+  if (managedAutosaveTimer) clearTimeout(managedAutosaveTimer);
+  managedAutosaveTimer = null;
+}
+
+function scheduleManagedAutosave() {
+  if (managedAutosaveTimer || managedSaveInFlight || !managedProjectId || suppressManagedAutosave) return;
+  managedAutosaveTimer = setTimeout(() => {
+    managedAutosaveTimer = null;
+    saveManagedProject({ interactive: false });
+  }, 2600);
+}
+
+function clearManagedProjectBinding() {
+  cancelManagedAutosave();
+  cancelManagedProjectRecovery();
+  managedProjectId = "";
+  managedProjectRevision = 0;
+  managedProjectUpdatedAt = "";
+  managedSavedFingerprint = "";
+  managedSaveConflict = false;
+  try {
+    window.localStorage.removeItem(LAST_MANAGED_PROJECT_KEY);
+  } catch {
+    // Project management still works when browser storage is unavailable.
+  }
+}
+
+const liveProjectInputIds = new Set([
+  "focalSlider", "focalValue", "cameraHeightSlider", "cameraHeightValue",
+  "cameraPanSlider", "cameraPanValue", "cameraTiltSlider", "cameraTiltValue",
+  "selectedName", "sizeSlider", "sizeValue", "propScaleX", "propScaleXValue",
+  "propScaleY", "propScaleYValue", "propScaleZ", "propScaleZValue",
+  "facingSlider", "facingValue", "sceneTitle", "sceneIntent",
+  "actorPoseAxisX", "actorPoseAxisXValue", "actorPoseAxisY", "actorPoseAxisYValue",
+  "actorPoseAxisZ", "actorPoseAxisZValue",
+]);
+
+function markLiveProjectInputDirty() {
+  syncActiveCutDocument(true);
+  setProjectSaveStatus("changed");
+}
+
+function finalizeLiveProjectInputEdit() {
+  evaluatedViewState = null;
+  applyCameraTracking(state);
+  history.push(snapshot());
+  if (history.length > 80) history.shift();
+  future = [];
+  syncActiveCutDocument(false);
+  if (!managedProjectId || hasUnsavedProjectChanges()) setProjectSaveStatus("changed");
+  syncUi();
+  draw();
+  syncProjectChrome();
+}
+
+document.addEventListener("input", (event) => {
+  if (liveProjectInputIds.has(event.target?.id)) markLiveProjectInputDirty();
+});
+
+function rememberManagedProject(projectId) {
+  try {
+    window.localStorage.setItem(LAST_MANAGED_PROJECT_KEY, projectId);
+  } catch {
+    // Recent-project resume is optional when browser storage is unavailable.
+  }
 }
 
 function notifyApp(message) {
@@ -4138,7 +5064,9 @@ function rememberTutorialSeen() {
 }
 
 function prepareTutorialStep(step) {
-  if (workspaceMode !== "blocking") setWorkspaceMode("blocking");
+  const nextWorkspace = step.workspace === "storyboard" ? "storyboard" : "blocking";
+  if (workspaceMode !== nextWorkspace) setWorkspaceMode(nextWorkspace);
+  if (nextWorkspace === "blocking" && step.view && viewMode !== step.view) setViewMode(step.view);
   if (step.prepare === "actor-properties") {
     const actor = state.items.find((item) => item.type === "actor");
     if (actor) {
@@ -4259,7 +5187,7 @@ function renderTutorialStep() {
 }
 
 function startTutorial(startIndex = 0) {
-  stopPreview();
+  cancelPreview();
   if (workspaceMode !== "blocking") setWorkspaceMode("blocking");
   if (viewMode !== "2d") setViewMode("2d");
   $$(".toolbar-menu[open]").forEach((menu) => { menu.open = false; });
@@ -4281,6 +5209,7 @@ function closeTutorial(completed = false) {
   overlay.setAttribute("aria-hidden", "true");
   rememberTutorialSeen();
   if (completed) notifyApp("튜토리얼을 완료했습니다. 상단 도움말에서 다시 볼 수 있습니다.");
+  $("#helpMenu > summary")?.focus({ preventScroll: true });
 }
 
 function changeTutorialStep(delta) {
@@ -4310,9 +5239,207 @@ document.addEventListener("keydown", (event) => {
   event.stopImmediatePropagation();
 }, true);
 
+function formatManualCodeTokens() {
+  const root = $("#manualContent");
+  if (!root || root.dataset.formatted === "true") return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    if (walker.currentNode.nodeValue.includes("`")) textNodes.push(walker.currentNode);
+  }
+  textNodes.forEach((node) => {
+    const parts = node.nodeValue.split(/(`[^`]+`)/g);
+    if (parts.length < 2) return;
+    const fragment = document.createDocumentFragment();
+    parts.filter(Boolean).forEach((part) => {
+      if (part.startsWith("`") && part.endsWith("`")) {
+        const code = document.createElement("code");
+        code.textContent = part.slice(1, -1);
+        fragment.append(code);
+      } else {
+        fragment.append(document.createTextNode(part));
+      }
+    });
+    node.replaceWith(fragment);
+  });
+  root.dataset.formatted = "true";
+}
+
+function toggleManual() {
+  const dialog = $("#manualDialog");
+  if (dialog.open) {
+    dialog.close();
+    return;
+  }
+  const otherDialog = document.querySelector("dialog[open]");
+  if (otherDialog) {
+    notifyApp("열린 창을 닫은 뒤 매뉴얼을 여세요.");
+    return;
+  }
+  if (tutorialOpen) closeTutorial(false);
+  formatManualCodeTokens();
+  filterManualSections($("#manualSearchInput")?.value || "");
+  dialog.showModal();
+  $("#manualBtn").classList.add("is-active");
+  $("#manualBtn").setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => $("#manualSearchInput")?.focus({ preventScroll: true }));
+}
+
+function filterManualSections(query = "") {
+  const tokens = String(query).trim().toLocaleLowerCase("ko").split(/\s+/).filter(Boolean);
+  const sections = $$("#manualContent [data-manual-section]");
+  const searching = tokens.length > 0;
+  let visibleCount = 0;
+  sections.forEach((section) => {
+    const haystack = `${section.textContent} ${section.dataset.manualKeywords || ""}`.toLocaleLowerCase("ko");
+    const matches = tokens.every((token) => haystack.includes(token));
+    const visible = searching ? matches : section.dataset.manualSection === manualActiveSection;
+    section.hidden = !visible;
+    const navButton = $(`#manualNav [data-manual-nav="${section.dataset.manualSection}"]`);
+    if (navButton) navButton.hidden = searching && !matches;
+    if (matches) visibleCount += 1;
+  });
+  $("#manualSearchSummary").textContent = searching
+    ? `“${String(query).trim()}” 검색 결과 ${visibleCount}개`
+    : "목차에서 한 항목씩 선택해 확인하세요";
+  $("#manualEmptyState").hidden = visibleCount > 0;
+  $("#manualContent").scrollTop = 0;
+  if (searching) updateManualActiveNav();
+  else setManualActiveNav(manualActiveSection);
+}
+
+function scrollManualTo(sectionId) {
+  const section = $(`#manualContent [data-manual-section="${sectionId}"]`);
+  if (!section) return;
+  manualActiveSection = sectionId;
+  const search = $("#manualSearchInput");
+  if (search) search.value = "";
+  filterManualSections("");
+  $("#manualContent")?.focus({ preventScroll: true });
+}
+
+function setManualActiveNav(sectionId) {
+  $$("#manualNav [data-manual-nav]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.manualNav === sectionId);
+  });
+}
+
+function updateManualActiveNav() {
+  const content = $("#manualContent");
+  if (!content) return;
+  if (!String($("#manualSearchInput")?.value || "").trim()) {
+    setManualActiveNav(manualActiveSection);
+    return;
+  }
+  const visible = $$("#manualContent [data-manual-section]").filter((section) => !section.hidden);
+  if (!visible.length) {
+    setManualActiveNav("");
+    return;
+  }
+  const threshold = content.scrollTop + 88;
+  const active = visible.reduce((current, section) => section.offsetTop <= threshold ? section : current, visible[0]);
+  setManualActiveNav(active.dataset.manualSection);
+}
+
+function closeManualAndRun(callback) {
+  const dialog = $("#manualDialog");
+  if (dialog.open) dialog.close();
+  requestAnimationFrame(callback);
+}
+
+function revealManualTarget(selector, options = {}) {
+  setWorkspaceMode(options.workspace === "storyboard" ? "storyboard" : "blocking");
+  if (options.view) setViewMode(options.view);
+  const target = $(selector);
+  const details = target?.closest("details");
+  if (details) details.open = true;
+  requestAnimationFrame(() => target?.scrollIntoView({ block: "center", behavior: "smooth" }));
+}
+
+function runManualAction(action) {
+  if (action === "tutorial") {
+    closeManualAndRun(() => startTutorial(0));
+    return;
+  }
+  if (action === "storyboard") {
+    closeManualAndRun(() => setWorkspaceMode("storyboard"));
+    return;
+  }
+  if (action === "blocking-2d") {
+    closeManualAndRun(() => revealManualTarget("#stageCanvas", { view: "2d" }));
+    return;
+  }
+  if (action === "blocking-3d") {
+    closeManualAndRun(() => revealManualTarget("#threeWrap", { view: "3d" }));
+    return;
+  }
+  if (action === "scenario") {
+    closeManualAndRun(openScenarioDialog);
+    return;
+  }
+  if (action === "project-menu" || action === "export-menu") {
+    closeManualAndRun(() => {
+      const menu = $(action === "project-menu" ? "#projectMenu" : "#exportMenu");
+      menu.open = true;
+      menu.querySelector("summary")?.focus();
+    });
+    return;
+  }
+  if (action === "objects") {
+    closeManualAndRun(() => revealManualTarget("#actorForm", { view: "2d" }));
+    return;
+  }
+  if (action === "camera") {
+    closeManualAndRun(() => revealManualTarget("#cameraLockControls", { view: "2d" }));
+    return;
+  }
+  if (action === "timeline") {
+    closeManualAndRun(() => revealManualTarget("#timelineTrack", { view: viewMode }));
+    return;
+  }
+  if (action === "mounting") {
+    closeManualAndRun(() => {
+      setWorkspaceMode("blocking");
+      setViewMode("2d");
+      const actor = state.items.find((item) => item.type === "actor");
+      if (!actor) {
+        notifyApp("배우를 추가한 뒤 탑승 설정을 열 수 있습니다.");
+        return;
+      }
+      selected = { kind: "item", id: actor.id };
+      syncUi();
+      const panel = $("#actorPlacementFields")?.closest("details");
+      if (panel) panel.open = true;
+      requestAnimationFrame(() => $("#actorPlacementFields")?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    });
+  }
+}
+
+$("#manualBtn").addEventListener("click", toggleManual);
+$("#manualSearchInput").addEventListener("input", (event) => filterManualSections(event.target.value));
+$("#manualSearchInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") event.preventDefault();
+});
+$("#manualNav").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-manual-nav]");
+  if (button) scrollManualTo(button.dataset.manualNav);
+});
+$("#manualContent").addEventListener("scroll", updateManualActiveNav, { passive: true });
+$("#manualContent").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-manual-action]");
+  if (button) runManualAction(button.dataset.manualAction);
+});
+$("#manualDialog").addEventListener("close", () => {
+  $("#manualBtn").classList.remove("is-active");
+  $("#manualBtn").setAttribute("aria-expanded", "false");
+  $("#helpMenu > summary")?.focus({ preventScroll: true });
+});
+
 function hasUnsavedProjectChanges() {
-  return projectSaveStatus !== "saved"
-    && (history.length > 1 || projectContainsWork() || scenarioDraftHasChanges());
+  if (managedProjectId && managedSavedFingerprint) {
+    return captureProjectSnapshot() !== managedSavedFingerprint;
+  }
+  return projectSaveStatus !== "saved";
 }
 
 function confirmProjectReplacement(actionLabel) {
@@ -4320,6 +5447,31 @@ function confirmProjectReplacement(actionLabel) {
     ? "저장 완료되지 않은 변경이 있습니다. "
     : "";
   return confirm(`${warning}${actionLabel} 현재 프로젝트를 교체할까요?`);
+}
+
+function syncWorkspaceNavigationState() {
+  const storyboardActive = workspaceMode === "storyboard";
+  const storyboardButton = $("#storyboardBtn");
+  if (storyboardActive) storyboardButton?.setAttribute("aria-current", "page");
+  else storyboardButton?.removeAttribute("aria-current");
+  $$("#viewButtons button").forEach((button) => {
+    const active = !storyboardActive && button.dataset.view === viewMode;
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+function syncHistoryButtons() {
+  const undoAvailable = workspaceMode === "storyboard"
+    ? projectHistory.length > 0 || history.length > 1
+    : history.length > 1;
+  const redoAvailable = workspaceMode === "storyboard"
+    ? projectFuture.length > 0 || future.length > 0
+    : future.length > 0;
+  const undoButton = $("#undoBtn");
+  const redoButton = $("#redoBtn");
+  if (undoButton) undoButton.disabled = !undoAvailable;
+  if (redoButton) redoButton.disabled = !redoAvailable;
 }
 
 function syncProjectChrome() {
@@ -4336,6 +5488,8 @@ function syncProjectChrome() {
   if ($("#storyboardBtnLabel")) $("#storyboardBtnLabel").textContent = "스토리보드";
   $("#storyboardBtn")?.classList.toggle("is-active", workspaceMode === "storyboard");
   $(".app")?.classList.toggle("is-storyboard", workspaceMode === "storyboard");
+  syncWorkspaceNavigationState();
+  syncHistoryButtons();
   setProjectSaveStatus(projectSaveStatus);
 }
 
@@ -4344,7 +5498,7 @@ function setWorkspaceMode(mode) {
   $("#storyboardScreen").hidden = workspaceMode !== "storyboard";
   syncProjectChrome();
   if (workspaceMode === "storyboard") {
-    stopPreview();
+    cancelPreview();
     syncActiveCutDocument(false);
     renderStoryboardWorkspace();
     return;
@@ -4378,9 +5532,6 @@ function renderStoryboardWorkspace() {
   $("#activeSceneHeading").readOnly = projectView;
   $("#activeSceneSynopsis").value = projectView ? project.logline : scene.synopsis;
   $("#activeSceneSynopsis").readOnly = projectView;
-  $$("#storyboardScopeSwitch button").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.storyboardScope === storyboardScope);
-  });
   $("#storyboardStatusFilter").value = storyboardStatusFilter;
   const scopeName = projectView ? "전체 시나리오" : `S${String(scene.number).padStart(2, "0")} ${scene.heading}`;
   const statusName = storyboardStatusFilter === "all" ? "전체 상태" : storyboardStatusLabels[storyboardStatusFilter];
@@ -4488,6 +5639,9 @@ function renderStoryboardCutGrid() {
       const cutGrid = document.createElement("div");
       cutGrid.className = "storyboard-cut-grid storyboard-scene-cut-grid";
       const visibleCuts = scene.cuts.filter((cut) => storyboardStatusFilter === "all" || cut.status === storyboardStatusFilter);
+      cutGrid.dataset.cutCount = String(visibleCuts.length);
+      cutGrid.classList.toggle("is-single-cut", visibleCuts.length === 1);
+      cutGrid.classList.toggle("is-multi-cut", visibleCuts.length > 1);
       if (visibleCuts.length) visibleCuts.forEach((cut) => cutGrid.append(createStoryboardCutCard(scene, cut)));
       else cutGrid.append(createStoryboardEmptyState());
       band.append(heading, cutGrid);
@@ -4519,6 +5673,7 @@ function createStoryboardCutCard(scene, cut) {
   card.addEventListener("click", () => switchProjectCut(scene.id, cut.id));
   card.addEventListener("dblclick", () => openCutInBlocking(scene.id, cut.id));
   card.addEventListener("keydown", (event) => {
+    if (event.target.matches("button, input, textarea, select")) return;
     if (event.key === " ") {
       switchProjectCut(scene.id, cut.id);
       event.preventDefault();
@@ -4560,12 +5715,157 @@ function createStoryboardCutCard(scene, cut) {
   const title = document.createElement("strong");
   title.className = "storyboard-card-title";
   title.textContent = cut.title || "제목 없는 컷";
+  const titleInput = document.createElement("input");
+  titleInput.className = "storyboard-card-title-input";
+  titleInput.type = "text";
+  titleInput.maxLength = 200;
+  titleInput.value = cut.title || "";
+  titleInput.setAttribute("aria-label", `${storyboardCutCode(scene, cut)} 컷 제목 수정`);
+  titleInput.hidden = true;
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "storyboard-card-title-wrap";
+  titleWrap.append(title, titleInput);
+  const bodyHead = document.createElement("div");
+  bodyHead.className = "storyboard-card-body-head";
+  bodyHead.append(titleWrap);
   const action = document.createElement("p");
   action.className = "storyboard-card-action";
   action.textContent = cut.action || "액션 설명 없음";
   const dialogue = document.createElement("p");
   dialogue.className = "storyboard-card-dialogue";
   dialogue.textContent = cut.dialogue ? `“${cut.dialogue.replace(/\n/g, " ")}”` : "대사 없음";
+  const actionBlock = document.createElement("div");
+  actionBlock.className = "storyboard-card-copy storyboard-card-action-copy";
+  const actionLabel = document.createElement("span");
+  actionLabel.className = "storyboard-card-copy-label";
+  actionLabel.textContent = "액션";
+  const actionInput = document.createElement("textarea");
+  actionInput.className = "storyboard-card-text-input";
+  actionInput.rows = 4;
+  actionInput.value = cut.action || "";
+  actionInput.placeholder = "인물과 화면에서 일어나는 일";
+  actionInput.setAttribute("aria-label", `${storyboardCutCode(scene, cut)} 액션 수정`);
+  actionInput.hidden = true;
+  actionBlock.append(actionLabel, action, actionInput);
+  const dialogueBlock = document.createElement("div");
+  dialogueBlock.className = "storyboard-card-copy storyboard-card-dialogue-copy";
+  const dialogueLabel = document.createElement("span");
+  dialogueLabel.className = "storyboard-card-copy-label";
+  dialogueLabel.textContent = "대사";
+  const dialogueInput = document.createElement("textarea");
+  dialogueInput.className = "storyboard-card-text-input";
+  dialogueInput.rows = 2;
+  dialogueInput.value = cut.dialogue || "";
+  dialogueInput.placeholder = "이 컷에 해당하는 대사";
+  dialogueInput.setAttribute("aria-label", `${storyboardCutCode(scene, cut)} 대사 수정`);
+  dialogueInput.hidden = true;
+  dialogueBlock.append(dialogueLabel, dialogue, dialogueInput);
+  const headActions = document.createElement("div");
+  headActions.className = "storyboard-card-head-actions";
+  const needsExpansion = String(cut.action || "").length > 120
+    || String(cut.dialogue || "").length > 80
+    || String(cut.title || "").length > 54;
+  if (needsExpansion) {
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "icon-btn storyboard-card-expand";
+    expand.innerHTML = '<i data-lucide="chevron-down" aria-hidden="true"></i>';
+    expand.title = "컷 설명 펼치기";
+    expand.setAttribute("aria-label", `${cut.title || "컷"} 설명 펼치기`);
+    expand.setAttribute("aria-expanded", "false");
+    expand.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const expanded = card.classList.toggle("is-expanded");
+      expand.setAttribute("aria-expanded", String(expanded));
+      expand.title = expanded ? "컷 설명 접기" : "컷 설명 펼치기";
+      expand.setAttribute("aria-label", `${cut.title || "컷"} 설명 ${expanded ? "접기" : "펼치기"}`);
+      expand.innerHTML = `<i data-lucide="chevron-${expanded ? "up" : "down"}" aria-hidden="true"></i>`;
+      refreshLucideIcons();
+    });
+    headActions.append(expand);
+  }
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "text-btn storyboard-card-edit";
+  edit.innerHTML = '<i data-lucide="pencil" aria-hidden="true"></i><span>수정</span>';
+  edit.setAttribute("aria-label", `${cut.title || "컷"} 내용 수정`);
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary-btn storyboard-card-save";
+  save.innerHTML = '<i data-lucide="save" aria-hidden="true"></i><span>저장</span>';
+  save.setAttribute("aria-label", `${cut.title || "컷"} 수정 내용 저장`);
+  save.hidden = true;
+  const cancelEdit = document.createElement("button");
+  cancelEdit.type = "button";
+  cancelEdit.className = "icon-btn storyboard-card-cancel";
+  cancelEdit.innerHTML = '<i data-lucide="x" aria-hidden="true"></i>';
+  cancelEdit.title = "수정 취소";
+  cancelEdit.setAttribute("aria-label", `${cut.title || "컷"} 수정 취소`);
+  cancelEdit.hidden = true;
+  headActions.append(edit, save, cancelEdit);
+  bodyHead.append(headActions);
+
+  const setInlineEditing = (editing) => {
+    card.classList.toggle("is-editing", editing);
+    title.hidden = editing;
+    action.hidden = editing;
+    dialogue.hidden = editing;
+    titleInput.hidden = !editing;
+    actionInput.hidden = !editing;
+    dialogueInput.hidden = !editing;
+    edit.hidden = editing;
+    save.hidden = !editing;
+    cancelEdit.hidden = !editing;
+    if (editing) {
+      titleInput.value = cut.title || "";
+      actionInput.value = cut.action || "";
+      dialogueInput.value = cut.dialogue || "";
+      requestAnimationFrame(() => titleInput.focus());
+    }
+  };
+  edit.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setInlineEditing(true);
+  });
+  cancelEdit.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setInlineEditing(false);
+  });
+  const saveInlineEdit = (event) => {
+    event?.stopPropagation();
+    const nextTitle = titleInput.value.trim() || "제목 없는 컷";
+    const nextAction = actionInput.value.trim();
+    const nextDialogue = dialogueInput.value.trim();
+    if (nextTitle === cut.title && nextAction === cut.action && nextDialogue === cut.dialogue) {
+      setInlineEditing(false);
+      return;
+    }
+    pushProjectHistory();
+    cut.title = nextTitle;
+    cut.action = nextAction;
+    cut.dialogue = nextDialogue;
+    cut.blocking.sceneTitle = cut.title;
+    if (cut.id === activeCutId) state = cut.blocking;
+    touchProjectCut(cut);
+    syncProjectChrome();
+    renderStoryboardWorkspace();
+    notifyApp(`${storyboardCutCode(scene, cut)} 내용을 저장했습니다.`);
+  };
+  save.addEventListener("click", saveInlineEdit);
+  [titleInput, actionInput, dialogueInput].forEach((input) => {
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("dblclick", (event) => event.stopPropagation());
+    input.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        saveInlineEdit(event);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setInlineEditing(false);
+      }
+    });
+  });
   const meta = document.createElement("div");
   meta.className = "storyboard-card-meta";
   const keyCount = cut.blocking.motion?.keyframes?.length || 0;
@@ -4590,7 +5890,7 @@ function createStoryboardCutCard(scene, cut) {
     order.append(button);
   });
   meta.append(order);
-  body.append(title, action, dialogue, meta);
+  body.append(bodyHead, actionBlock, dialogueBlock, meta);
   card.append(thumb, body);
   return card;
 }
@@ -4957,311 +6257,18 @@ function renderTrackingTargetSelect(updateInputs = true) {
 function setViewMode(mode) {
   viewMode = mode === "3d" ? "3d" : "2d";
   canvas.hidden = viewMode !== "2d";
+  stageViewport.hidden = viewMode !== "2d";
+  stageZoomControls.hidden = viewMode !== "2d";
   $("#threeWrap").hidden = viewMode !== "3d";
   if (viewMode === "3d") {
     initThreeView();
     resizeThreeView();
     renderThreeView(state, true);
+  } else {
+    requestAnimationFrame(() => resizeCanvas());
   }
   syncUi(false);
   draw();
-}
-
-function renderReferenceControls(updateInputs = true) {
-  const reference = state.reference || sanitizeReference();
-  const fileLabel = $("#videoFileLabel");
-  const status = $("#referenceStatus");
-  const actorCount = $("#traceActorCount");
-  const precision = $("#analysisPrecision");
-  const analyzeButton = $("#analyzeReferenceBtn");
-  const clearButton = $("#clearReferenceBtn");
-  const sourceInput = $("#referenceFile");
-  const videoPreview = $("#referencePreview");
-  const imagePreview = $("#referenceImagePreview");
-  const previewWrap = $("#referencePreviewWrap");
-  const overlayCanvas = $("#referenceOverlayCanvas");
-  const frameBar = $("#referenceFrameBar");
-  const range = $("#referenceRange");
-  const rangeText = $("#referenceRangeText");
-  const startButton = $("#setReferenceStartBtn");
-  const endButton = $("#setReferenceEndBtn");
-  const useFrameTimeButton = $("#useReferenceTimeBtn");
-  const summary = $("#referenceAnalysisSummary");
-
-  if (fileLabel) fileLabel.textContent = reference.name || "파일 선택";
-  const isImage = reference.kind === "image";
-  if (videoPreview) videoPreview.hidden = isImage;
-  if (imagePreview) imagePreview.hidden = !isImage;
-  if (actorCount && (updateInputs || document.activeElement !== actorCount)) {
-    actorCount.value = String(reference.analysis?.actorCount || 1);
-  }
-  if (precision && (updateInputs || document.activeElement !== precision)) {
-    precision.value = reference.precision || "detailed";
-  }
-  if (actorCount) actorCount.disabled = referenceAnalysisBusy;
-  if (precision) precision.disabled = referenceAnalysisBusy;
-  if (sourceInput) sourceInput.disabled = referenceAnalysisBusy;
-  if (previewWrap) previewWrap.hidden = !referenceClipBlob;
-  if (overlayCanvas) overlayCanvas.hidden = isImage || !referenceClipBlob || !reference.showOverlay || !referenceAnalysisCache || reference.analysis?.status !== "ready";
-  if (frameBar) frameBar.hidden = !referenceClipBlob || isImage;
-  if (range) range.hidden = !referenceClipBlob || isImage;
-  if (rangeText) rangeText.textContent = reference.start.toFixed(1) + "s - " + reference.end.toFixed(1) + "s";
-  if (startButton) startButton.disabled = !referenceClipBlob || referenceAnalysisBusy;
-  if (endButton) endButton.disabled = !referenceClipBlob || referenceAnalysisBusy;
-  if (useFrameTimeButton) useFrameTimeButton.disabled = !referenceClipBlob || referenceAnalysisBusy;
-  updateReferenceFrameTime();
-  if (analyzeButton) {
-    analyzeButton.disabled = !referenceClipBlob || referenceAnalysisBusy;
-    analyzeButton.textContent = referenceAnalysisBusy ? "읽는 중..." : isImage ? "3D 배치 초안 만들기" : "동선 초안 만들기";
-  }
-  if (clearButton) clearButton.disabled = referenceAnalysisBusy || (!referenceClipBlob && !reference.name);
-  renderReferenceCalibrationControls(reference, updateInputs);
-
-  if (status) {
-    if (referenceAnalysisBusy) {
-      status.textContent = referenceAnalysisStage || "장면의 움직임과 시간 리듬을 읽고 있습니다...";
-    } else if (!reference.name) {
-      status.textContent = "영상은 동선 키를, 이미지는 3D 배치 초안을 만듭니다.";
-    } else if (reference.analysis?.status === "ready") {
-      const trackingLabel = reference.analysis.tracking === "vision"
-        ? "인물 추적 " + reference.analysis.detectedFrames + "프레임"
-        : "움직임 추정";
-      const readyMessage = isImage
-        ? reference.name + " · 배우 " + reference.analysis.detectedActorCount + "명 · 오브젝트 " + reference.analysis.detectedObjectCount + "개 배치됨 · 3D에서 검토하세요."
-        : reference.name + " · " + reference.duration.toFixed(1) + "초 · " + trackingLabel + " · 키 " + reference.analysis.keyCount + "개 생성됨 · 2D/3D에서 검토하세요.";
-      status.textContent = referenceAnalysisMessage ? `${readyMessage} ${referenceAnalysisMessage}` : readyMessage;
-    } else if (referenceAnalysisMessage) {
-      status.textContent = referenceAnalysisMessage;
-    } else if (!referenceClipBlob) {
-      status.textContent = reference.name + " · 원본 영상을 다시 선택하면 새 초안을 만들 수 있습니다.";
-    } else {
-      status.textContent = isImage ? reference.name + " · 이미지 준비됨" : reference.name + " · " + reference.duration.toFixed(1) + "초 · 준비됨";
-    }
-  }
-
-  if (summary) {
-    const ready = reference.analysis?.status === "ready";
-    summary.hidden = !ready;
-    if (ready) {
-      $("#cameraMotionLabel").textContent = isImage ? "3D 배치" : cameraMotionLabels[reference.analysis.cameraMotionType] || "카메라";
-      $("#cameraConfidenceValue").textContent = Math.round(isImage ? reference.analysis.mappingConfidence : reference.analysis.cameraConfidence) + "%";
-      $("#actorAnalysisScore").textContent = Math.round(reference.analysis.actorConfidence) + "%";
-      $("#sceneCutCount").textContent = Math.round(reference.analysis.sceneCuts) + "회";
-      const notes = [];
-      if (reference.analysis.sceneCuts) {
-        const cutList = (reference.analysis.cutTimes || []).map((time) => Number(time).toFixed(1) + "s").join(", ");
-        notes.push(`샷 ${reference.analysis.sceneCuts + 1}개${cutList ? ` · 컷 ${cutList}` : ""}.`);
-      }
-      if (reference.analysis.cameraConfidence < 55) notes.push("카메라 경로는 수동 보정이 필요할 수 있습니다.");
-      if (reference.analysis.cameraJitter > 0.48) notes.push("핸드헬드 흔들림이 감지되어 정리 강도를 조절할 수 있습니다.");
-      if (reference.analysis.actorConfidence < 55) notes.push("가려진 배우의 위치를 2D 또는 3D에서 확인하세요.");
-      if (reference.analysis.mappingConfidence < 45) notes.push("3D 깊이 추정 신뢰도가 낮아 위치 보정이 필요할 수 있습니다.");
-      if (!notes.length) notes.push(reference.analysis.sampleCount + "개 프레임을 비교해 안정적인 초안을 만들었습니다.");
-      $("#referenceAnalysisNote").textContent = notes.join(" ");
-    }
-  }
-  drawReferenceOverlay();
-}
-
-function renderReferenceCalibrationControls(reference, updateInputs = true) {
-  const calibration = reference.calibration || sanitizeReferenceCalibration();
-  const controls = [
-    ["#calibrationLateralSlider", calibration.lateralScale],
-    ["#calibrationDepthSlider", calibration.depthScale],
-    ["#calibrationSizeDepthSlider", calibration.sizeDepthWeight],
-    ["#calibrationCameraGainSlider", calibration.cameraGain],
-    ["#calibrationStabilizationSlider", calibration.stabilizationStrength],
-  ];
-  controls.forEach(([selector, value]) => {
-    const input = $(selector);
-    if (input && (updateInputs || document.activeElement !== input)) input.value = String(value);
-    if (input) input.disabled = referenceAnalysisBusy;
-  });
-  $("#referenceOverlayToggle").checked = reference.showOverlay !== false;
-  $("#calibrationAnchorToggle").checked = calibration.anchorToCurrent !== false;
-  $("#calibrationMirrorToggle").checked = calibration.mirrorX;
-  $("#calibrationCameraInterpretation").value = calibration.cameraInterpretation;
-  $("#referenceOverlayToggle").disabled = referenceAnalysisBusy;
-  $("#calibrationAnchorToggle").disabled = referenceAnalysisBusy;
-  $("#calibrationMirrorToggle").disabled = referenceAnalysisBusy;
-  $("#calibrationCameraInterpretation").disabled = referenceAnalysisBusy;
-  $("#resetReferenceCalibrationBtn").disabled = referenceAnalysisBusy;
-  $("#calibrationLateralValue").textContent = Math.round(calibration.lateralScale * 100) + "%";
-  $("#calibrationDepthValue").textContent = Math.round(calibration.depthScale * 100) + "%";
-  $("#calibrationSizeDepthValue").textContent = Math.round(calibration.sizeDepthWeight * 100) + "%";
-  $("#calibrationCameraGainValue").textContent = Math.round(calibration.cameraGain * 100) + "%";
-  $("#calibrationStabilizationValue").textContent = Math.round(calibration.stabilizationStrength * 100) + "%";
-  $$("#calibrationRotation button").forEach((button) => {
-    button.disabled = referenceAnalysisBusy;
-    button.classList.toggle("is-active", Number(button.dataset.calibrationRotation) === calibration.rotation);
-  });
-}
-
-function updateReferenceFrameTime() {
-  const video = $("#referencePreview");
-  const label = $("#referenceFrameTime");
-  if (!video || !label) return;
-  const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-  const duration = Number.isFinite(video.duration) ? video.duration : 0;
-  label.textContent = current.toFixed(1) + "s" + (duration ? " / " + duration.toFixed(1) + "s" : "");
-}
-
-function drawReferenceOverlay() {
-  const canvas = $("#referenceOverlayCanvas");
-  const video = $("#referencePreview");
-  const cache = referenceAnalysisCache;
-  if (!canvas || !video) return;
-  if (!cache || state.reference.showOverlay === false || !referenceClipBlob || state.reference.analysis?.status !== "ready") {
-    canvas.hidden = true;
-    return;
-  }
-  const width = video.clientWidth;
-  const height = video.clientHeight;
-  if (width < 2 || height < 2) return;
-  canvas.hidden = false;
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const pixelWidth = Math.max(1, Math.round(width * ratio));
-  const pixelHeight = Math.max(1, Math.round(height * ratio));
-  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
-  }
-  const context = canvas.getContext("2d");
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  const samples = cache.samples || [];
-  if (!samples.length) return;
-  const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : samples[0].sourceTime;
-  const sampleIndex = samples.reduce((bestIndex, sample, index) => (
-    Math.abs(sample.sourceTime - currentTime) < Math.abs(samples[bestIndex].sourceTime - currentTime) ? index : bestIndex
-  ), 0);
-  const sample = samples[sampleIndex];
-
-  (cache.screenTracks || []).forEach((track, actorIndex) => {
-    const actor = cache.actors?.[actorIndex] || {};
-    const color = actor.color || colors[actorIndex % colors.length];
-    const pose = track[sampleIndex];
-    if (!pose) return;
-    let start = Math.max(0, sampleIndex - 18);
-    while (start < sampleIndex && track[start]?.shot !== pose.shot) start += 1;
-    context.save();
-    context.strokeStyle = color;
-    context.lineWidth = 2;
-    context.globalAlpha = 0.78;
-    context.beginPath();
-    for (let index = start; index <= sampleIndex; index += 1) {
-      const pose = track[index];
-      if (!pose) continue;
-      const x = pose.x * width;
-      const y = pose.y * height;
-      if (index === start) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.stroke();
-    context.restore();
-
-    const footX = pose.x * width;
-    const footY = pose.y * height;
-    const boxHeight = clamp(Number(pose.size || 0.24) * height, 18, height * 0.9);
-    const boxWidth = clamp(Number(pose.width || pose.size * 0.42 || 0.12) * width, 12, width * 0.55);
-    const left = clamp(footX - boxWidth / 2, 1, Math.max(1, width - boxWidth - 1));
-    const top = clamp(footY - boxHeight, 1, Math.max(1, height - boxHeight - 1));
-    context.save();
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.lineWidth = pose.observed ? 2 : 1;
-    if (!pose.observed) context.setLineDash([5, 4]);
-    context.strokeRect(left, top, boxWidth, boxHeight);
-    context.setLineDash([]);
-    context.beginPath();
-    context.arc(footX, footY, 4, 0, Math.PI * 2);
-    context.fill();
-    const confidence = pose.observed && pose.source === "vision" ? " " + Math.round((pose.score || 0) * 100) + "%" : " 추정";
-    const rawLabel = (actor.name || "배우 " + (actorIndex + 1)) + confidence;
-    context.font = "700 11px system-ui, sans-serif";
-    const label = fitReferenceOverlayText(context, rawLabel, Math.max(20, width - left - 12));
-    const labelWidth = context.measureText(label).width + 10;
-    context.fillStyle = "rgba(7, 10, 11, 0.82)";
-    context.fillRect(left, Math.max(1, top - 19), labelWidth, 17);
-    context.fillStyle = color;
-    context.fillText(label, left + 5, Math.max(13, top - 6));
-    context.restore();
-  });
-
-  const movement = sample.cameraMotion || {};
-  const centerX = width * 0.5;
-  const centerY = height * 0.18;
-  const cameraX = centerX - Number(movement.dx || 0) * width * 5;
-  const cameraY = centerY - Number(movement.dy || 0) * height * 5;
-  drawReferenceArrow(context, centerX, centerY, cameraX, cameraY, "#71b8ff");
-  const rawMovementLabel = movement.cut
-    ? "장면 전환"
-    : (cameraMotionLabels[cache.cameraProfile?.type] || "카메라") + " · " + Math.round(Math.hypot(movement.dx || 0, movement.dy || 0) * 1000) / 10 + "% · " + Math.round((movement.confidence || 0) * 100) + "%";
-  context.font = "700 11px system-ui, sans-serif";
-  const currentIsKey = cache.selectedIndexes?.includes(sampleIndex);
-  const movementLabel = fitReferenceOverlayText(context, rawMovementLabel, Math.max(40, currentIsKey ? width * 0.44 : width - 26));
-  const tagWidth = context.measureText(movementLabel).width + 12;
-  context.fillStyle = movement.cut ? "rgba(255, 98, 98, 0.92)" : "rgba(8, 15, 19, 0.8)";
-  context.fillRect(7, 7, tagWidth, 20);
-  context.fillStyle = movement.cut ? "#111" : "#b9dfff";
-  context.fillText(movementLabel, 13, 21);
-
-  if (currentIsKey) {
-    context.font = "800 11px system-ui, sans-serif";
-    const keyLabel = fitReferenceOverlayText(context, "생성 키 · " + sample.sourceTime.toFixed(1) + "s", Math.max(40, width * 0.5));
-    const keyWidth = context.measureText(keyLabel).width + 12;
-    context.fillStyle = "rgba(255, 107, 85, 0.9)";
-    context.fillRect(width - keyWidth - 7, 7, keyWidth, 20);
-    context.fillStyle = "#111";
-    context.fillText(keyLabel, width - keyWidth - 1, 21);
-  }
-}
-
-function fitReferenceOverlayText(context, text, maxWidth) {
-  if (context.measureText(text).width <= maxWidth) return text;
-  let fitted = String(text);
-  while (fitted.length > 1 && context.measureText(fitted + "...").width > maxWidth) fitted = fitted.slice(0, -1);
-  return fitted + "...";
-}
-
-function drawReferenceArrow(context, fromX, fromY, toX, toY, color) {
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const length = Math.hypot(dx, dy);
-  context.save();
-  context.strokeStyle = color;
-  context.fillStyle = color;
-  context.lineWidth = 2;
-  if (length < 3) {
-    context.beginPath();
-    context.arc(fromX, fromY, 3, 0, Math.PI * 2);
-    context.fill();
-    context.restore();
-    return;
-  }
-  const angle = Math.atan2(dy, dx);
-  context.beginPath();
-  context.moveTo(fromX, fromY);
-  context.lineTo(toX, toY);
-  context.stroke();
-  context.beginPath();
-  context.moveTo(toX, toY);
-  context.lineTo(toX - Math.cos(angle - 0.55) * 8, toY - Math.sin(angle - 0.55) * 8);
-  context.lineTo(toX - Math.cos(angle + 0.55) * 8, toY - Math.sin(angle + 0.55) * 8);
-  context.closePath();
-  context.fill();
-  context.restore();
-}
-
-function motionPrevisStatusText() {
-  const imported = state.motionPrevis;
-  if (!imported?.imported) return "모션 프리비즈 없음";
-  const parts = ["모션 프리비즈 연결됨"];
-  if (imported.sourceName) parts.push(imported.sourceName);
-  if (imported.frameCount) parts.push(`포즈 ${imported.frameCount}프레임`);
-  if (imported.cameraMoveFrames) parts.push(`카메라 ${imported.cameraMoveFrames}프레임`);
-  if (imported.qualityReport?.score != null) parts.push(`점수 ${imported.qualityReport.score}`);
-  return parts.join(" · ");
 }
 
 function renderToggleGrid(selector, catalog, selectedValues, onToggle) {
@@ -5291,1446 +6298,6 @@ function toggleExportPreset(key) {
 
 function toggleArrayValue(values, key) {
   return values.includes(key) ? values.filter((value) => value !== key) : [...values, key];
-}
-
-function setReferenceClip(file) {
-  referenceAnalysisGeneration += 1;
-  const previousReferenceId = state.reference?.id;
-  if (previousReferenceId) removeReferenceGeneratedData(previousReferenceId);
-  if (referenceClipUrl) URL.revokeObjectURL(referenceClipUrl);
-  referenceClipBlob = file;
-  referenceClipUrl = file ? URL.createObjectURL(file) : "";
-  referenceAnalysisMessage = "";
-  referenceAnalysisStage = "";
-  referenceAnalysisCache = null;
-
-  const video = $("#referencePreview");
-  const image = $("#referenceImagePreview");
-  $("#referencePreviewWrap").hidden = !file;
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
-  image.removeAttribute("src");
-
-  if (!file) {
-    state.reference = sanitizeReference({
-      ...state.reference,
-      name: "",
-      id: "",
-      kind: "none",
-      type: "",
-      size: 0,
-      duration: 0,
-      start: 0,
-      end: 0,
-      analysis: { status: "idle", keyCount: 0, actorCount: state.reference.analysis?.actorCount || 1, motionScore: 0 },
-    });
-    commit();
-    return;
-  }
-
-  state.reference = sanitizeReference({
-    ...state.reference,
-    id: uid(),
-    kind: file.type.startsWith("image/") ? "image" : "video",
-    name: file.name,
-    type: file.type,
-    size: file.size,
-    analysis: {
-      status: "idle",
-      keyCount: 0,
-      actorCount: state.reference.analysis?.actorCount || 1,
-      motionScore: 0,
-    },
-  });
-  if (state.reference.kind === "image") {
-    image.src = referenceClipUrl;
-    image.onload = () => {
-      state.reference = sanitizeReference({
-        ...state.reference,
-        duration: 0,
-        start: 0,
-        end: 0,
-        analysis: { ...state.reference.analysis, status: "idle", keyCount: 0, motionScore: 0 },
-      });
-      commit();
-    };
-    commit();
-    return;
-  }
-  video.src = referenceClipUrl;
-  video.onloadedmetadata = () => {
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    state.reference = sanitizeReference({
-      ...state.reference,
-      duration,
-      start: 0,
-      end: duration,
-      analysis: { ...state.reference.analysis, status: "idle", keyCount: 0, motionScore: 0 },
-    });
-    commit();
-  };
-  commit();
-}
-
-function clearReferenceClipRuntime() {
-  referenceAnalysisGeneration += 1;
-  if (referenceClipUrl) URL.revokeObjectURL(referenceClipUrl);
-  referenceClipBlob = null;
-  referenceClipUrl = "";
-  referenceAnalysisCache = null;
-  referenceAnalysisMessage = "";
-  referenceAnalysisStage = "";
-  const video = $("#referencePreview");
-  const image = $("#referenceImagePreview");
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
-  image?.removeAttribute("src");
-  $("#referencePreviewWrap").hidden = true;
-  $("#referenceOverlayCanvas").hidden = true;
-}
-
-async function createVideoDraft() {
-  const video = $("#referencePreview");
-  if (referenceAnalysisBusy || !referenceClipBlob || !video) return;
-  if (!Number.isFinite(video.duration) || video.duration <= 0) {
-    referenceAnalysisMessage = "영상을 읽은 뒤 다시 초안 만들기를 눌러주세요.";
-    syncUi(false);
-    return;
-  }
-  const beforeDraft = snapshot();
-  const analysisReferenceId = state.reference.id;
-  const analysisGeneration = referenceAnalysisGeneration;
-  let buildStarted = false;
-
-  referenceAnalysisBusy = true;
-  referenceAnalysisMessage = "";
-  referenceAnalysisStage = "영상 프레임을 읽고 있습니다...";
-  referenceAnalysisCache = null;
-  state.reference.analysis = {
-    ...state.reference.analysis,
-    status: "working",
-  };
-  syncUi(false);
-
-  try {
-    const requestedActorCount = clamp(Number($("#traceActorCount")?.value || 1), 1, 8);
-    const samples = await sampleReferenceVideo(video, (completed, total) => {
-      referenceAnalysisStage = "영상 프레임을 읽고 있습니다... " + completed + "/" + total;
-      syncUi(false);
-    });
-    assertReferenceAnalysisCurrent(analysisReferenceId, analysisGeneration, "video");
-    if (samples.length < 2) throw new Error("영상에서 충분한 장면을 읽지 못했습니다.");
-    referenceAnalysisStage = "영상 안에서 인물을 찾고 있습니다...";
-    syncUi(false);
-    const tracking = await attachPersonDetections(samples, (completed, total) => {
-      referenceAnalysisStage = "인물 위치를 읽고 있습니다... " + completed + "/" + total;
-      syncUi(false);
-    });
-    assertReferenceAnalysisCurrent(analysisReferenceId, analysisGeneration, "video");
-
-    const actorCount = Math.max(requestedActorCount, inferSustainedActorCount(samples, 1));
-    tracking.detectedActorCount = actorCount;
-    if ($("#traceActorCount")) $("#traceActorCount").value = String(Math.min(actorCount, 8));
-
-    buildStarted = true;
-    const draft = buildVideoDraft(samples, actorCount, tracking);
-    if (!draft.entries.length) throw new Error("움직임 초안을 만들지 못했습니다.");
-
-    const appliedDraft = applyVideoDraft(draft, actorCount);
-    referenceAnalysisCache = draft.preview;
-    state.reference = sanitizeReference({
-      ...state.reference,
-      analysis: {
-        status: "ready",
-        keyCount: appliedDraft.temporalKeyCount,
-        actorCount,
-        motionScore: draft.motionScore,
-        tracking: tracking.mode,
-        detectedFrames: tracking.detectedFrames,
-        sampleCount: samples.length,
-        cameraConfidence: draft.cameraConfidence,
-        cameraMotionType: draft.cameraProfile.type,
-        cameraPan: draft.cameraProfile.pan,
-        cameraZoom: draft.cameraProfile.zoom,
-        cameraJitter: draft.cameraProfile.jitter,
-        actorConfidence: draft.actorConfidence,
-        mappingConfidence: draft.mappingConfidence,
-        detectedActorCount: actorCount,
-        sceneCuts: draft.sceneCuts,
-        cutTimes: draft.cutTimes,
-      },
-    });
-    const minimumVisionFrames = Math.max(2, Math.ceil(samples.length * 0.12));
-    const analysisMessages = [];
-    if (tracking.warning) analysisMessages.push(tracking.warning);
-    else if (tracking.detectedFrames < minimumVisionFrames) {
-      analysisMessages.push("인물 감지가 충분하지 않아 화면 움직임을 함께 사용했습니다. 배우 동선을 2D/3D에서 확인하세요.");
-    }
-    if (appliedDraft.collisionCount) {
-      analysisMessages.push(`기존 수동 키와 겹친 ${appliedDraft.collisionCount}개 위치는 수동 키를 보존했습니다.`);
-    }
-    referenceAnalysisMessage = analysisMessages.join(" ");
-    commit();
-    scrubToTime(0);
-  } catch (error) {
-    if (error?.code === "STALE_REFERENCE") return;
-    if (buildStarted) {
-      state = JSON.parse(beforeDraft);
-      sanitizeState();
-    }
-    state.reference.analysis = {
-      ...state.reference.analysis,
-      status: "review",
-    };
-    referenceAnalysisMessage = error instanceof Error ? error.message : "영상 초안을 만들지 못했습니다.";
-    syncUi(false);
-  } finally {
-    referenceAnalysisBusy = false;
-    referenceAnalysisStage = "";
-    syncUi(false);
-    draw();
-  }
-}
-
-async function createReferenceDraft() {
-  if (state.reference.kind === "image") {
-    await createImageReferenceDraft();
-    return;
-  }
-  await createVideoDraft();
-}
-
-async function createImageReferenceDraft() {
-  const image = $("#referenceImagePreview");
-  if (referenceAnalysisBusy || !referenceClipBlob || !image?.naturalWidth) return;
-  referenceAnalysisBusy = true;
-  const analysisReferenceId = state.reference.id;
-  const analysisGeneration = referenceAnalysisGeneration;
-  referenceAnalysisMessage = "";
-  referenceAnalysisStage = "이미지에서 인물과 오브젝트를 찾고 있습니다...";
-  state.reference.analysis = { ...state.reference.analysis, status: "working" };
-  syncUi(false);
-
-  try {
-    const detector = await getPersonDetector();
-    const canvas = document.createElement("canvas");
-    const scale = Math.min(1, 960 / Math.max(image.naturalWidth, image.naturalHeight));
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-    const predictions = await detector.detect(canvas, 30, 0.3);
-    assertReferenceAnalysisCurrent(analysisReferenceId, analysisGeneration, "image");
-    const people = predictions
-      .filter((prediction) => prediction.class === "person" && prediction.score >= 0.35)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
-    const objects = predictions
-      .filter((prediction) => referenceObjectLabels[prediction.class] && prediction.score >= 0.38)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 16);
-    const referenceId = state.reference.id || (state.reference.id = uid());
-    removeReferenceGeneratedItems(referenceId);
-    const placements = [];
-    people.forEach((prediction, index) => {
-      const placement = predictionToStagePlacement(prediction, canvas.width, canvas.height);
-      placements.push(placement);
-      state.items.push({
-        id: uid(),
-        type: "actor",
-        name: `배우 ${index + 1}`,
-        x: placement.x,
-        y: placement.y,
-        size: clamp(0.72 + prediction.bbox[3] / canvas.height, 0.72, 1.55),
-        color: colors[index % colors.length],
-        shape: "circle",
-        facing: cameraHeadingDeg(state.camera),
-        provenance: { type: "reference", referenceId, detectionId: `image-person-${index}` },
-        detectionConfidence: prediction.score,
-      });
-    });
-    objects.forEach((prediction, index) => {
-      const placement = predictionToStagePlacement(prediction, canvas.width, canvas.height);
-      placements.push(placement);
-      state.items.push({
-        id: uid(),
-        type: "prop",
-        name: referenceObjectLabels[prediction.class],
-        x: placement.x,
-        y: placement.y,
-        size: clamp(0.65 + Math.max(prediction.bbox[2] / canvas.width, prediction.bbox[3] / canvas.height) * 1.8, 0.65, 1.8),
-        color: colors[(people.length + index + 3) % colors.length],
-        shape: referenceObjectShape(prediction.class),
-        facing: 0,
-        provenance: { type: "reference", referenceId, detectionId: `image-${prediction.class}-${index}` },
-        detectionConfidence: prediction.score,
-      });
-    });
-    const mappingConfidence = placements.length
-      ? Math.round(placements.reduce((sum, entry) => sum + entry.confidence, 0) / placements.length * 100)
-      : 0;
-    state.reference.analysis = {
-      ...state.reference.analysis,
-      status: "ready",
-      keyCount: 0,
-      actorCount: Math.max(1, people.length),
-      detectedActorCount: people.length,
-      detectedObjectCount: objects.length,
-      mappingConfidence,
-      tracking: people.length ? "vision" : "motion",
-      detectedFrames: people.length ? 1 : 0,
-      sampleCount: 1,
-      actorConfidence: people.length
-        ? Math.round(people.reduce((sum, prediction) => sum + prediction.score, 0) / people.length * 100)
-        : 0,
-      cameraConfidence: 0,
-      sceneCuts: 0,
-      cutTimes: [],
-    };
-    state.motion.selectedKeyId = selectedKeyframeExists(state.motion.selectedKeyId) ? state.motion.selectedKeyId : null;
-    referenceAnalysisMessage = placements.length
-      ? "이미지 배치 초안이 만들어졌습니다. 단안 추정이므로 3D에서 깊이와 크기를 확인하세요."
-      : "인물이나 지원되는 주요 오브젝트를 찾지 못했습니다.";
-    commit();
-  } catch (error) {
-    if (error?.code === "STALE_REFERENCE") return;
-    state.reference.analysis = { ...state.reference.analysis, status: "review" };
-    referenceAnalysisMessage = error instanceof Error ? error.message : "이미지 배치 초안을 만들지 못했습니다.";
-    syncUi(false);
-  } finally {
-    referenceAnalysisBusy = false;
-    referenceAnalysisStage = "";
-    syncUi(false);
-    draw();
-  }
-}
-
-function assertReferenceAnalysisCurrent(referenceId, generation, kind) {
-  if (
-    referenceAnalysisGeneration !== generation
-    || state.reference.id !== referenceId
-    || state.reference.kind !== kind
-    || !referenceClipBlob
-  ) {
-    const error = new Error("취소된 레퍼런스 분석입니다.");
-    error.code = "STALE_REFERENCE";
-    throw error;
-  }
-}
-
-const referenceObjectLabels = {
-  chair: "의자",
-  couch: "소파",
-  "dining table": "테이블",
-  bed: "침대",
-  tv: "TV",
-  laptop: "노트북",
-  suitcase: "가방",
-  backpack: "백팩",
-  handbag: "핸드백",
-  bottle: "병",
-  cup: "컵",
-  book: "책",
-  "potted plant": "화분",
-  car: "자동차",
-  truck: "트럭",
-  bus: "버스",
-  bicycle: "자전거",
-  motorcycle: "오토바이",
-};
-
-function predictionToStagePlacement(prediction, width, height) {
-  const [left, top, boxWidth, boxHeight] = prediction.bbox || [0, 0, 0, 0];
-  const screenX = clamp((left + boxWidth / 2) / Math.max(1, width), 0, 1);
-  const screenY = clamp((top + boxHeight) / Math.max(1, height), 0, 1);
-  const stageSize = stageWorldSize(state);
-  const projected = projectScreenToStage3D(screenX, screenY, state.camera, {
-    aspect: width / Math.max(1, height),
-    stageWidth: stageSize.width,
-    stageDepth: stageSize.depth,
-  });
-  if (projected.hit && projected.confidence > 0.08) return projected;
-  return {
-    x: clamp(0.08 + screenX * 0.84, 0.02, 0.98),
-    y: clamp(0.12 + screenY * 0.72, 0.02, 0.98),
-    confidence: 0.12,
-    hit: false,
-  };
-}
-
-function referenceObjectShape(className) {
-  if (["bottle", "cup", "potted plant"].includes(className)) return "circle";
-  if (className === "dining table") return "square";
-  if (["car", "truck", "bus"].includes(className)) return "pill";
-  return "diamond";
-}
-
-function removeReferenceGeneratedItems(referenceId) {
-  const generatedIds = new Set(state.items
-    .filter((item) => item.provenance?.type === "reference" && item.provenance.referenceId === referenceId)
-    .map((item) => item.id));
-  state.items = state.items.filter((item) => !generatedIds.has(item.id));
-  state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !generatedIds.has(keyframe.source));
-}
-
-function removeReferenceGeneratedData(referenceId) {
-  removeReferenceGeneratedItems(referenceId);
-  state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !(
-    keyframe.provenance?.type === "reference"
-    && keyframe.provenance.referenceId === referenceId
-  ));
-}
-
-async function sampleReferenceVideo(video, onProgress) {
-  video.pause();
-  const originalTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-  const sourceDuration = Math.max(0, Number(video.duration || state.reference.duration || 0));
-  const rangeStart = clamp(Number(state.reference.start || 0), 0, sourceDuration);
-  const rangeEnd = clamp(Number(state.reference.end || sourceDuration), rangeStart, sourceDuration);
-  const rangeDuration = Math.max(0.25, rangeEnd - rangeStart);
-  const detailed = state.reference.precision !== "fast";
-  const sampleRate = detailed ? 4 : 1.15;
-  const sampleCount = clamp(Math.round(rangeDuration * sampleRate) + 2, detailed ? 16 : 8, detailed ? 80 : 20);
-  const sourceWidth = Math.max(1, Number(video.videoWidth || 16));
-  const sourceHeight = Math.max(1, Number(video.videoHeight || 9));
-  const sampleSize = fitFrameSize(sourceWidth, sourceHeight, detailed ? 240 : 112);
-  const visionSize = fitFrameSize(sourceWidth, sourceHeight, detailed ? 512 : 320);
-  const sampleCanvas = document.createElement("canvas");
-  sampleCanvas.width = sampleSize.width;
-  sampleCanvas.height = sampleSize.height;
-  const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
-  const samples = [];
-
-  for (let index = 0; index < sampleCount; index += 1) {
-    const progress = sampleCount === 1 ? 0 : index / (sampleCount - 1);
-    const time = Math.min(rangeEnd, rangeStart + progress * rangeDuration);
-    await seekReferenceVideo(video, time);
-    sampleContext.drawImage(video, 0, 0, sampleCanvas.width, sampleCanvas.height);
-    const image = sampleContext.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
-    const visionFrame = document.createElement("canvas");
-    visionFrame.width = visionSize.width;
-    visionFrame.height = visionSize.height;
-    const visionContext = visionFrame.getContext("2d", { willReadFrequently: false });
-    if (visionContext) visionContext.drawImage(video, 0, 0, visionFrame.width, visionFrame.height);
-    samples.push({
-      sourceTime: time,
-      progress,
-      luma: frameLuminance(image.data),
-      width: sampleCanvas.width,
-      height: sampleCanvas.height,
-      mean: meanLuminance(image.data),
-      histogram: lumaHistogram(image.data),
-      visionFrame,
-      people: [],
-    });
-    onProgress?.(index + 1, sampleCount);
-  }
-
-  samples.forEach((sample, index) => {
-    const previous = samples[index - 1] || null;
-    sample.visual = visualCenter(sample.luma, sample.width, sample.height);
-    sample.cameraMotion = previous
-      ? estimateGlobalFrameMotion(previous, sample)
-      : { dx: 0, dy: 0, scale: 1, confidence: 1, residual: 0, cut: false };
-    sample.motion = previous
-      ? compensatedMotionFeatures(previous, sample, sample.cameraMotion)
-      : { x: 0.5, y: 0.5, energy: 0, regions: [] };
-  });
-  const stabilization = accumulateCameraTransforms(samples.map((sample) => sample.cameraMotion));
-  samples.forEach((sample, index) => {
-    sample.stabilization = stabilization[index];
-  });
-  await seekReferenceVideo(video, originalTime);
-  return samples;
-}
-
-async function attachPersonDetections(samples, onProgress) {
-  try {
-    const detector = await getPersonDetector();
-    const detailed = state.reference.precision !== "fast";
-    const scoreThreshold = detailed ? 0.35 : 0.44;
-    let detectedFrames = 0;
-    for (let index = 0; index < samples.length; index += 1) {
-      const sample = samples[index];
-      const predictions = await detector.detect(sample.visionFrame, detailed ? 20 : 12, scoreThreshold);
-      sample.people = predictions
-        .filter((prediction) => prediction.class === "person" && prediction.score >= scoreThreshold)
-        .map((prediction) => predictionToPerson(prediction, sample.visionFrame.width, sample.visionFrame.height))
-        .filter(Boolean)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 8);
-      if (sample.people.length) detectedFrames += 1;
-      sample.visionFrame.width = 1;
-      sample.visionFrame.height = 1;
-      sample.visionFrame = null;
-      onProgress?.(index + 1, samples.length);
-    }
-    const minimumVisionFrames = Math.max(2, Math.ceil(samples.length * 0.12));
-    return {
-      mode: detectedFrames >= minimumVisionFrames ? "vision" : "motion",
-      detectedFrames,
-      warning: detectedFrames && detectedFrames < minimumVisionFrames
-        ? `인물을 ${samples.length}개 중 ${detectedFrames}개 프레임에서만 찾았습니다.`
-        : "",
-    };
-  } catch (error) {
-    samples.forEach((sample) => {
-      if (sample.visionFrame) {
-        sample.visionFrame.width = 1;
-        sample.visionFrame.height = 1;
-        sample.visionFrame = null;
-      }
-      sample.people = [];
-    });
-    return {
-      mode: "motion",
-      detectedFrames: 0,
-      warning: `인물 추적을 사용할 수 없어 움직임 분석으로 전환했습니다${error?.message ? `: ${error.message}` : "."}`,
-    };
-  }
-}
-
-function predictionToPerson(prediction, width, height) {
-  const box = Array.isArray(prediction.bbox) ? prediction.bbox : [];
-  if (box.length !== 4 || !width || !height) return null;
-  const [left, top, boxWidth, boxHeight] = box;
-  return {
-    x: clamp((left + boxWidth / 2) / width, 0, 1),
-    y: clamp((top + boxHeight / 2) / height, 0, 1),
-    footY: clamp((top + boxHeight) / height, 0, 1),
-    width: clamp(boxWidth / width, 0, 1),
-    size: clamp(boxHeight / height, 0, 1),
-    score: clamp(Number(prediction.score || 0), 0, 1),
-  };
-}
-
-async function getPersonDetector() {
-  const base = state.reference.precision === "fast" ? "lite_mobilenet_v2" : "mobilenet_v2";
-  if (personDetectors[base]) return personDetectors[base];
-  if (!personDetectorPromises[base]) {
-    personDetectorPromises[base] = (async () => {
-      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js", "tf");
-      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js", "cocoSsd");
-      if (!window.cocoSsd?.load) throw new Error("인물 추적 모듈을 불러오지 못했습니다.");
-      personDetectors[base] = await window.cocoSsd.load({ base });
-      return personDetectors[base];
-    })().catch((error) => {
-      personDetectorPromises[base] = null;
-      throw error;
-    });
-  }
-  return personDetectorPromises[base];
-}
-
-function loadScriptOnce(src, globalName) {
-  if (window[globalName]) return Promise.resolve(window[globalName]);
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-previs-library="' + globalName + '"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(window[globalName]), { once: true });
-      existing.addEventListener("error", () => reject(new Error("인물 추적 모듈을 불러오지 못했습니다.")), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.previsLibrary = globalName;
-    script.onload = () => window[globalName]
-      ? resolve(window[globalName])
-      : reject(new Error("인물 추적 모듈을 불러오지 못했습니다."));
-    script.onerror = () => {
-      script.remove();
-      reject(new Error("인물 추적 모듈을 불러오지 못했습니다."));
-    };
-    document.head.append(script);
-  });
-}
-
-function seekReferenceVideo(video, time) {
-  return new Promise((resolve, reject) => {
-    const target = clamp(Number(time || 0), 0, Number(video.duration || time || 0));
-    let settled = false;
-    let presentationRequested = false;
-    let frameFallback = null;
-    const finish = () => {
-      if (settled || presentationRequested) return;
-      presentationRequested = true;
-      video.removeEventListener("seeked", finish);
-      const presented = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        clearTimeout(frameFallback);
-        resolve();
-      };
-      if (typeof video.requestVideoFrameCallback === "function") {
-        video.requestVideoFrameCallback(presented);
-        frameFallback = setTimeout(presented, 120);
-      } else {
-        requestAnimationFrame(() => requestAnimationFrame(presented));
-      }
-    };
-    const fail = () => {
-      if (settled) return;
-      settled = true;
-      video.removeEventListener("seeked", finish);
-      clearTimeout(frameFallback);
-      reject(new Error("영상 프레임을 불러오는 시간이 초과되었습니다."));
-    };
-    const timeout = setTimeout(fail, 5000);
-    video.addEventListener("seeked", finish, { once: true });
-    if (Math.abs(video.currentTime - target) < 0.01 && video.readyState >= 2) {
-      requestAnimationFrame(finish);
-      return;
-    }
-    video.currentTime = target;
-  });
-}
-
-function frameLuminance(data) {
-  const luma = new Float32Array(data.length / 4);
-  for (let index = 0; index < luma.length; index += 1) {
-    const offset = index * 4;
-    luma[index] = data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
-  }
-  return luma;
-}
-
-function meanLuminance(data) {
-  let total = 0;
-  const pixels = Math.max(1, data.length / 4);
-  for (let offset = 0; offset < data.length; offset += 4) {
-    total += data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
-  }
-  return total / pixels;
-}
-
-function lumaHistogram(data) {
-  const bins = new Float32Array(16);
-  const pixels = Math.max(1, data.length / 4);
-  for (let offset = 0; offset < data.length; offset += 4) {
-    const value = data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
-    bins[Math.min(15, Math.floor(value / 16))] += 1 / pixels;
-  }
-  return bins;
-}
-
-function visualCenter(luma, width, height) {
-  let total = 0;
-  let x = 0;
-  let y = 0;
-  for (let row = 0; row < height; row += 2) {
-    for (let col = 0; col < width; col += 2) {
-      const weight = Math.max(6, luma[row * width + col]);
-      total += weight;
-      x += col * weight;
-      y += row * weight;
-    }
-  }
-  return total
-    ? { x: clamp(x / total / Math.max(1, width - 1), 0, 1), y: clamp(y / total / Math.max(1, height - 1), 0, 1) }
-    : { x: 0.5, y: 0.5 };
-}
-
-function motionFeatures(previous, current, width, height) {
-  const gridWidth = Math.floor(width / 2);
-  const gridHeight = Math.floor(height / 2);
-  const weights = new Float32Array(gridWidth * gridHeight);
-  let total = 0;
-  let x = 0;
-  let y = 0;
-  for (let row = 0; row < gridHeight; row += 1) {
-    for (let col = 0; col < gridWidth; col += 1) {
-      const sourceIndex = (row * 2) * width + col * 2;
-      const difference = Math.abs(current[sourceIndex] - previous[sourceIndex]);
-      const weight = difference > 18 ? difference - 18 : 0;
-      weights[row * gridWidth + col] = weight;
-      total += weight;
-      x += col * weight;
-      y += row * weight;
-    }
-  }
-  const regions = findMotionRegions(weights, gridWidth, gridHeight);
-  return {
-    x: total ? clamp(x / total / Math.max(1, gridWidth - 1), 0, 1) : 0.5,
-    y: total ? clamp(y / total / Math.max(1, gridHeight - 1), 0, 1) : 0.5,
-    energy: clamp(total / Math.max(1, gridWidth * gridHeight * 72), 0, 1),
-    regions,
-  };
-}
-
-function buildVideoDraft(samples, actorCount, tracking = { mode: "motion", detectedFrames: 0 }, baseline = null) {
-  if (samples.some((sample) => !sample.stabilization)) {
-    const transforms = accumulateCameraTransforms(samples.map((sample) => sample.cameraMotion));
-    samples.forEach((sample, index) => {
-      sample.stabilization = transforms[index];
-    });
-  }
-  const referenceId = state.reference.id || (state.reference.id = uid());
-  const activeActors = ensureTraceActors(actorCount, { type: "reference", referenceId, detectionId: "video-actor" });
-  const resolvedBaseline = {
-    camera: clone(baseline?.camera || state.camera),
-    actors: activeActors.map((actor, index) => {
-      const saved = baseline?.actors?.find((entry) => entry.id === actor.id) || baseline?.actors?.[index];
-      return saved ? { ...actor, ...clone(saved), id: actor.id } : clone(actor);
-    }),
-  };
-  const planningActors = activeActors.map((actor, index) => {
-    const saved = resolvedBaseline.actors?.find((entry) => entry.id === actor.id) || resolvedBaseline.actors?.[index];
-    return saved ? { ...actor, ...clone(saved), id: actor.id } : clone(actor);
-  });
-  const actorTracking = buildActorTracks(samples, planningActors, tracking);
-  const actorTracks = actorTracking.tracks;
-  const startCamera = clone(resolvedBaseline.camera || state.camera);
-  const cameraTrack = buildCameraTrack(samples, actorTracks, startCamera);
-  const selectedIndexes = selectVideoDraftSamples(samples, cameraTrack, actorTracks);
-  const rangeDuration = Math.max(0.25, Number(state.reference.end || state.reference.duration || 0) - Number(state.reference.start || 0));
-  const duration = clamp(rangeDuration, 1, MAX_TIMELINE_DURATION);
-  let shot = 1;
-  const entries = selectedIndexes.map((sampleIndex, entryIndex) => {
-    const sample = samples[sampleIndex];
-    if (entryIndex && sample.cameraMotion?.cut) shot += 1;
-    const actorPoses = actorTracks.map((track) => clone(track[sampleIndex]));
-    return {
-      time: Number((sample.progress * duration).toFixed(2)),
-      camera: clone(cameraTrack[sampleIndex]),
-      actorPoses,
-      label: sample.cameraMotion?.cut ? "장면 " + shot + " 시작" : "영상 " + (entryIndex + 1),
-      transition: sample.cameraMotion?.cut ? "cut" : "smooth",
-    };
-  });
-  if (entries.length) entries[entries.length - 1].time = duration;
-  const transitionSamples = samples.slice(1).filter((sample) => !sample.cameraMotion?.cut);
-  const cameraConfidence = transitionSamples.length
-    ? Math.round(transitionSamples.reduce((sum, sample) => sum + sample.cameraMotion.confidence, 0) / transitionSamples.length * 100)
-    : 100;
-  const cutTimes = entries.filter((entry) => entry.transition === "cut").map((entry) => entry.time);
-  const sceneCuts = cutTimes.length;
-  const cameraProfile = classifyCameraMotion(
-    samples.map((sample) => sample.cameraMotion),
-    samples.map((sample) => sample.motion?.energy || 0),
-  );
-  const motionSignal = samples.reduce((sum, sample) => {
-    const cameraEnergy = Math.hypot(sample.cameraMotion?.dx || 0, sample.cameraMotion?.dy || 0) * 5;
-    const zoomEnergy = Math.abs((sample.cameraMotion?.scale || 1) - 1) * 3;
-    return sum + sample.motion.energy + cameraEnergy + zoomEnergy;
-  }, 0) / Math.max(1, samples.length);
-  return {
-    duration,
-    entries,
-    motionScore: Math.round(clamp(motionSignal, 0, 1) * 100),
-    cameraConfidence,
-    cameraProfile,
-    actorConfidence: actorTracking.confidence,
-    mappingConfidence: actorTracking.mappingConfidence,
-    sceneCuts,
-    cutTimes,
-    tracking,
-    preview: {
-      samples: samples.map(stripReferenceAnalysisSample),
-      screenTracks: clone(actorTracking.screenTracks),
-      cameraTrack: clone(cameraTrack),
-      selectedIndexes: [...selectedIndexes],
-      actors: activeActors.map((actor) => ({ id: actor.id, name: actor.name, color: actor.color })),
-      baseline: clone(resolvedBaseline),
-      actorCount,
-      tracking: clone(tracking),
-      cameraProfile: clone(cameraProfile),
-    },
-  };
-}
-
-function stripReferenceAnalysisSample(sample) {
-  return {
-    sourceTime: sample.sourceTime,
-    progress: sample.progress,
-    width: sample.width,
-    height: sample.height,
-    people: clone(sample.people || []),
-    visual: clone(sample.visual || { x: 0.5, y: 0.5 }),
-    cameraMotion: clone(sample.cameraMotion || { dx: 0, dy: 0, scale: 1, confidence: 0, cut: false }),
-    stabilization: clone(sample.stabilization || { scale: 1, tx: 0, ty: 0, shot: 1, cut: false }),
-    cameraSolve: clone(sample.cameraSolve || sample.stabilization || { scale: 1, tx: 0, ty: 0, shot: 1, cut: false }),
-    motion: clone(sample.motion || { x: 0.5, y: 0.5, energy: 0, regions: [] }),
-  };
-}
-
-function buildCameraTrack(samples, actorTracks, startCamera) {
-  const calibration = state.reference.calibration || sanitizeReferenceCalibration();
-  const rawTransforms = samples.map((sample) => sample.stabilization)
-    .map((transform) => transform || { scale: 1, tx: 0, ty: 0, shot: 1, cut: false });
-  const transforms = smoothCameraTransforms(rawTransforms, calibration.stabilizationStrength);
-  const shotCompositions = buildShotCompositions(samples, transforms);
-  const movementMix = cameraInterpretationMix[calibration.cameraInterpretation] ?? cameraInterpretationMix.balanced;
-  const zoomMovementMix = calibration.cameraInterpretation === "movement"
-    ? 0.7
-    : calibration.cameraInterpretation === "rotation"
-      ? 0.15
-      : 0.4;
-  let activeShot = transforms[0]?.shot || 1;
-  let shotOffset = { x: 0, y: 0 };
-  let shotAimOffset = { x: 0, y: 0 };
-  let shotFocal = clamp(Number(startCamera.focal || 50), 24, 135);
-
-  return samples.map((sample, index) => {
-    const transform = transforms[index] || { scale: 1, tx: 0, ty: 0, shot: 1, cut: false };
-    sample.cameraSolve = clone(transform);
-    if (index === 0 || transform.shot !== activeShot) {
-      activeShot = transform.shot;
-      const composition = shotCompositions.get(activeShot) || { x: 0.5, footY: 0.7, size: 0.28 };
-      shotOffset = calibratedReferenceDelta(
-        (0.5 - composition.x) * 0.32,
-        (composition.footY - 0.7) * 0.16,
-        0,
-        calibration,
-      );
-      shotAimOffset = calibratedReferenceDelta((0.5 - composition.x) * 0.2, 0, 0, calibration);
-      shotFocal = clamp(Math.round(24 + composition.size * 112), 24, 135);
-    }
-    const actorPoses = actorTracks.map((track) => track[index]).filter(Boolean);
-    const focus = averageActorPosition(actorPoses, startCamera);
-    const zoomSignal = clamp((transform.scale - 1) * 0.82, -0.28, 0.35);
-    const panDelta = calibratedReferenceDelta(-transform.tx, -transform.ty, 0, calibration);
-    const solvedDelta = {
-      x: panDelta.x + shotOffset.x,
-      y: panDelta.y + shotOffset.y,
-    };
-    const focusDistance = Math.hypot(focus.x - startCamera.x, focus.y - startCamera.y) || 1;
-    const dolly = zoomSignal * 0.18 * calibration.cameraGain * zoomMovementMix;
-    const cameraX = startCamera.x
-      + solvedDelta.x * calibration.cameraGain * movementMix
-      + (focus.x - startCamera.x) / focusDistance * dolly;
-    const cameraY = startCamera.y
-      + solvedDelta.y * calibration.cameraGain * movementMix
-      + (focus.y - startCamera.y) / focusDistance * dolly;
-    const aimGain = calibration.cameraGain * (1 - movementMix) * 1.1;
-    const targetX = focus.x + solvedDelta.x * aimGain + shotAimOffset.x;
-    const targetY = focus.y + solvedDelta.y * aimGain + shotAimOffset.y;
-    const actorSize = actorPoses.length
-      ? actorPoses.reduce((sum, actor) => sum + Number(actor.size || 1), 0) / actorPoses.length
-      : 1;
-    const orientation = trackingOrientation(
-      { type: "actor", x: targetX, y: targetY, size: actorSize },
-      { ...startCamera, x: cameraX, y: cameraY },
-      state,
-    );
-    const pose = sanitizeCameraPose({
-      ...startCamera,
-      x: cameraX,
-      y: cameraY,
-      panDeg: orientation.panDeg,
-      tiltDeg: orientation.tiltDeg,
-      focal: clamp(Math.round(shotFocal * (1 + zoomSignal * (1 - zoomMovementMix) * 0.9)), 18, 135),
-      trackingTargetId: "",
-    });
-    return pose;
-  });
-}
-
-function buildShotCompositions(samples, transforms) {
-  const groups = new Map();
-  samples.forEach((sample, index) => {
-    const shot = transforms[index]?.shot || 1;
-    if (!groups.has(shot)) {
-      groups.set(shot, { people: 0, x: 0, footY: 0, size: 0, visuals: 0, visualX: 0, visualY: 0 });
-    }
-    const group = groups.get(shot);
-    const people = sample.people || [];
-    people.forEach((person) => {
-      group.people += 1;
-      group.x += Number(person.x ?? 0.5);
-      group.footY += Number(person.footY ?? person.y ?? 0.7);
-      group.size += Number(person.size || 0.28);
-    });
-    const visual = sample.visual || { x: 0.5, y: 0.6 };
-    group.visuals += 1;
-    group.visualX += Number(visual.x ?? 0.5);
-    group.visualY += Number(visual.y ?? 0.6);
-  });
-  return new Map([...groups].map(([shot, group]) => [shot, group.people
-    ? {
-      x: group.x / group.people,
-      footY: group.footY / group.people,
-      size: group.size / group.people,
-      hasPeople: true,
-    }
-    : {
-      x: group.visualX / Math.max(1, group.visuals),
-      footY: group.visualY / Math.max(1, group.visuals),
-      size: 0.28,
-      hasPeople: false,
-    }]));
-}
-
-function calibratedReferenceDelta(screenX, screenY, sizeDelta = 0, calibration = state.reference.calibration) {
-  return mapReferenceDelta(screenX, screenY, sizeDelta, sanitizeReferenceCalibration(calibration));
-}
-
-function selectVideoDraftSamples(samples, cameraTrack, actorTracks) {
-  const baseMaxKeys = Math.min(samples.length, state.reference.precision === "fast" ? 9 : 20);
-  const minKeys = Math.min(samples.length, state.reference.precision === "fast" ? 5 : 8);
-  const selected = new Set([0, samples.length - 1]);
-  samples.forEach((sample, index) => {
-    if (!sample.cameraMotion?.cut) return;
-    if (index > 0) selected.add(index - 1);
-    selected.add(index);
-  });
-  const maxKeys = Math.max(baseMaxKeys, selected.size);
-
-  while (selected.size < maxKeys) {
-    const ordered = [...selected].sort((a, b) => a - b);
-    let best = null;
-    for (let segment = 0; segment < ordered.length - 1; segment += 1) {
-      const start = ordered[segment];
-      const end = ordered[segment + 1];
-      for (let index = start + 1; index < end; index += 1) {
-        const error = videoDraftDeviation(index, start, end, samples, cameraTrack, actorTracks);
-        if (!best || error > best.error) best = { index, error };
-      }
-    }
-    if (!best) break;
-    if (selected.size >= minKeys && best.error < 0.075) break;
-    selected.add(best.index);
-  }
-
-  while (selected.size < minKeys) {
-    const ordered = [...selected].sort((a, b) => a - b);
-    let largest = null;
-    for (let index = 0; index < ordered.length - 1; index += 1) {
-      const gap = ordered[index + 1] - ordered[index];
-      if (gap > 1 && (!largest || gap > largest.gap)) largest = { start: ordered[index], gap };
-    }
-    if (!largest) break;
-    selected.add(largest.start + Math.round(largest.gap / 2));
-  }
-  return [...selected].sort((a, b) => a - b);
-}
-
-function videoDraftDeviation(index, start, end, samples, cameraTrack, actorTracks) {
-  const span = Math.max(0.001, samples[end].sourceTime - samples[start].sourceTime);
-  const t = clamp((samples[index].sourceTime - samples[start].sourceTime) / span, 0, 1);
-  const camera = cameraTrack[index];
-  const expectedCamera = {
-    x: lerp(cameraTrack[start].x, cameraTrack[end].x, t),
-    y: lerp(cameraTrack[start].y, cameraTrack[end].y, t),
-    aimX: lerp(cameraTrack[start].aimX, cameraTrack[end].aimX, t),
-    aimY: lerp(cameraTrack[start].aimY, cameraTrack[end].aimY, t),
-    focal: lerp(cameraTrack[start].focal, cameraTrack[end].focal, t),
-  };
-  let error = Math.hypot(camera.x - expectedCamera.x, camera.y - expectedCamera.y) * 2.8;
-  error += Math.hypot(camera.aimX - expectedCamera.aimX, camera.aimY - expectedCamera.aimY) * 1.9;
-  error += Math.abs(camera.focal - expectedCamera.focal) / 120;
-  actorTracks.forEach((track) => {
-    const expectedX = lerp(track[start].x, track[end].x, t);
-    const expectedY = lerp(track[start].y, track[end].y, t);
-    error += Math.hypot(track[index].x - expectedX, track[index].y - expectedY) * 1.8 / Math.max(1, actorTracks.length);
-  });
-  error += samples[index].motion.energy * 0.14;
-  if (samples[index].cameraMotion?.cut) error += 5;
-  return error;
-}
-
-function ensureTraceActors(actorCount, provenance = null) {
-  const actors = state.items.filter((item) => item.type === "actor");
-  while (actors.length < actorCount) {
-    const index = actors.length;
-    const actor = {
-      id: uid(),
-      type: "actor",
-      name: "배우 " + (index + 1),
-      x: 0.32 + index * 0.12,
-      y: 0.46 + (index % 2) * 0.12,
-      size: 1,
-      color: colors[(state.items.length + 1) % colors.length],
-      shape: "circle",
-      facing: 0,
-      provenance: sanitizeProvenance(provenance),
-      detectionConfidence: null,
-    };
-    state.items.push(actor);
-    actors.push(actor);
-  }
-  return actors.slice(0, actorCount);
-}
-
-function buildActorTracks(samples, actors, tracking = { mode: "motion" }) {
-  const tracks = actors.map(() => []);
-  const screenTracks = actors.map(() => []);
-  const trackOrigins = actors.map(() => null);
-  let actorAnchors = actors.map((actor) => clone(actor));
-  let states = actors.map((actor) => ({
-    x: clamp((actor.x - 0.1) / 0.8, 0, 1),
-    y: clamp((actor.y - 0.1) / 0.68, 0, 1),
-    rawX: 0.5,
-    rawY: 0.5,
-    size: 0.3,
-    width: 0.14,
-    rawSize: 0.3,
-    rawWidth: 0.14,
-    baseSize: 0,
-    vx: 0,
-    vy: 0,
-    rawVx: 0,
-    rawVy: 0,
-    initialized: false,
-    misses: 0,
-    observed: false,
-    source: "none",
-    score: 0,
-    shot: 1,
-  }));
-  let visionObservations = 0;
-  let motionObservations = 0;
-  let scoreTotal = 0;
-  let mappingConfidenceTotal = 0;
-  let mappingConfidenceCount = 0;
-
-  samples.forEach((sample) => {
-    if (sample.cameraMotion?.cut) {
-      actorAnchors = actorAnchors.map((anchor, index) => clone(tracks[index][tracks[index].length - 1] || anchor));
-      trackOrigins.fill(null);
-      states = states.map((last) => ({
-        ...last,
-        initialized: false,
-        vx: 0,
-        vy: 0,
-        rawVx: 0,
-        rawVy: 0,
-        baseSize: last.size,
-        misses: 0,
-        shot: sample.stabilization?.shot || last.shot + 1,
-      }));
-    }
-    const allowMotionOnly = tracking.mode !== "vision" || (!sample.cameraMotion?.cut && states.some((entry) => entry.initialized));
-    const candidates = videoCandidatesForSample(sample, { allowMotionOnly });
-    const assignments = assignTrackCandidates(states, candidates);
-    const nextStates = states.map((last, actorIndex) => {
-      const target = assignments[actorIndex] >= 0 ? candidates[assignments[actorIndex]] : null;
-      if (!target) {
-        return {
-          ...last,
-          x: clamp(last.x + last.vx * 0.35, 0, 1),
-          y: clamp(last.y + last.vy * 0.35, 0, 1),
-          rawX: clamp(last.rawX + last.rawVx * 0.35, 0, 1),
-          rawY: clamp(last.rawY + last.rawVy * 0.35, 0, 1),
-          vx: last.vx * 0.55,
-          vy: last.vy * 0.55,
-          rawVx: last.rawVx * 0.55,
-          rawVy: last.rawVy * 0.55,
-          misses: last.misses + 1,
-          observed: false,
-        };
-      }
-      const alpha = last.initialized ? (target.source === "vision" ? 0.7 : 0.5) : 1;
-      const rawAlpha = last.initialized ? (target.source === "vision" ? 0.82 : 0.58) : 1;
-      const x = lerp(last.x, target.x, alpha);
-      const y = lerp(last.y, target.y, alpha);
-      const rawX = lerp(last.rawX, target.rawX, rawAlpha);
-      const rawY = lerp(last.rawY, target.rawY, rawAlpha);
-      if (target.source === "vision") {
-        visionObservations += 1;
-        scoreTotal += target.score;
-      } else {
-        motionObservations += 1;
-      }
-      return {
-        ...last,
-        x,
-        y,
-        rawX,
-        rawY,
-        size: target.size || last.size,
-        width: target.width || last.width,
-        rawSize: target.rawSize || last.rawSize,
-        rawWidth: target.rawWidth || last.rawWidth,
-        baseSize: last.baseSize || target.size || last.size,
-        vx: lerp(last.vx, x - last.x, 0.72),
-        vy: lerp(last.vy, y - last.y, 0.72),
-        rawVx: lerp(last.rawVx, rawX - last.rawX, 0.72),
-        rawVy: lerp(last.rawVy, rawY - last.rawY, 0.72),
-        initialized: true,
-        misses: 0,
-        observed: true,
-        source: target.source,
-        score: target.score,
-        shot: sample.stabilization?.shot || last.shot,
-      };
-    });
-
-    nextStates.forEach((screenPose, index) => {
-      const lastPose = tracks[index][tracks[index].length - 1] || actors[index];
-      if (!trackOrigins[index] && screenPose.initialized) {
-        trackOrigins[index] = { x: screenPose.x, y: screenPose.y, size: screenPose.size || 0.3 };
-      }
-      const origin = trackOrigins[index] || { x: 0.5, y: 0.5, size: screenPose.baseSize || 0.3 };
-      const calibration = state.reference.calibration || sanitizeReferenceCalibration();
-      let mappedPose = mapActorScreenPose(screenPose, origin, actorAnchors[index], calibration);
-      const stageSize = stageWorldSize(state);
-      const projectionOptions = {
-        aspect: sample.width && sample.height ? sample.width / sample.height : aspectMap[state.aspect],
-        stageWidth: stageSize.width,
-        stageDepth: stageSize.depth,
-      };
-      const projected = projectScreenToStage3D(screenPose.x, screenPose.y, state.camera, projectionOptions);
-      const projectedOrigin = projectScreenToStage3D(origin.x, origin.y, state.camera, projectionOptions);
-      if (projected.hit && projectedOrigin.hit && projected.confidence > 0.12) {
-        const projectedPose = calibration.anchorToCurrent !== false
-          ? {
-            x: clamp(actorAnchors[index].x + projected.x - projectedOrigin.x, 0.02, 0.98),
-            y: clamp(actorAnchors[index].y + projected.y - projectedOrigin.y, 0.02, 0.98),
-          }
-          : { x: projected.x, y: projected.y };
-        const projectionBlend = clamp(projected.confidence * 0.45, 0.12, 0.45);
-        mappedPose = {
-          x: lerp(mappedPose.x, projectedPose.x, projectionBlend),
-          y: lerp(mappedPose.y, projectedPose.y, projectionBlend),
-        };
-        mappingConfidenceTotal += projected.confidence;
-        mappingConfidenceCount += 1;
-      }
-      const targetX = mappedPose.x;
-      const targetY = mappedPose.y;
-      const x = lerp(lastPose.x, targetX, screenPose.initialized ? 0.76 : 0);
-      const y = lerp(lastPose.y, targetY, screenPose.initialized ? 0.76 : 0);
-      const moved = Math.hypot(x - lastPose.x, y - lastPose.y);
-      const facing = moved > 0.006
-        ? Math.round(radToDeg(Math.atan2(y - lastPose.y, x - lastPose.x)))
-        : lastPose.facing;
-      tracks[index].push({
-        ...lastPose,
-        x,
-        y,
-        facing,
-        visible: screenPose.initialized && (screenPose.observed || screenPose.misses <= 2),
-      });
-      screenTracks[index].push({
-        x: screenPose.rawX,
-        y: screenPose.rawY,
-        size: screenPose.rawSize,
-        width: screenPose.rawWidth,
-        observed: screenPose.observed,
-        source: screenPose.source,
-        score: screenPose.score,
-        shot: screenPose.shot,
-      });
-    });
-    states = nextStates;
-  });
-
-  const totalSlots = Math.max(1, samples.length * actors.length);
-  const confidence = visionObservations
-    ? Math.round(clamp(visionObservations / totalSlots * 0.65 + scoreTotal / visionObservations * 0.35, 0, 1) * 100)
-    : Math.round(clamp(motionObservations / totalSlots * 0.42, 0, 0.42) * 100);
-  const mappingConfidence = mappingConfidenceCount
-    ? Math.round(clamp(mappingConfidenceTotal / mappingConfidenceCount, 0, 1) * 100)
-    : 0;
-  return { tracks, screenTracks, confidence, mappingConfidence };
-}
-
-function videoCandidatesForSample(sample, options = {}) {
-  const people = sample.people || [];
-  const visionCandidates = people.map((person) => {
-    const rawY = person.footY ?? person.y;
-    const stabilized = stabilizeDetection({
-      x: person.x,
-      y: rawY,
-      size: person.size,
-      width: person.width,
-    }, sample.stabilization, 1);
-    return {
-      x: stabilized.x,
-      y: stabilized.y,
-      size: stabilized.size,
-      width: stabilized.width,
-      rawX: person.x,
-      rawY,
-      rawSize: person.size,
-      rawWidth: person.width,
-      score: person.score,
-      weight: Math.round(person.score * 1000),
-      source: "vision",
-    };
-  });
-  const motionCandidates = (sample.motion?.regions || []).map((region) => {
-    const stabilized = stabilizeDetection({ x: region.x, y: region.y, size: 0.24, width: 0.16 }, sample.stabilization, 1);
-    return {
-      x: stabilized.x,
-      y: stabilized.y,
-      size: stabilized.size,
-      width: stabilized.width,
-      rawX: region.x,
-      rawY: region.y,
-      rawSize: 0.24,
-      rawWidth: 0.16,
-      score: clamp(region.weight / 1200, 0.2, 0.72),
-      weight: region.weight,
-      source: "motion",
-    };
-  });
-  if (!visionCandidates.length) return options.allowMotionOnly === false ? [] : motionCandidates;
-  const supplementalMotion = motionCandidates.filter((motion) => visionCandidates.every((vision) => {
-    const exclusionRadius = Math.max(0.1, Number(vision.width || 0.12) * 0.75);
-    return Math.hypot(motion.rawX - vision.rawX, motion.rawY - vision.rawY) > exclusionRadius;
-  }));
-  return [...visionCandidates, ...supplementalMotion].slice(0, 8);
-}
-
-function averageActorPosition(poses, fallbackCamera) {
-  if (!poses.length) return { x: fallbackCamera.aimX, y: fallbackCamera.aimY };
-  return {
-    x: poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length,
-    y: poses.reduce((sum, pose) => sum + pose.y, 0) / poses.length,
-  };
-}
-
-function applyVideoDraft(draft, actorCount) {
-  const referenceId = state.reference.id || (state.reference.id = uid());
-  const actors = ensureTraceActors(actorCount, { type: "reference", referenceId, detectionId: "video-actor" });
-  const actorIds = actors.map((actor) => actor.id);
-  state.motion.playhead = 0;
-  state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources)
-    .filter((sourceId) => sourceId !== "camera" && !actorIds.includes(sourceId));
-  state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !(
-    keyframe.provenance?.type === "reference"
-    && keyframe.provenance.referenceId === referenceId
-  ));
-  state.motion.duration = resolveDraftDuration(draft.duration, state.motion.keyframes, MAX_TIMELINE_DURATION);
-
-  const appliedTimes = new Set();
-  let collisionCount = 0;
-  draft.entries.forEach((entry) => {
-    let insertedAtTime = false;
-    if (pushReferenceKeyframe({
-      id: uid(),
-      source: "camera",
-      label: entry.label,
-      time: entry.time,
-      transition: normalizeTransition(entry.transition),
-      pose: clone(entry.camera),
-      provenance: { type: "reference", referenceId, detectionId: `camera-${entry.time}` },
-    })) insertedAtTime = true;
-    else collisionCount += 1;
-    actors.forEach((actor, index) => {
-      if (pushReferenceKeyframe({
-        id: uid(),
-        source: actor.id,
-        label: entry.label,
-        time: entry.time,
-        transition: normalizeTransition(entry.transition),
-        pose: clone(entry.actorPoses[index]),
-        provenance: { type: "reference", referenceId, detectionId: `actor-${index}-${entry.time}` },
-      })) insertedAtTime = true;
-      else collisionCount += 1;
-    });
-    if (insertedAtTime) appliedTimes.add(Number(entry.time).toFixed(2));
-  });
-  const unusedGeneratedActors = new Set(state.items
-    .filter((item) => (
-      item.type === "actor"
-      && item.provenance?.type === "reference"
-      && item.provenance.referenceId === referenceId
-      && !actorIds.includes(item.id)
-    ))
-    .map((item) => item.id));
-  if (unusedGeneratedActors.size) {
-    state.items = state.items.filter((item) => !unusedGeneratedActors.has(item.id));
-    state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !unusedGeneratedActors.has(keyframe.source));
-  }
-  state.motion.keyframes = sortKeyframes(state.motion.keyframes);
-  state.motion.activeSource = "all";
-  state.motion.selectedKeyId = state.motion.keyframes.find((keyframe) => keyframe.source === "camera")?.id || null;
-  selected = { kind: "camera" };
-  return { temporalKeyCount: appliedTimes.size, collisionCount };
-}
-
-function pushReferenceKeyframe(keyframe) {
-  const manualCollision = state.motion.keyframes.some((entry) => (
-    entry.source === keyframe.source
-    && !entry.provenance
-    && Math.abs(entry.time - keyframe.time) < 0.05
-  ));
-  if (!manualCollision) {
-    keyframe.segment = sanitizeMotionSegment(keyframe.segment, keyframe.source);
-    state.motion.keyframes.push(keyframe);
-    return true;
-  }
-  return false;
-}
-
-async function importMotionPrevisFiles(fileList) {
-  const files = [...(fileList || [])];
-  if (!files.length) return;
-  const loaded = [];
-  for (const file of files) {
-    try {
-      loaded.push({
-        name: file.name,
-        data: JSON.parse(await file.text()),
-      });
-    } catch (error) {
-      console.warn(`Could not import ${file.name}: ${error.message}`);
-    }
-  }
-  if (!loaded.length) return;
-  applyMotionPrevisImports(loaded);
-  const input = $("#mpsImportInput");
-  if (input) input.value = "";
-  commit();
-}
-
-function applyMotionPrevisImports(loadedFiles) {
-  const bundle = findMotionPrevisFile(loadedFiles, isBundleManifest)?.data || null;
-  const analysis = findMotionPrevisFile(loadedFiles, isAnalysisManifest)?.data || null;
-  const quality = findMotionPrevisFile(loadedFiles, isQualityReport)?.data || bundle?.planning?.qualityReport || null;
-  const controlManifest = findMotionPrevisFile(loadedFiles, isControlLayerManifest)?.data || null;
-  const shotBible = findMotionPrevisFile(loadedFiles, (data) => Array.isArray(data))?.data || bundle?.planning?.shotBible || [];
-  const cameraMotion = findMotionPrevisFile(loadedFiles, isCameraMotionData)?.data || null;
-  const planning = bundle?.planning || {};
-  const primaryShot = Array.isArray(shotBible) ? shotBible.find((entry) => entry?.selected) || shotBible[0] : null;
-  const sourceName = bundle?.sourceName || analysis?.sourceName || state.reference.name || "";
-  const range = bundle?.range || analysis?.range || {};
-  const importedFiles = {
-    ...(analysis ? pickMotionPrevisFileRefs(analysis) : {}),
-    ...(bundle?.files || {}),
-  };
-
-  state.motionPrevis = sanitizeMotionPrevis({
-    imported: true,
-    importedAt: new Date().toISOString(),
-    sourceName,
-    frameCount: bundle?.frameCount || 0,
-    cameraMoveFrames: bundle?.cameraMoveFrames || cameraMotion?.frames?.length || 0,
-    sampleFps: bundle?.sampleFps || analysis?.sampleFps || cameraMotion?.fps || 0,
-    qualityReport: quality,
-    poseDiagnostics: bundle?.poseDiagnostics || [],
-    files: importedFiles,
-    shotBible: Array.isArray(shotBible) ? shotBible : [],
-    analysisSettings: bundle?.analysisSettings || planning.analysisSettings || null,
-  });
-
-  if (planning.sceneTitle || primaryShot?.scene) state.sceneTitle = planning.sceneTitle || primaryShot.scene;
-  if (planning.creativeIntent || primaryShot?.description) state.sceneIntent = planning.creativeIntent || primaryShot.description;
-  state.previs.mode = mapMotionPrevisMode(planning.subjectMode || primaryShot?.subjectMode || state.previs.mode);
-  state.previs.selectedLayers = normalizeSelection(
-    controlManifest?.selectedLayers || planning.selectedLayers || state.previs.selectedLayers,
-    controlLayers,
-    state.previs.selectedLayers,
-  );
-  state.previs.exportPresets = normalizeSelection(planning.exportPresets || state.previs.exportPresets, exportPresets, state.previs.exportPresets);
-
-  state.reference = sanitizeReference({
-    ...state.reference,
-    name: sourceName || state.reference.name,
-    url: analysis?.referenceUrl || state.reference.url,
-    duration: Math.max(Number(range.end || 0), Number(range.duration || 0), Number(state.reference.duration || 0)),
-    start: range.start ?? state.reference.start,
-    end: range.end ?? (range.duration ? (range.start || 0) + range.duration : state.reference.end),
-    notes: buildImportedReferenceNotes(planning, quality, cameraMotion),
-  });
-
-  if (cameraMotion?.summary) applyCameraMotionSummary(cameraMotion);
-}
-
-function findMotionPrevisFile(files, predicate) {
-  return files.find((file) => {
-    try {
-      return predicate(file.data, file.name);
-    } catch {
-      return false;
-    }
-  });
-}
-
-function isBundleManifest(data, name = "") {
-  return Boolean(name === "bundle_manifest.json" || (data?.app && data?.files && data?.planning));
-}
-
-function isAnalysisManifest(data, name = "") {
-  return Boolean(name === "analysis_manifest.json" || (data?.analysisId && data?.referenceUrl && data?.range));
-}
-
-function isQualityReport(data, name = "") {
-  return Boolean(name === "quality_report.json" || (data?.score != null && data?.readiness && (data?.tracking || data?.camera || data?.layers)));
-}
-
-function isControlLayerManifest(data, name = "") {
-  return Boolean(name === "control_layers_manifest.json" || (Array.isArray(data?.selectedLayers) && Array.isArray(data?.layers)));
-}
-
-function isCameraMotionData(data, name = "") {
-  return Boolean(name === "camera_motion.json" || (Array.isArray(data?.frames) && data?.summary && data?.fps));
-}
-
-function pickMotionPrevisFileRefs(analysis) {
-  return {
-    reference: analysis.referencePath || "",
-    depth: analysis.depthPath || "",
-    edges: analysis.edgesPath || "",
-    lineart: analysis.lineartPath || "",
-    motionMask: analysis.motionMaskPath || "",
-    normalsProxy: analysis.normalsPath || "",
-    contactSheet: analysis.contactSheetPath || "",
-    animatic: analysis.animaticPath || "",
-  };
-}
-
-function mapMotionPrevisMode(mode) {
-  if (mode === "camera-only") return "camera-only";
-  if (mode === "actor-motion") return "actor-blocking";
-  if (mode === "object-motion") return "full-scene";
-  if (mode === "full-scene") return "full-scene";
-  return previsModes[mode] ? mode : state.previs.mode;
-}
-
-function buildImportedReferenceNotes(planning = {}, quality = null, cameraMotion = null) {
-  const notes = [];
-  if (planning.creativeIntent) notes.push(planning.creativeIntent);
-  if (planning.visualStyle) notes.push(`스타일 목표: ${planning.visualStyle}`);
-  if (quality?.score != null) notes.push(`모션 프리비즈 준비도: ${quality.score}/100 · ${quality.readiness}`);
-  if (cameraMotion?.summary) {
-    const summary = cameraMotion.summary;
-    notes.push(`카메라 추적: 좌우 ${round(summary.panPixels || 0, 1)}px, 상하 ${round(summary.tiltPixels || 0, 1)}px, 줌 ${round(summary.zoomRatio || 1, 2)}x, 롤 ${round(summary.rollDegrees || 0, 1)}°.`);
-  }
-  return notes.join("\n");
-}
-
-function applyCameraMotionSummary(cameraMotion) {
-  const summary = cameraMotion.summary || {};
-  const confidence = Number(summary.averageConfidence || 0);
-  if (!Number.isFinite(confidence) || confidence < 0.18) return;
-  const horizontalFov = focalToFov(state.camera.focal);
-  const verticalFov = horizontalFovToVerticalFov(horizontalFov, aspectMap[state.aspect] || 16 / 9);
-  const panDelta = clamp(
-    -(Number(summary.panPixels || 0) / Math.max(1, cameraMotion.width || 1920)) * horizontalFov,
-    -30,
-    30,
-  );
-  const tiltDelta = clamp(
-    (Number(summary.tiltPixels || 0) / Math.max(1, cameraMotion.height || 1080)) * verticalFov,
-    -20,
-    20,
-  );
-  const zoom = clamp(Number(summary.zoomRatio || 1), 0.75, 1.35);
-  const endTime = clamp(Number(cameraMotion.duration || state.motion.duration), 1, 60);
-  state.motion.duration = Math.max(state.motion.duration, endTime);
-  const endCamera = sanitizeCameraPose({
-    ...state.camera,
-    panDeg: state.camera.panDeg + panDelta,
-    tiltDeg: state.camera.tiltDeg + tiltDelta,
-    focal: state.camera.focal * zoom,
-  });
-  state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !(keyframe.source === "camera" && (keyframe.label === "MPS Camera" || keyframe.label === "MPS 카메라")));
-  state.motion.keyframes.push({
-    id: uid(),
-    source: "camera",
-    label: "MPS 카메라",
-    time: endTime,
-    transition: "smooth",
-    segment: motionSegmentForPathMode("straight", "camera"),
-    pose: endCamera,
-  });
-  state.motion.keyframes = sortKeyframes(state.motion.keyframes);
 }
 
 function renderObjectLists() {
@@ -6774,7 +6341,7 @@ function renderObjectList(selector, type) {
         <span class="dot" style="background:${item.color}"></span>
         <span class="object-row-name">
           <span>${index + 1}. @ ${escapeHtml(item.name)}</span>
-          ${item.type === "prop" ? `<small>${escapeHtml(propDefinition(item.assetType).label)}${item.motionEnabled === false ? " · 고정" : ""}${groupForItem(item.id) ? " · 묶음" : ""}</small>` : item.placementMode === "auto" && item.mountId ? `<small>자동 탑승</small>` : groupForItem(item.id) ? `<small>수동 묶음</small>` : ""}
+          ${item.type === "prop" ? `<small>${escapeHtml(propDefinition(item.assetType).label)}${item.motionEnabled === false ? " · 고정" : ""}${item.editLocked ? " · 잠김" : ""}${groupForItem(item.id) ? " · 묶음" : ""}</small>` : item.placementMode === "auto" && item.mountId ? `<small>자동 탑승${item.editLocked ? " · 잠김" : ""}</small>` : groupForItem(item.id) ? `<small>수동 묶음${item.editLocked ? " · 잠김" : ""}</small>` : item.editLocked ? `<small>편집 잠김</small>` : ""}
         </span>
         <button type="button" aria-label="${escapeHtml(item.name)} 제거">×</button>
       `;
@@ -6790,6 +6357,10 @@ function renderObjectList(selector, type) {
       });
       row.querySelector("button").addEventListener("click", (event) => {
         event.stopPropagation();
+        if (sourceEditLocked(item.id)) {
+          notifyEditLocked(item.name);
+          return;
+        }
         removeItemById(item.id);
         commit();
       });
@@ -6810,6 +6381,12 @@ function renderProperties(updateInputs) {
   $("#selectionEmpty").textContent = "배우, 소품, 카메라를 선택하세요.";
 
   const transformItem = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  const locked = sourceEditLocked(transformItem.id);
+  const itemLockButton = $("#itemEditLockBtn");
+  itemLockButton.classList.toggle("is-locked", locked);
+  itemLockButton.setAttribute("aria-pressed", String(locked));
+  itemLockButton.querySelector("i, svg")?.setAttribute("data-lucide", locked ? "lock" : "unlock");
+  $("#itemEditLockStatus").textContent = locked ? "잠김" : "편집 가능";
   if (updateInputs) {
     $("#selectedName").value = item.name;
     $("#sizeSlider").value = item.size;
@@ -6820,11 +6397,20 @@ function renderProperties(updateInputs) {
   $("#facingValue").value = Math.round(transformItem.facing);
   $("#sizeSlider").value = item.size;
   $("#facingSlider").value = transformItem.facing;
+  ["#selectedName", "#sizeSlider", "#sizeValue", "#selectedPropAsset", "#propMotionToggle",
+    "#propScaleX", "#propScaleXValue", "#propScaleY", "#propScaleYValue", "#propScaleZ", "#propScaleZValue",
+    "#actorPlacementMode", "#actorMountSelect", "#actorSeatSelect", "#facingSlider", "#facingValue",
+    "#groupOverlapBtn", "#ungroupBtn", "#duplicateBtn", "#deleteBtn"].forEach((selector) => {
+    const control = $(selector);
+    if (control) control.disabled = locked;
+  });
 
   const propFields = $("#propSpecificFields");
   const actorPlacementFields = $("#actorPlacementFields");
+  const actorPoseFields = $("#actorPoseFields");
   propFields.hidden = item.type !== "prop";
   actorPlacementFields.hidden = item.type !== "actor";
+  actorPoseFields.hidden = item.type !== "actor";
   $("#shapeField").hidden = item.type === "prop" && item.assetType !== "generic";
   if (item.type === "prop") {
     $("#selectedPropAsset").value = item.assetType;
@@ -6836,9 +6422,14 @@ function renderProperties(updateInputs) {
   } else {
     $("#actorPlacementMode").value = item.placementMode || "manual";
     renderAutoMountControls(item, updateInputs);
+    renderActorPoseControls(item, locked, updateInputs);
   }
   $("#manualGroupFields").hidden = item.type === "actor" && item.placementMode === "auto";
   renderManualGroupControls(item);
+  if (locked) {
+    $("#groupOverlapBtn").disabled = true;
+    $("#ungroupBtn").disabled = true;
+  }
 
   const swatches = $("#colorSwatches");
   swatches.innerHTML = "";
@@ -6847,6 +6438,7 @@ function renderProperties(updateInputs) {
     button.className = "swatch";
     button.style.background = color;
     button.classList.toggle("is-active", item.color === color);
+    button.disabled = locked;
     button.type = "button";
     button.setAttribute("aria-label", color);
     button.addEventListener("click", () => {
@@ -6863,6 +6455,7 @@ function renderProperties(updateInputs) {
     button.type = "button";
     button.textContent = label;
     button.classList.toggle("is-active", item.shape === value);
+    button.disabled = locked;
     button.addEventListener("click", () => {
       item.shape = value;
       commit();
@@ -6873,7 +6466,10 @@ function renderProperties(updateInputs) {
   $$(".facing-grid button").forEach((button) => {
     const diff = Math.abs((((Number(button.dataset.facing) - transformItem.facing) % 360) + 540) % 360 - 180);
     button.classList.toggle("is-active", diff <= 22.5);
+    button.disabled = locked;
   });
+  $$(".nudge-grid button").forEach((button) => { button.disabled = locked; });
+  refreshLucideIcons();
 }
 
 function itemFootprintRadiusWorld(item) {
@@ -6886,11 +6482,11 @@ function itemFootprintRadiusWorld(item) {
 }
 
 function overlappingItemsForGroup(item, renderState = state) {
-  if (!item || item.motionEnabled === false || groupForItem(item.id, renderState)) return [];
+  if (!item || item.motionEnabled === false || sourceEditLocked(item.id, renderState) || groupForItem(item.id, renderState)) return [];
   if (item.type === "actor" && item.placementMode === "auto") return [];
   const size = stageWorldSize(renderState);
   return renderState.items.filter((candidate) => {
-    if (candidate.id === item.id || candidate.visible === false || candidate.motionEnabled === false) return false;
+    if (candidate.id === item.id || candidate.visible === false || candidate.motionEnabled === false || sourceEditLocked(candidate.id, renderState)) return false;
     if (candidate.type === "actor" && candidate.placementMode === "auto") return false;
     if (groupForItem(candidate.id, renderState)) return false;
     const dx = (candidate.x - item.x) * size.width;
@@ -6937,32 +6533,309 @@ function renderAutoMountControls(actor, updateInputs = true) {
   }
 }
 
+function bodyPosesEqual(first, second, epsilon = 0.01) {
+  const a = sanitizeBodyPose(first);
+  const b = sanitizeBodyPose(second);
+  return Object.keys(JOINT_DEFINITIONS).every((jointId) => ["x", "y", "z"].every(
+    (axis) => Math.abs(a[jointId][axis] - b[jointId][axis]) <= epsilon,
+  ));
+}
+
+function renderActorPoseControls(actor, locked, updateInputs = true) {
+  if (!actor || actor.type !== "actor") return;
+  if (selectedPoseActorId !== actor.id) {
+    selectedPoseActorId = actor.id;
+    selectedPoseJoint = "chest";
+  }
+  if (!JOINT_DEFINITIONS[selectedPoseJoint]) selectedPoseJoint = "chest";
+  actor.bodyPose = sanitizeBodyPose(actor.bodyPose);
+
+  const jointSelect = $("#actorPoseJointSelect");
+  if (!jointSelect.dataset.ready) {
+    jointSelect.innerHTML = Object.entries(JOINT_DEFINITIONS)
+      .map(([jointId, definition]) => `<option value="${jointId}">${escapeHtml(definition.label)}</option>`)
+      .join("");
+    jointSelect.dataset.ready = "true";
+  }
+  if (updateInputs || document.activeElement !== jointSelect) jointSelect.value = selectedPoseJoint;
+  jointSelect.disabled = locked;
+
+  const definition = JOINT_DEFINITIONS[selectedPoseJoint];
+  const rotation = actor.bodyPose[selectedPoseJoint];
+  ["X", "Y", "Z"].forEach((axisName) => {
+    const axis = axisName.toLowerCase();
+    const slider = $("#actorPoseAxis" + axisName);
+    const value = $("#actorPoseAxis" + axisName + "Value");
+    slider.min = definition[axis][0];
+    slider.max = definition[axis][1];
+    value.min = definition[axis][0];
+    value.max = definition[axis][1];
+    if (updateInputs || document.activeElement !== slider) slider.value = rotation[axis];
+    if (updateInputs || document.activeElement !== value) value.value = Math.round(rotation[axis]);
+    slider.disabled = locked;
+    value.disabled = locked;
+  });
+
+  /* ── Category tabs ── */
+  const tabRoot = $("#actorPoseCategoryTabs");
+  if (!tabRoot.dataset.ready) {
+    const allTab = `<button type="button" data-pose-category="">전체</button>`;
+    const categoryTabs = PRESET_CATEGORIES.map((category) =>
+      `<button type="button" data-pose-category="${category.id}">${category.emoji} ${escapeHtml(category.label)}</button>`
+    ).join("");
+    const customTab = `<button type="button" data-pose-category="custom">⭐ 내 포즈</button>`;
+    tabRoot.innerHTML = allTab + categoryTabs + customTab;
+    tabRoot.dataset.ready = "true";
+  }
+  tabRoot.querySelectorAll("button[data-pose-category]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.poseCategory === selectedPoseCategory);
+  });
+
+  /* ── Presets grid (filtered by category) ── */
+  const presetRoot = $("#actorPosePresets");
+  const customPoses = loadCustomPoses();
+  const isCustomTab = selectedPoseCategory === "custom";
+  let presetIds = [];
+  if (!isCustomTab) {
+    if (!selectedPoseCategory) {
+      presetIds = Object.keys(POSE_PRESET_LABELS);
+    } else {
+      const category = PRESET_CATEGORIES.find((category) => category.id === selectedPoseCategory);
+      presetIds = category ? category.presets : Object.keys(POSE_PRESET_LABELS);
+    }
+  }
+  let presetsHtml = presetIds.map((presetId) =>
+    `<button type="button" data-pose-preset="${presetId}">${escapeHtml(POSE_PRESET_LABELS[presetId] || presetId)}</button>`
+  ).join("");
+  if (isCustomTab) {
+    presetsHtml = customPoses.map((entry) =>
+      `<button type="button" data-custom-pose="${escapeHtml(entry.id)}" title="${escapeHtml(entry.name)}">${escapeHtml(entry.name)}<span class="pose-delete-mark">✕</span></button>`
+    ).join("");
+    if (!customPoses.length) presetsHtml = `<span style="grid-column:1/-1;color:#5a6a72;font-size:10px;text-align:center;padding:8px 0;">저장된 포즈가 없습니다.</span>`;
+  }
+  presetRoot.innerHTML = presetsHtml;
+  presetRoot.querySelectorAll("button[data-pose-preset]").forEach((button) => {
+    button.classList.toggle("is-active", bodyPosesEqual(actor.bodyPose, presetBodyPose(button.dataset.posePreset)));
+    button.disabled = locked;
+  });
+  presetRoot.querySelectorAll("button[data-custom-pose]").forEach((button) => {
+    const entry = customPoses.find((pose) => pose.id === button.dataset.customPose);
+    if (entry) button.classList.toggle("is-active", bodyPosesEqual(actor.bodyPose, sanitizeBodyPose(entry.pose)));
+    button.disabled = locked;
+  });
+
+  /* ── Custom save ── */
+  const customSaveSection = $("#actorPoseCustomSave");
+  customSaveSection.hidden = false;
+  $("#actorPoseCustomNameInput").disabled = locked;
+  $("#actorPoseCustomSaveBtn").disabled = locked;
+
+  /* ── Action buttons ── */
+  $("#actorPoseResetBtn").disabled = locked;
+  $("#actorPoseMirrorBtn").disabled = locked;
+  $("#actorPoseRandomBtn").disabled = locked;
+  $("#actorPoseCopyBtn").disabled = locked;
+  $("#actorPosePasteBtn").disabled = locked || !poseClipboard;
+  const canKeyPose = !locked && isIndependentMotionSource(actor, state);
+  const currentTime = readTimelineTimeInput(state.motion.playhead);
+  const existing = keysForSource(actor.id).find((keyframe) => Math.abs(keyframe.time - currentTime) < 0.05);
+  $("#actorPoseKeyBtn").disabled = !canKeyPose;
+  $("#actorPoseKeyBtn").querySelector("span").textContent = existing ? "포즈 키 갱신" : "포즈 키 추가";
+  $("#actorPoseHint").textContent = actor.placementMode === "auto" && actor.mountId
+    ? "차량 탑승 중에는 포즈를 고정 편집할 수 있지만 독립 포즈 키는 추가되지 않습니다."
+    : "현재 포즈는 배우 키프레임에 위치·방향과 함께 저장됩니다.";
+}
+
+function loadCustomPoses() {
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_POSES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function saveCustomPose(name) {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor") return;
+  const trimmed = String(name || "").trim();
+  if (!trimmed) { notifyApp("포즈 이름을 입력하세요."); return; }
+  const poses = loadCustomPoses();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  poses.push({ id, name: trimmed, pose: sanitizeBodyPose(actor.bodyPose) });
+  try { window.localStorage.setItem(CUSTOM_POSES_KEY, JSON.stringify(poses)); } catch { /* quota */ }
+  notifyApp(`"${trimmed}" 포즈를 저장했습니다.`);
+  $("#actorPoseCustomNameInput").value = "";
+  syncUi(false);
+}
+
+function deleteCustomPose(poseId) {
+  const poses = loadCustomPoses().filter((entry) => entry.id !== poseId);
+  try { window.localStorage.setItem(CUSTOM_POSES_KEY, JSON.stringify(poses)); } catch { /* quota */ }
+  notifyApp("저장된 포즈를 삭제했습니다.");
+  syncUi(false);
+}
+
+function applyCustomPose(poseId) {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  const entry = loadCustomPoses().find((pose) => pose.id === poseId);
+  if (!entry) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  current.bodyPose = sanitizeBodyPose(entry.pose);
+  selectedPoseActorId = current.id;
+  commit();
+  notifyApp(`"${entry.name}" 포즈를 적용했습니다.`);
+}
+
+function copyActorPose() {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor") return;
+  poseClipboard = sanitizeBodyPose(actor.bodyPose);
+  notifyApp("배우 포즈를 복사했습니다.");
+  syncUi(false);
+}
+
+function pasteActorPose() {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id) || !poseClipboard) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  current.bodyPose = sanitizeBodyPose(poseClipboard);
+  selectedPoseActorId = current.id;
+  commit();
+  notifyApp("복사한 포즈를 붙여넣었습니다.");
+}
+
+function randomizeActorPose() {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  const pose = defaultBodyPose();
+  Object.entries(JOINT_DEFINITIONS).forEach(([jointId, definition]) => {
+    ["x", "y", "z"].forEach((axis) => {
+      const range = definition[axis][1] - definition[axis][0];
+      const center = (definition[axis][0] + definition[axis][1]) / 2;
+      pose[jointId][axis] = center + (Math.random() - 0.5) * range * 0.5;
+    });
+  });
+  current.bodyPose = sanitizeBodyPose(pose);
+  selectedPoseActorId = current.id;
+  commit();
+  notifyApp("랜덤 포즈를 적용했습니다.");
+}
+
+function selectActorPoseJoint(actorId, jointId, { announce = false } = {}) {
+  const actor = state.items.find((item) => item.id === actorId && item.type === "actor");
+  if (!actor || !JOINT_DEFINITIONS[jointId]) return false;
+  selected = { kind: "item", id: actor.id };
+  selectedPoseActorId = actor.id;
+  selectedPoseJoint = jointId;
+  if (isIndependentMotionSource(actor, state)) {
+    setActiveSource(actor.id);
+    selectKeyForSource(actor.id);
+  }
+  syncUi();
+  if (viewMode === "3d") renderThreeView(evaluatedViewState || state, true);
+  if (announce) notifyApp(`${JOINT_DEFINITIONS[jointId].label} 포즈 편집`);
+  return true;
+}
+
+function updateActorPoseAxis(axis, rawValue) {
+  const actor = state.items.find((item) => item.id === selectedPoseActorId && item.type === "actor");
+  const definition = JOINT_DEFINITIONS[selectedPoseJoint];
+  if (!actor || !definition || !["x", "y", "z"].includes(axis) || sourceEditLocked(actor.id)) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  current.bodyPose = sanitizeBodyPose(current.bodyPose);
+  current.bodyPose[selectedPoseJoint][axis] = clamp(Number(rawValue), definition[axis][0], definition[axis][1]);
+  current.bodyPose = sanitizeBodyPose(current.bodyPose);
+  draw();
+}
+
+function applyActorPosePreset(presetId) {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  current.bodyPose = presetBodyPose(presetId);
+  selectedPoseActorId = current.id;
+  commit();
+  notifyApp(`${POSE_PRESET_LABELS[presetId] || "기본"} 포즈를 적용했습니다.`);
+}
+
+function captureActorPoseKeyframe() {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  if (!isIndependentMotionSource(actor, state)) {
+    notifyApp("차량이나 묶음에서 분리한 뒤 배우 포즈 키를 추가하세요.");
+    return;
+  }
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  const requestedTime = readTimelineTimeInput(state.motion.playhead);
+  const existing = keysForSource(actor.id).find((keyframe) => Math.abs(keyframe.time - requestedTime) < 0.05);
+  setActiveSource(actor.id);
+  if (existing) {
+    existing.pose = sanitizeSourcePose(actor.id, { ...existing.pose, bodyPose: current.bodyPose });
+    state.motion.selectedKeyId = existing.id;
+    state.motion.playhead = existing.time;
+    commit();
+    notifyApp(`${existing.time.toFixed(1)}초 배우 키의 포즈를 갱신했습니다.`);
+    return;
+  }
+  const time = availableKeyTime(requestedTime, actor.id, { maxTime: MAX_TIMELINE_DURATION });
+  ensureDurationCovers(time);
+  const keyframe = captureSourceKeyframe(actor.id, time, undefined, $("#keyPathSelect")?.value || "straight");
+  if (!keyframe) return;
+  state.motion.keyframes.push(keyframe);
+  state.motion.selectedKeyId = keyframe.id;
+  state.motion.playhead = keyframe.time;
+  state.motion.keyframes = sortKeyframes(state.motion.keyframes);
+  commit();
+  notifyApp(`${keyframe.time.toFixed(1)}초에 배우 포즈 키를 추가했습니다.`);
+}
+
 function renderKeyStatus(updateInputs = true) {
   const visibleSourceIds = new Set(visibleSourceDefinitions().map((source) => source.id));
   const keyframes = sortKeyframes(state.motion.keyframes).filter((keyframe) => visibleSourceIds.has(keyframe.source));
   const selectedKey = selectedKeyframe();
   const current = selectedKey && visibleSourceIds.has(selectedKey.source) ? selectedKey : null;
+  const currentLocked = Boolean(current && sourceEditLocked(current.source));
   const timeInput = $("#keyTimeInput");
   const transitionSelect = $("#keyTransitionSelect");
   const pathSelect = $("#keyPathSelect");
+  const instructionInput = $("#keyInstructionInput");
   if (updateInputs || document.activeElement !== timeInput) {
     timeInput.value = Number(displayPlayhead() ?? current?.time ?? 0).toFixed(1);
   }
   updatePlayheadDisplay(displayPlayhead());
-  $("#deleteKeyBtn").disabled = !current;
-  $("#updateKeyBtn").disabled = !current;
+  $("#deleteKeyBtn").disabled = !current || currentLocked;
+  $("#updateKeyBtn").disabled = !current || currentLocked;
+  $("#addKeyBtn").disabled = activeSourceId() !== "all" && sourceEditLocked(activeSourceId());
   const currentSourceKeys = current ? keysForSource(current.source) : [];
   const isFirstSourceKey = Boolean(current && currentSourceKeys[0]?.id === current.id);
   if (transitionSelect && (updateInputs || document.activeElement !== transitionSelect)) {
     transitionSelect.value = normalizeTransition(current?.transition);
   }
   if (transitionSelect) {
-    transitionSelect.disabled = !current || isFirstSourceKey;
+    transitionSelect.disabled = !current || isFirstSourceKey || currentLocked;
     transitionSelect.title = isFirstSourceKey
       ? "첫 키에는 도착 방식이 적용되지 않습니다."
       : "이 키에 도착하는 이동 방식";
   }
   renderPathModeSelect(pathSelect, current, isFirstSourceKey, updateInputs);
+  if (instructionInput && (updateInputs || document.activeElement !== instructionInput)) {
+    instructionInput.value = current?.note || "";
+  }
+  if (instructionInput) {
+    instructionInput.disabled = !current || currentLocked;
+    instructionInput.title = current
+      ? "이 키로 이동하는 구간에 표시할 짧은 행동 지문"
+      : "먼저 키프레임을 선택하세요.";
+  }
 
   const markers = $("#timelineMarkers");
   markers.innerHTML = "";
@@ -6981,13 +6854,15 @@ function renderKeyStatus(updateInputs = true) {
     marker.classList.toggle("is-active", keyframe.id === state.motion.selectedKeyId);
     marker.classList.toggle("is-cut-marker", keyframe.transition === "cut");
     marker.classList.toggle("is-dragging", timelineDrag?.id === keyframe.id);
+    marker.classList.toggle("is-locked", sourceEditLocked(keyframe.source));
     marker.style.setProperty("--marker-color", sourceColor(keyframe.source));
     marker.style.left = `${clamp((keyframe.time / state.motion.duration) * 100, 0, 100)}%`;
     marker.dataset.time = `${keyframe.time.toFixed(2)}초`;
     marker.innerHTML = `<span>${keySequenceNumber(keyframe, keyframes)}</span>`;
     const transitionText = keyTransitionLabels[normalizeTransition(keyframe.transition)];
     const pathText = pathModeLabels[pathModeForSegment(keyframe.segment, keyframe.source)];
-    marker.title = `${sourceLabel(keyframe.source)} · ${keyframe.label} · ${keyframe.time.toFixed(1)}s · ${transitionText} · ${pathText} · 좌우 드래그로 시간 이동`;
+    const summaryText = keyframeSummary(keyframe);
+    marker.title = `${sourceLabel(keyframe.source)} · ${keyframe.label} · ${keyframe.time.toFixed(1)}s · ${transitionText} · ${pathText} · ${summaryText}${keyframe.note ? ` · 지문: ${keyframe.note}` : ""}${sourceEditLocked(keyframe.source) ? " · 편집 잠김" : " · 좌우 드래그로 시간 이동"}`;
     marker.addEventListener("pointerdown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
     marker.addEventListener("mousedown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
     marker.addEventListener("click", (event) => {
@@ -7007,7 +6882,7 @@ function renderKeyStatus(updateInputs = true) {
   renderSourceTimelines(keyframes, cutTimes);
 
   const currentText = current
-    ? `${sourceLabel(current.source)} · ${current.label} @ ${current.time.toFixed(1)}s · ${isFirstSourceKey ? "첫 키" : `${keyTransitionLabels[normalizeTransition(current.transition)]} · ${pathModeLabels[pathModeForSegment(current.segment, current.source)]}`}`
+    ? `${sourceLabel(current.source)} · ${current.label} @ ${current.time.toFixed(1)}s · ${isFirstSourceKey ? "첫 키" : `${keyTransitionLabels[normalizeTransition(current.transition)]} · ${pathModeLabels[pathModeForSegment(current.segment, current.source)]}`}${current.note ? ` · 지문: ${current.note}` : ""}${current.source === "camera" ? ` · ${keyframeSummary(current)}` : ""}`
     : "선택된 키 없음";
   const motionText = `키 ${keyframes.length}개`;
   $("#keyStatus").textContent = `${motionText} · ${currentText}`;
@@ -7051,7 +6926,7 @@ function renderSourceSelect() {
   select.innerHTML = "";
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = "전체";
+  allOption.textContent = "전체 대상 (모두 기록)";
   select.append(allOption);
   sourceDefinitions().filter((source) => {
     if (source.id === "camera") return true;
@@ -7063,7 +6938,8 @@ function renderSourceSelect() {
     const item = state.items.find((entry) => entry.id === source.id);
     option.textContent = item?.type === "actor" && item.mountId
       ? `${source.name} (탑승 연동)`
-      : item?.motionEnabled === false || isSourceHidden(source.id) ? `${source.name} (고정)` : source.name;
+      : sourceEditLocked(source.id) ? `${source.name} (잠김)`
+        : item?.motionEnabled === false || isSourceHidden(source.id) ? `${source.name} (고정)` : source.name;
     select.append(option);
   });
   select.value = currentValue;
@@ -7113,11 +6989,12 @@ function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
         marker.classList.toggle("is-active", keyframe.id === state.motion.selectedKeyId);
         marker.classList.toggle("is-cut-marker", keyframe.transition === "cut");
         marker.classList.toggle("is-dragging", timelineDrag?.id === keyframe.id);
+        marker.classList.toggle("is-locked", sourceEditLocked(keyframe.source));
         marker.style.setProperty("--marker-color", source.color);
         marker.style.left = `${clamp((keyframe.time / state.motion.duration) * 100, 0, 100)}%`;
         marker.dataset.time = `${keyframe.time.toFixed(2)}초`;
         marker.innerHTML = `<span>${keySequenceNumber(keyframe, keyframes)}</span>`;
-        marker.title = `${source.name} · ${keyframe.label} · ${keyframe.time.toFixed(1)}s · ${keyTransitionLabels[normalizeTransition(keyframe.transition)]} · ${pathModeLabels[pathModeForSegment(keyframe.segment, keyframe.source)]}`;
+        marker.title = `${source.name} · ${keyframe.label} · ${keyframe.time.toFixed(1)}s · ${keyTransitionLabels[normalizeTransition(keyframe.transition)]} · ${pathModeLabels[pathModeForSegment(keyframe.segment, keyframe.source)]} · ${keyframeSummary(keyframe)}${sourceEditLocked(keyframe.source) ? " · 편집 잠김" : ""}`;
         marker.addEventListener("pointerdown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
         marker.addEventListener("mousedown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
         marker.addEventListener("click", (event) => {
@@ -7131,12 +7008,13 @@ function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
     remove.type = "button";
     remove.className = "source-lane-remove";
     remove.textContent = "×";
-    remove.title = `${source.name} 타임라인 숨기기`;
+    remove.disabled = sourceEditLocked(source.id);
+    remove.title = sourceEditLocked(source.id) ? `${source.name} 편집 잠김` : `${source.name} 타임라인 숨기기`;
     remove.setAttribute("aria-label", `${source.name} 타임라인 숨기기`);
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
-      hideSourceTimeline(source.id);
-      commit();
+      if (!confirmKeyframeRemoval(source.id, `${source.name} 타임라인을 제거할까요?`, "대상은 현재 위치에 고정됩니다.")) return;
+      if (hideSourceTimeline(source.id)) commit();
     });
 
     lane.append(label, track, remove);
@@ -7165,13 +7043,22 @@ function beginTimelineMarkerDrag(event, keyframeId) {
   if (timelineDrag) return;
   event.preventDefault();
   event.stopPropagation();
-  stopPreview();
+  cancelPreview();
   const keyframe = state.motion.keyframes.find((entry) => entry.id === keyframeId);
   if (!keyframe) return;
+  if (sourceEditLocked(keyframe.source)) {
+    selectKeyframe(keyframe.id);
+    notifyEditLocked(sourceLabel(keyframe.source));
+    return;
+  }
   const track = event.currentTarget.closest(".source-lane-track, .timeline-track") || $("#timelineTrack");
   const trackRect = track.getBoundingClientRect();
   const groupedKeys = keyframe.transition === "cut"
-    ? state.motion.keyframes.filter((entry) => entry.transition === "cut" && Math.abs(entry.time - keyframe.time) < 0.05)
+    ? state.motion.keyframes.filter((entry) => (
+      entry.transition === "cut"
+      && Math.abs(entry.time - keyframe.time) < 0.05
+      && !sourceEditLocked(entry.source)
+    ))
     : [keyframe];
   timelineDrag = {
     id: keyframeId,
@@ -7179,6 +7066,7 @@ function beginTimelineMarkerDrag(event, keyframeId) {
     target: event.currentTarget,
     startDuration: state.motion.duration,
     startTime: keyframe.time,
+    startState: clone(state),
     group: groupedKeys.map((entry) => ({ id: entry.id, startTime: entry.time })),
     trackRect: {
       left: trackRect.left,
@@ -7205,6 +7093,12 @@ document.addEventListener("pointerup", (event) => {
   if (!timelineDrag || event.pointerId !== timelineDrag.pointerId) return;
   event.preventDefault();
   finishTimelineMarkerDrag();
+});
+
+document.addEventListener("pointercancel", (event) => {
+  if (!timelineDrag || event.pointerId !== timelineDrag.pointerId) return;
+  event.preventDefault();
+  cancelTimelineMarkerDrag();
 });
 
 document.addEventListener("mousemove", (event) => {
@@ -7244,6 +7138,7 @@ function updateTimelineMarkerDrag(clientX) {
 }
 
 function finishTimelineMarkerDrag() {
+  const completedDrag = timelineDrag;
   if (timelineDrag.pointerId !== "mouse") {
     timelineDrag.target?.releasePointerCapture?.(timelineDrag.pointerId);
   }
@@ -7251,10 +7146,22 @@ function finishTimelineMarkerDrag() {
     state.motion.keyframes.find((entry) => entry.id === grouped.id)?.source
   )).filter(Boolean));
   changedSources.forEach(reconcileSourcePathConstraints);
-  state.reference.analysis.cutTimes = shotCutTimes();
-  state.reference.analysis.sceneCuts = state.reference.analysis.cutTimes.length;
   timelineDrag = null;
-  commit();
+  if (completedDrag.moved) commit();
+  else {
+    syncUi();
+    draw();
+  }
+}
+
+function cancelTimelineMarkerDrag() {
+  if (!timelineDrag) return;
+  const cancelledDrag = timelineDrag;
+  if (cancelledDrag.pointerId !== "mouse") {
+    cancelledDrag.target?.releasePointerCapture?.(cancelledDrag.pointerId);
+  }
+  timelineDrag = null;
+  if (cancelledDrag.startState) restoreUncommittedState(cancelledDrag.startState);
 }
 
 function moveTimelineDragGroup(targetTime) {
@@ -7284,12 +7191,55 @@ function escapeHtml(value) {
   });
 }
 
+function resetCurrentStage() {
+  const actorCount = state.items.filter((item) => item.type === "actor").length;
+  const propCount = state.items.filter((item) => item.type === "prop").length;
+  const keyCount = state.motion.keyframes.length;
+  const impact = `배우 ${actorCount}명 · 소품 ${propCount}개 · 키 ${keyCount}개`;
+  if (!confirm(`현재 컷의 무대를 기본값으로 되돌릴까요?\n${impact}와 카메라 설정이 초기화됩니다.\n컷 제목, 연출 의도, 화면비와 보기 설정은 유지되며 실행 취소할 수 있습니다.`)) return;
+
+  cancelPreview();
+  const previous = state;
+  const beforeReset = snapshot();
+  if (history[history.length - 1] !== beforeReset) {
+    history.push(beforeReset);
+    if (history.length > 80) history.shift();
+  }
+  const fresh = defaultState();
+  state = {
+    ...fresh,
+    sceneTitle: previous.sceneTitle,
+    sceneIntent: previous.sceneIntent,
+    aspect: previous.aspect,
+    showGrid: previous.showGrid,
+    showNames: previous.showNames,
+    showCamera: previous.showCamera,
+    cleanExport: previous.cleanExport,
+    blenderControls: previous.blenderControls,
+    previs: clone(previous.previs || fresh.previs),
+  };
+  evaluatedViewState = null;
+  selected = { kind: "camera" };
+  drag = null;
+  threeDrag = null;
+  timelineDrag = null;
+  keyBadgePress = null;
+  keyBadgeDrag = null;
+  curveHandleDrag = null;
+  pathSnapGuide = null;
+  commit();
+  notifyApp("현재 컷의 무대를 기본값으로 되돌렸습니다.");
+}
+
 $("#aspectButtons").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-aspect]");
   if (!button) return;
   state.aspect = button.dataset.aspect;
   commit();
+  requestAnimationFrame(() => resizeCanvas());
 });
+
+$("#resetStageBtn").addEventListener("click", resetCurrentStage);
 
 $("#gridToggle").addEventListener("change", (event) => {
   state.showGrid = event.target.checked;
@@ -7311,12 +7261,20 @@ $("#cleanExportToggle").addEventListener("change", (event) => {
   commit();
 });
 
-$("#blenderControlsToggle").addEventListener("change", (event) => {
-  state.blenderControls = event.target.checked;
+$("#cameraLockControls").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-camera-lock]");
+  if (!button) return;
+  const field = button.dataset.cameraLock;
+  const locks = sanitizeCameraLocks(state.camera.locks);
+  locks[field] = !locks[field];
+  state.camera.locks = locks;
+  if (field === "orientation" && locks[field]) state.camera.trackingTargetId = "";
   commit();
+  notifyApp(`${button.textContent.trim()} ${locks[field] ? "잠금" : "잠금 해제"}`);
 });
 
 $("#trackingTargetSelect").addEventListener("change", (event) => {
+  if (cameraFieldLocked("orientation")) return;
   state.camera.trackingTargetId = sanitizeTrackingTargetId(event.target.value, state);
   applyCameraTracking(state);
   selected = { kind: "camera" };
@@ -7325,7 +7283,7 @@ $("#trackingTargetSelect").addEventListener("change", (event) => {
 });
 
 $("#focalSlider").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   state.camera.focal = Number(event.target.value);
   $("#focalValue").value = state.camera.focal;
   selected = { kind: "camera" };
@@ -7335,10 +7293,10 @@ $("#focalSlider").addEventListener("input", (event) => {
   draw();
 });
 
-$("#focalSlider").addEventListener("change", commit);
+$("#focalSlider").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#focalValue").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, 14, 135);
@@ -7350,10 +7308,10 @@ $("#focalValue").addEventListener("input", (event) => {
   draw();
   if (viewMode === "3d") renderThreeView(state, true);
 });
-$("#focalValue").addEventListener("change", commit);
+$("#focalValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraHeightSlider").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   state.camera.height = Number(event.target.value);
   applyCameraTracking(state);
   syncCameraDerivedAim(state.camera, state);
@@ -7365,10 +7323,14 @@ $("#cameraHeightSlider").addEventListener("input", (event) => {
   if (viewMode === "3d") renderThreeView(state, true);
 });
 
-$("#cameraHeightSlider").addEventListener("change", commit);
+$("#cameraHeightSlider").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#cameraHeightKeyBtn").addEventListener("click", () => {
+  captureCameraHeightKeyframe();
+});
 
 $("#cameraHeightValue").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, 0.4, 3);
@@ -7382,10 +7344,10 @@ $("#cameraHeightValue").addEventListener("input", (event) => {
   draw();
   if (viewMode === "3d") renderThreeView(state, true);
 });
-$("#cameraHeightValue").addEventListener("change", commit);
+$("#cameraHeightValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraPanSlider").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   state.camera.panDeg = normalizePanDeg(event.target.value);
   syncCameraDerivedAim(state.camera, state);
   $("#cameraPanValue").value = Math.round(state.camera.panDeg);
@@ -7396,10 +7358,10 @@ $("#cameraPanSlider").addEventListener("input", (event) => {
   if (viewMode === "3d") renderThreeView(state, true);
 });
 
-$("#cameraPanSlider").addEventListener("change", commit);
+$("#cameraPanSlider").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraPanValue").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = normalizePanDeg(val);
@@ -7412,10 +7374,10 @@ $("#cameraPanValue").addEventListener("input", (event) => {
   draw();
   if (viewMode === "3d") renderThreeView(state, true);
 });
-$("#cameraPanValue").addEventListener("change", commit);
+$("#cameraPanValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraTiltSlider").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   state.camera.tiltDeg = clamp(Number(event.target.value), -60, 60);
   syncCameraDerivedAim(state.camera, state);
   $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
@@ -7426,10 +7388,10 @@ $("#cameraTiltSlider").addEventListener("input", (event) => {
   if (viewMode === "3d") renderThreeView(state, true);
 });
 
-$("#cameraTiltSlider").addEventListener("change", commit);
+$("#cameraTiltSlider").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraTiltValue").addEventListener("input", (event) => {
-  materializeEvaluatedViewForEditing();
+  materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
   val = clamp(val, -60, 60);
@@ -7442,12 +7404,16 @@ $("#cameraTiltValue").addEventListener("input", (event) => {
   draw();
   if (viewMode === "3d") renderThreeView(state, true);
 });
-$("#cameraTiltValue").addEventListener("change", commit);
+$("#cameraTiltValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#focalPresets").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-focal]");
   if (!button) return;
-  materializeEvaluatedViewForEditing();
+  if (cameraFieldLocked("lens")) {
+    notifyEditLocked("카메라 렌즈");
+    return;
+  }
+  materializeEvaluatedViewForEditing("camera");
   state.camera.focal = Number(button.dataset.focal);
   selected = { kind: "camera" };
   setActiveSource("camera");
@@ -7473,6 +7439,7 @@ function addItem(type, rawName, assetType = "generic") {
   const safeAssetType = type === "prop" && propCatalog[assetType] ? assetType : "generic";
   const item = {
     id: uid(),
+    continuityId: uid(),
     type,
     name: rawName.trim().replace(/^@/, "") || (type === "prop" ? propDefinition(safeAssetType).label : `${base} ${count + 1}`),
     x: type === "prop" ? 0.52 : 0.38 + count * 0.06,
@@ -7481,6 +7448,7 @@ function addItem(type, rawName, assetType = "generic") {
     color: colors[(state.items.length + 2) % colors.length],
     shape: type === "prop" ? "square" : "circle",
     facing: 0,
+    bodyPose: type === "actor" ? defaultBodyPose() : null,
     assetType: safeAssetType,
     scaleX: 1,
     scaleY: 1,
@@ -7489,6 +7457,7 @@ function addItem(type, rawName, assetType = "generic") {
     mountId: "",
     seatIndex: 0,
     motionEnabled: true,
+    editLocked: false,
   };
   state.items.push(item);
   selected = { kind: "item", id: item.id };
@@ -7548,7 +7517,18 @@ $("#selectedName").addEventListener("input", (event) => {
   draw();
 });
 
-$("#selectedName").addEventListener("change", commit);
+$("#selectedName").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#itemEditLockBtn").addEventListener("click", () => {
+  const item = selectedItem();
+  if (!item) return;
+  const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  const affected = affectedTransformItems(target.id);
+  const nextLocked = !affected.some((entry) => itemEditLocked(entry));
+  affected.forEach((entry) => { entry.editLocked = nextLocked; });
+  commit();
+  notifyApp(`${target.name}${affected.length > 1 ? ` 외 ${affected.length - 1}개` : ""} ${nextLocked ? "편집 잠금" : "편집 잠금 해제"}`);
+});
 
 $("#sizeSlider").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing();
@@ -7559,7 +7539,7 @@ $("#sizeSlider").addEventListener("input", (event) => {
   draw();
 });
 
-$("#sizeSlider").addEventListener("change", commit);
+$("#sizeSlider").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#sizeValue").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing();
@@ -7573,7 +7553,7 @@ $("#sizeValue").addEventListener("input", (event) => {
   $("#sizeSlider").value = val;
   draw();
 });
-$("#sizeValue").addEventListener("change", commit);
+$("#sizeValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#selectedPropAsset").addEventListener("change", (event) => {
   materializeEvaluatedViewForEditing();
@@ -7588,9 +7568,13 @@ $("#selectedPropAsset").addEventListener("change", (event) => {
 });
 
 $("#propMotionToggle").addEventListener("change", (event) => {
-  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item || item.type !== "prop") return;
+  if (!event.target.checked && !confirmKeyframeRemoval(item.id, `${item.name}의 동선 타임라인을 끌까요?`, "소품은 현재 위치에 고정됩니다.")) {
+    event.target.checked = true;
+    return;
+  }
+  materializeEvaluatedViewForEditing();
   item.motionEnabled = event.target.checked;
   if (!item.motionEnabled && state.motion.activeSource === item.id) state.motion.activeSource = "all";
   commit();
@@ -7605,7 +7589,7 @@ $("#propMotionToggle").addEventListener("change", (event) => {
     $("#propScale" + axis + "Value").value = item[field].toFixed(2);
     draw();
   });
-  $("#propScale" + axis).addEventListener("change", commit);
+  $("#propScale" + axis).addEventListener("change", finalizeLiveProjectInputEdit);
 
   $("#propScale" + axis + "Value").addEventListener("input", (event) => {
     materializeEvaluatedViewForEditing();
@@ -7618,14 +7602,19 @@ $("#propMotionToggle").addEventListener("change", (event) => {
     $("#propScale" + axis).value = val;
     draw();
   });
-  $("#propScale" + axis + "Value").addEventListener("change", commit);
+  $("#propScale" + axis + "Value").addEventListener("change", finalizeLiveProjectInputEdit);
 });
 
 $("#actorPlacementMode").addEventListener("change", (event) => {
-  materializeEvaluatedViewForEditing();
   const actor = selectedItem();
   if (!actor || actor.type !== "actor") return;
   const nextMode = event.target.value === "auto" ? "auto" : "manual";
+  if (actor.placementMode !== nextMode
+    && !confirmKeyframeRemoval(actor.id, `${actor.name}의 탑승 방식을 바꿀까요?`, "배우의 독립 동선은 차량 또는 묶음 동선으로 전환됩니다.")) {
+    event.target.value = actor.placementMode || "manual";
+    return;
+  }
+  materializeEvaluatedViewForEditing();
   if (actor.placementMode === "auto" && nextMode === "manual") {
     const pose = resolvedItemPose(actor, state);
     actor.x = pose.x;
@@ -7673,11 +7662,86 @@ $("#actorSeatSelect").addEventListener("change", (event) => {
   commit();
 });
 
+$("#actorPoseJointSelect").addEventListener("change", (event) => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor") return;
+  selectActorPoseJoint(actor.id, event.target.value, { announce: viewMode === "3d" });
+  if (viewMode === "3d") setThreeEditMode("pose");
+});
+
+["X", "Y", "Z"].forEach((axisName) => {
+  const axis = axisName.toLowerCase();
+  const slider = $("#actorPoseAxis" + axisName);
+  const value = $("#actorPoseAxis" + axisName + "Value");
+  slider.addEventListener("input", (event) => {
+    updateActorPoseAxis(axis, event.target.value);
+    value.value = Math.round(Number(event.target.value));
+  });
+  value.addEventListener("input", (event) => {
+    if (!Number.isFinite(Number(event.target.value))) return;
+    updateActorPoseAxis(axis, event.target.value);
+    slider.value = event.target.value;
+  });
+  slider.addEventListener("change", finalizeLiveProjectInputEdit);
+  value.addEventListener("change", finalizeLiveProjectInputEdit);
+});
+
+$("#actorPoseCategoryTabs").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-pose-category]");
+  if (!button) return;
+  selectedPoseCategory = button.dataset.poseCategory;
+  syncUi(false);
+});
+
+$("#actorPosePresets").addEventListener("click", (event) => {
+  const deleteBtn = event.target.closest(".pose-delete-mark");
+  if (deleteBtn) {
+    const parent = deleteBtn.closest("button[data-custom-pose]");
+    if (parent) { deleteCustomPose(parent.dataset.customPose); return; }
+  }
+  const customBtn = event.target.closest("button[data-custom-pose]");
+  if (customBtn) { applyCustomPose(customBtn.dataset.customPose); return; }
+  const button = event.target.closest("button[data-pose-preset]");
+  if (!button) return;
+  applyActorPosePreset(button.dataset.posePreset);
+});
+
+$("#actorPoseCustomSaveBtn").addEventListener("click", () => {
+  saveCustomPose($("#actorPoseCustomNameInput").value);
+});
+
+$("#actorPoseCustomNameInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); saveCustomPose(event.target.value); }
+});
+
+$("#actorPoseResetBtn").addEventListener("click", () => applyActorPosePreset("neutral"));
+
+$("#actorPoseMirrorBtn").addEventListener("click", () => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id);
+  current.bodyPose = mirrorBodyPose(current.bodyPose);
+  selectedPoseActorId = current.id;
+  commit();
+  notifyApp("배우 포즈를 좌우 반전했습니다.");
+});
+
+$("#actorPoseCopyBtn").addEventListener("click", copyActorPose);
+$("#actorPosePasteBtn").addEventListener("click", pasteActorPose);
+$("#actorPoseRandomBtn").addEventListener("click", randomizeActorPose);
+
+$("#actorPoseKeyBtn").addEventListener("click", captureActorPoseKeyframe);
+
 $("#groupOverlapBtn").addEventListener("click", () => {
-  materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item) return;
   const candidates = overlappingItemsForGroup(item, state);
+  const members = [item, ...candidates];
+  const leader = members.find((entry) => isVehicleProp(entry)) || item;
+  const followerIds = members.filter((entry) => entry.id !== leader.id).map((entry) => entry.id);
+  if (!confirmKeyframeRemoval(followerIds, `${members.length}개 대상을 묶을까요?`, `${leader.name} 동선 하나로 함께 움직입니다.`)) return;
+  materializeEvaluatedViewForEditing();
   const group = createManualGroup([item.id, ...candidates.map((candidate) => candidate.id)], item.id, state);
   if (!group) return;
   setActiveSource(group.leaderId);
@@ -7708,7 +7772,7 @@ $("#facingSlider").addEventListener("input", (event) => {
   draw();
 });
 
-$("#facingSlider").addEventListener("change", commit);
+$("#facingSlider").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#facingValue").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing();
@@ -7722,7 +7786,7 @@ $("#facingValue").addEventListener("input", (event) => {
   $("#facingSlider").value = val;
   draw();
 });
-$("#facingValue").addEventListener("change", commit);
+$("#facingValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $(".facing-grid").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-facing]");
@@ -7742,7 +7806,7 @@ $("#sceneTitle").addEventListener("input", (event) => {
   syncProjectChrome();
 });
 
-$("#sceneTitle").addEventListener("change", commit);
+$("#sceneTitle").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#sceneIntent").addEventListener("input", (event) => {
   state.sceneIntent = event.target.value;
@@ -7750,175 +7814,7 @@ $("#sceneIntent").addEventListener("input", (event) => {
   if (cut) cut.intent = event.target.value;
 });
 
-$("#sceneIntent").addEventListener("change", commit);
-
-$("#referenceFile").addEventListener("change", (event) => {
-  const file = event.target.files?.[0] || null;
-  setReferenceClip(file);
-});
-
-$("#referencePreview").addEventListener("loadedmetadata", () => {
-  updateReferenceFrameTime();
-  drawReferenceOverlay();
-});
-$("#referencePreview").addEventListener("loadeddata", drawReferenceOverlay);
-$("#referencePreview").addEventListener("timeupdate", () => {
-  updateReferenceFrameTime();
-  drawReferenceOverlay();
-});
-$("#referencePreview").addEventListener("seeked", drawReferenceOverlay);
-
-$("#useReferenceTimeBtn").addEventListener("click", () => {
-  const video = $("#referencePreview");
-  const sourceDuration = Number(video?.duration || state.reference.duration || 0);
-  if (!referenceClipBlob || !sourceDuration) return;
-  const sourceTime = clamp(Number(video.currentTime || 0), 0, sourceDuration);
-  const timelineTime = clamp((sourceTime / sourceDuration) * state.motion.duration, 0, state.motion.duration);
-  $("#keyTimeInput").value = timelineTime.toFixed(1);
-  scrubToTime(timelineTime);
-});
-
-$("#traceActorCount").addEventListener("change", (event) => {
-  const actorCount = clamp(Number(event.target.value || 1), 1, 8);
-  state.reference.analysis = {
-    ...state.reference.analysis,
-    actorCount,
-  };
-  if (referenceAnalysisCache) rebuildReferenceDraftFromCache(actorCount);
-  else {
-    referenceAnalysisMessage = "추적 인원수가 바뀌었습니다. 초안을 만들면 적용됩니다.";
-    commit();
-  }
-});
-
-$("#analysisPrecision").addEventListener("change", (event) => {
-  state.reference.precision = event.target.value === "fast" ? "fast" : "detailed";
-  if (state.reference.analysis?.status === "ready") state.reference.analysis.status = "review";
-  referenceAnalysisCache = null;
-  referenceAnalysisMessage = "분석 정밀도가 바뀌었습니다. 초안을 다시 만들면 적용됩니다.";
-  commit();
-});
-
-$("#referenceOverlayToggle").addEventListener("change", (event) => {
-  state.reference.showOverlay = event.target.checked;
-  commit();
-  drawReferenceOverlay();
-});
-
-$("#calibrationAnchorToggle").addEventListener("change", (event) => {
-  state.reference.calibration.anchorToCurrent = event.target.checked;
-  applyReferenceCalibrationChange();
-});
-
-$("#calibrationMirrorToggle").addEventListener("change", (event) => {
-  state.reference.calibration.mirrorX = event.target.checked;
-  applyReferenceCalibrationChange();
-});
-
-$("#calibrationCameraInterpretation").addEventListener("change", (event) => {
-  state.reference.calibration.cameraInterpretation = cameraInterpretationMix[event.target.value] != null
-    ? event.target.value
-    : "balanced";
-  applyReferenceCalibrationChange();
-});
-
-$("#calibrationRotation").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-calibration-rotation]");
-  if (!button) return;
-  state.reference.calibration.rotation = Number(button.dataset.calibrationRotation);
-  applyReferenceCalibrationChange();
-});
-
-[
-  ["#calibrationLateralSlider", "lateralScale"],
-  ["#calibrationDepthSlider", "depthScale"],
-  ["#calibrationSizeDepthSlider", "sizeDepthWeight"],
-  ["#calibrationCameraGainSlider", "cameraGain"],
-  ["#calibrationStabilizationSlider", "stabilizationStrength"],
-].forEach(([selector, key]) => {
-  const input = $(selector);
-  input.addEventListener("input", (event) => {
-    state.reference.calibration[key] = Number(event.target.value);
-    renderReferenceCalibrationControls(state.reference, false);
-  });
-  input.addEventListener("change", applyReferenceCalibrationChange);
-});
-
-$("#resetReferenceCalibrationBtn").addEventListener("click", () => {
-  state.reference.calibration = sanitizeReferenceCalibration();
-  applyReferenceCalibrationChange();
-});
-
-$("#setReferenceStartBtn").addEventListener("click", () => setReferenceRangeBoundary("start"));
-$("#setReferenceEndBtn").addEventListener("click", () => setReferenceRangeBoundary("end"));
-
-$("#analyzeReferenceBtn").addEventListener("click", createReferenceDraft);
-
-$("#clearReferenceBtn").addEventListener("click", () => {
-  $("#referenceFile").value = "";
-  setReferenceClip(null);
-});
-
-function setReferenceRangeBoundary(boundary) {
-  const video = $("#referencePreview");
-  const duration = Number(video?.duration || state.reference.duration || 0);
-  if (!referenceClipBlob || !duration) return;
-  const current = clamp(Number(video.currentTime || 0), 0, duration);
-  if (boundary === "start") {
-    state.reference.start = clamp(current, 0, Math.max(0, state.reference.end - 0.25));
-  } else {
-    state.reference.end = clamp(current, Math.min(duration, state.reference.start + 0.25), duration);
-  }
-  state.reference.analysis = { ...state.reference.analysis, status: "review" };
-  referenceAnalysisCache = null;
-  referenceAnalysisMessage = "분석 구간이 바뀌었습니다. 초안을 다시 만들어 적용하세요.";
-  commit();
-}
-
-function applyReferenceCalibrationChange() {
-  state.reference.calibration = sanitizeReferenceCalibration(state.reference.calibration);
-  if (referenceAnalysisCache) {
-    rebuildReferenceDraftFromCache(referenceAnalysisCache.actorCount);
-    return;
-  }
-  referenceAnalysisMessage = referenceClipBlob ? "보정값이 바뀌었습니다. 초안을 만들면 적용됩니다." : "";
-  commit();
-}
-
-function rebuildReferenceDraftFromCache(actorCount = state.reference.analysis?.actorCount || 1) {
-  if (!referenceAnalysisCache?.samples?.length) {
-    commit();
-    return;
-  }
-  const draft = buildVideoDraft(
-    referenceAnalysisCache.samples,
-    actorCount,
-    referenceAnalysisCache.tracking,
-    referenceAnalysisCache.baseline,
-  );
-  applyVideoDraft(draft, actorCount);
-  referenceAnalysisCache = draft.preview;
-  state.reference.analysis = {
-    ...state.reference.analysis,
-    status: "ready",
-    keyCount: draft.entries.length,
-    actorCount,
-    motionScore: draft.motionScore,
-    cameraConfidence: draft.cameraConfidence,
-    cameraMotionType: draft.cameraProfile.type,
-    cameraPan: draft.cameraProfile.pan,
-    cameraZoom: draft.cameraProfile.zoom,
-    cameraJitter: draft.cameraProfile.jitter,
-    actorConfidence: draft.actorConfidence,
-    mappingConfidence: draft.mappingConfidence,
-    sceneCuts: draft.sceneCuts,
-    cutTimes: draft.cutTimes,
-  };
-  referenceAnalysisMessage = "";
-  commit();
-  scrubToTime(0);
-  drawReferenceOverlay();
-}
+$("#sceneIntent").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $(".nudge-grid").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-nudge]");
@@ -7930,6 +7826,10 @@ $(".nudge-grid").addEventListener("click", (event) => {
 
 function nudge(item, dx, dy, amount) {
   const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  if (sourceEditLocked(target.id)) {
+    notifyEditLocked(target.name);
+    return;
+  }
   target.x = clamp(target.x + dx * amount, 0.02, 0.98);
   target.y = clamp(target.y + dy * amount, 0.02, 0.98);
   commit();
@@ -7938,14 +7838,16 @@ function nudge(item, dx, dy, amount) {
 $("#duplicateBtn").addEventListener("click", () => {
   const item = selectedItem();
   if (!item) return;
+  if (sourceEditLocked(item.id)) {
+    notifyEditLocked(item.name);
+    return;
+  }
   const duplicate = {
     ...clone(item),
     id: uid(),
     name: `${item.name} copy`,
     x: clamp(item.x + 0.04, 0.02, 0.98),
     y: clamp(item.y + 0.04, 0.02, 0.98),
-    provenance: null,
-    detectionConfidence: null,
     presetInstanceId: "",
   };
   if (duplicate.type === "actor") {
@@ -7963,6 +7865,12 @@ $("#deleteBtn").addEventListener("click", deleteSelected);
 function deleteSelected() {
   const item = selectedItem();
   if (!item) return;
+  if (sourceEditLocked(item.id)) {
+    notifyEditLocked(item.name);
+    return;
+  }
+  const keyCount = keyframeCountForSources(item.id);
+  if (!confirm(`${item.name}을(를) 무대에서 삭제할까요?${keyCount ? `\n연결된 키프레임 ${keyCount}개도 함께 삭제됩니다.` : ""}\n이 작업은 실행 취소할 수 있습니다.`)) return;
   removeItemById(item.id);
   commit();
 }
@@ -7997,16 +7905,29 @@ $("#viewButtons").addEventListener("click", (event) => {
 $(".three-editbar").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-three-mode]");
   if (!button) return;
-  threeEditMode = button.dataset.threeMode || "move";
-  syncUi(false);
-  if (viewMode === "3d") renderThreeView(state, true);
+  setThreeEditMode(button.dataset.threeMode || "move");
 });
 
-$("#newBtn").addEventListener("click", () => {
-  if (!confirmProjectReplacement("새 프로젝트를 시작하면")) return;
-  loadProjectDocument(createDefaultProject(defaultState()));
-  setWorkspaceMode("blocking");
-});
+function startNewProject() {
+  openProjectCreateDialog({ mode: "blank" });
+}
+
+function openProjectCreateDialog({ mode = "blank" } = {}) {
+  if (mode === "blank" && (managedProjectId || hasUnsavedProjectChanges())) {
+    if (!confirmProjectReplacement("새 프로젝트를 만들면")) return;
+  }
+  pendingProjectCreationMode = mode === "current" ? "current" : "blank";
+  const currentTitle = String(project?.title || "").trim();
+  $("#projectCreateInput").value = pendingProjectCreationMode === "current" && currentTitle !== "새 프로젝트"
+    ? currentTitle
+    : "";
+  $("#projectCreateError").hidden = true;
+  $("#projectCreateError").innerHTML = "";
+  $("#projectCreateDialog").showModal();
+  requestAnimationFrame(() => $("#projectCreateInput").focus());
+}
+
+$("#newBtn").addEventListener("click", startNewProject);
 
 $("#storyboardBtn").addEventListener("click", () => {
   setWorkspaceMode("storyboard");
@@ -8056,13 +7977,6 @@ $("#storyboardStatusFilter").addEventListener("change", (event) => {
   renderStoryboardWorkspace();
 });
 
-$("#storyboardScopeSwitch").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-storyboard-scope]");
-  if (!button) return;
-  storyboardScope = button.dataset.storyboardScope === "project" ? "project" : "scene";
-  renderStoryboardWorkspace();
-});
-
 $$('#contactSheetMenu button[data-contact-sheet-size]').forEach((button) => {
   button.addEventListener("click", () => {
     $("#contactSheetMenu").open = false;
@@ -8098,26 +8012,86 @@ const storyboardInspectorInputs = [
   "#cutIntentInput",
   "#cutNotesInput",
 ];
+function captureProjectFieldEditStart(event) {
+  if (event.currentTarget.dataset.historyCaptured === "true") return;
+  pushProjectHistory();
+  event.currentTarget.dataset.historyCaptured = "true";
+}
+
+function releaseProjectFieldEdit(event) {
+  delete event.currentTarget.dataset.historyCaptured;
+}
+
+[$("#activeSceneHeading"), $("#activeSceneSynopsis")].forEach((input) => {
+  input.addEventListener("focus", captureProjectFieldEditStart);
+  input.addEventListener("blur", releaseProjectFieldEdit);
+});
+
 storyboardInspectorInputs.forEach((selector) => {
-  $(selector).addEventListener("input", () => updateStoryboardCutFromInspector(false));
-  $(selector).addEventListener("change", () => updateStoryboardCutFromInspector(true));
+  const input = $(selector);
+  input.addEventListener("focus", captureProjectFieldEditStart);
+  input.addEventListener("blur", releaseProjectFieldEdit);
+  input.addEventListener("input", () => updateStoryboardCutFromInspector(false));
+  input.addEventListener("change", () => updateStoryboardCutFromInspector(true));
 });
 
-$("#sourceVideoBtn").addEventListener("click", () => {
-  const panel = $("#videoDraftPanel");
-  $("#propertiesPanel").open = false;
-  $("#cameraProperties").open = false;
-  panel.open = true;
-  panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
-});
-
-$("#jsonBtn").addEventListener("click", () => exportJson());
+$("#jsonBtn").addEventListener("click", () => saveManagedProject({ interactive: true }));
+$("#backupBtn").addEventListener("click", () => exportJson());
+$("#projectManagerBtn").addEventListener("click", () => openProjectLibrary(!managedProjectId));
+$("#projectVersionsBtn").addEventListener("click", openProjectVersions);
 $("#importBtn").addEventListener("click", () => $("#importInput").click());
 $("#shareBtn").addEventListener("click", shareProject);
 $("#copyShareLinkBtn").addEventListener("click", copyShareLink);
 $("#importInput").addEventListener("change", importJson);
+$("#projectLibraryNewBtn").addEventListener("click", startNewProject);
+$("#projectCreateSaveBtn").addEventListener("click", createManagedProject);
+$("#projectCreateInput").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  createManagedProject();
+});
+$("#projectCreateDialog").addEventListener("close", () => {
+  pendingProjectCreationMode = "blank";
+});
+$("#projectLibraryDialog").addEventListener("cancel", (event) => {
+  if ($("#projectLibraryDialog").classList.contains("is-required")) event.preventDefault();
+});
+$("#projectLibrarySearch").addEventListener("input", renderProjectLibrary);
+$("#projectLibraryTabs").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-project-library-tab]");
+  if (!button) return;
+  projectLibraryTab = button.dataset.projectLibraryTab === "trash" ? "trash" : "active";
+  $$("#projectLibraryTabs [data-project-library-tab]").forEach((entry) => {
+    entry.classList.toggle("is-active", entry === button);
+  });
+  refreshProjectLibrary();
+});
+$("#projectLibraryList").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-project-action]");
+  if (button) runProjectLibraryAction(button.dataset.projectAction, button.dataset.projectId);
+});
+$("#projectVersionsList").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-version-revision]");
+  if (button) restoreProjectVersion(Number(button.dataset.versionRevision));
+});
+$("#projectLibraryList").addEventListener("dblclick", (event) => {
+  if (projectLibraryTab === "trash" || event.target.closest("button")) return;
+  const row = event.target.closest("[data-project-row]");
+  if (row) openManagedProject(row.dataset.projectRow);
+});
+$("#projectRenameSaveBtn").addEventListener("click", applyProjectRename);
+$("#projectRenameInput").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  applyProjectRename();
+});
+$("#projectRenameDialog").addEventListener("close", () => {
+  pendingProjectRenameId = "";
+});
 $("#videoBtn").addEventListener("click", exportVideo);
 $("#videoPanelBtn").addEventListener("click", exportVideo);
+$("#blockingPlanBtn").addEventListener("click", exportBlockingPlanImage);
+$("#blockingPlanPanelBtn").addEventListener("click", exportBlockingPlanImage);
 $("#frameBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePanelBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePairBtn").addEventListener("click", exportStartEndCameraFrames);
@@ -8126,6 +8100,7 @@ $("#addKeyBtn").addEventListener("click", addMotionKey);
 $("#updateKeyBtn").addEventListener("click", updateSelectedKey);
 $("#deleteKeyBtn").addEventListener("click", deleteSelectedKey);
 $("#playBtn").addEventListener("click", playPreview);
+$("#pauseBtn").addEventListener("click", pausePreview);
 $("#stopBtn").addEventListener("click", stopPreview);
 
 $$('.toolbar-menu-popover button').forEach((button) => {
@@ -8133,6 +8108,35 @@ $$('.toolbar-menu-popover button').forEach((button) => {
     const menu = button.closest("details");
     if (menu) menu.open = false;
   });
+});
+
+$$('.toolbar-menu').forEach((menu) => {
+  menu.querySelector("summary")?.addEventListener("click", () => {
+    if (menu.open) return;
+    $$('.toolbar-menu[open]').forEach((otherMenu) => {
+      if (otherMenu !== menu) otherMenu.open = false;
+    });
+  });
+  menu.addEventListener("toggle", () => {
+    if (!menu.open) return;
+    $$('.toolbar-menu[open]').forEach((otherMenu) => {
+      if (otherMenu !== menu) otherMenu.open = false;
+    });
+  });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest?.(".toolbar-menu")) return;
+  $$('.toolbar-menu[open]').forEach((menu) => { menu.open = false; });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || tutorialOpen || document.querySelector("dialog[open]")) return;
+  const openMenus = $$('.toolbar-menu[open]');
+  if (!openMenus.length) return;
+  openMenus.forEach((menu) => { menu.open = false; });
+  openMenus.at(-1)?.querySelector("summary")?.focus({ preventScroll: true });
+  event.preventDefault();
 });
 
 $("#keySourceSelect").addEventListener("change", (event) => {
@@ -8158,16 +8162,32 @@ $("#timelineMode").addEventListener("click", (event) => {
   commit();
 });
 
-$("#keyTimeInput").addEventListener("change", (event) => {
+function scrubFromTimelineTimeInput(event) {
+  if (preview) pausePreview();
   const time = clamp(Number(event.target.value), 0, MAX_TIMELINE_DURATION);
+  const previousDuration = state.motion.duration;
   ensureDurationCovers(time);
-  state.motion.playhead = time;
-  commit();
+  if (state.motion.duration !== previousDuration) commit();
+  scrubToTime(time);
+}
+
+$("#keyTimeInput").addEventListener("change", scrubFromTimelineTimeInput);
+$("#keyTimeInput").addEventListener("keydown", (event) => {
+  event.stopPropagation();
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  scrubFromTimelineTimeInput(event);
+  event.target.blur();
 });
 
 $("#keyTransitionSelect").addEventListener("change", (event) => {
   const keyframe = selectedKeyframe();
   if (!keyframe) return;
+  if (sourceEditLocked(keyframe.source)) {
+    notifyEditLocked(sourceLabel(keyframe.source));
+    syncUi();
+    return;
+  }
   const sourceKeys = keysForSource(keyframe.source);
   if (sourceKeys[0]?.id === keyframe.id) {
     syncUi();
@@ -8175,7 +8195,9 @@ $("#keyTransitionSelect").addEventListener("change", (event) => {
   }
   const previousMode = normalizeTransition(keyframe.transition);
   const nextMode = normalizeTransition(event.target.value);
-  const sameTimeKeys = state.motion.keyframes.filter((entry) => Math.abs(entry.time - keyframe.time) < 0.05);
+  const sameTimeKeys = state.motion.keyframes.filter((entry) => (
+    Math.abs(entry.time - keyframe.time) < 0.05 && !sourceEditLocked(entry.source)
+  ));
   if (nextMode === "cut") {
     sameTimeKeys.forEach((entry) => {
       if (keysForSource(entry.source)[0]?.id !== entry.id) entry.transition = "cut";
@@ -8187,12 +8209,39 @@ $("#keyTransitionSelect").addEventListener("change", (event) => {
   } else {
     keyframe.transition = nextMode;
   }
-  state.reference.analysis.cutTimes = shotCutTimes();
-  state.reference.analysis.sceneCuts = state.reference.analysis.cutTimes.length;
   commit();
 });
 
+function saveSelectedKeyInstruction(event) {
+  const keyframe = selectedKeyframe();
+  if (!keyframe) {
+    syncUi();
+    return;
+  }
+  if (sourceEditLocked(keyframe.source)) {
+    notifyEditLocked(sourceLabel(keyframe.source));
+    syncUi();
+    return;
+  }
+  keyframe.note = String(event.target.value || "").trim().slice(0, 80);
+  commit();
+}
+
+$("#keyInstructionInput").addEventListener("change", saveSelectedKeyInstruction);
+$("#keyInstructionInput").addEventListener("keydown", (event) => {
+  event.stopPropagation();
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  saveSelectedKeyInstruction(event);
+  event.target.blur();
+});
+
 $("#durationInput").addEventListener("change", (event) => {
+  if (hasLockedTimelineSources()) {
+    notifyApp("잠긴 대상의 키가 있어 전체 길이를 바꿀 수 없습니다.");
+    syncUi();
+    return;
+  }
   const previousDuration = state.motion.duration || 1;
   const nextDuration = clamp(Number(event.target.value), 1, MAX_TIMELINE_DURATION);
   const scale = nextDuration / previousDuration;
@@ -8210,14 +8259,16 @@ $("#fpsInput").addEventListener("change", (event) => {
 });
 
 function addMotionKey() {
-  materializeEvaluatedViewForEditing();
   const requestedTime = readTimelineTimeInput(state.motion.playhead);
   ensureDurationCovers(requestedTime);
   const selectedStageSource = selectedSourceId();
-  const sources = activeSourceId() === "all"
+  const requestedSources = activeSourceId() === "all"
     ? visibleSourceDefinitions().map((source) => source.id)
     : [activeSourceId()];
+  const sources = requestedSources.filter((sourceId) => !sourceEditLocked(sourceId));
   if (!sources.length) return;
+  ensureDurationCovers(requestedTime);
+  materializeEvaluatedViewForEditing(activeSourceId());
   const requestedPathMode = $("#keyPathSelect")?.value || "straight";
   const changedKeys = [];
   sources.forEach((sourceId) => {
@@ -8233,11 +8284,13 @@ function addMotionKey() {
   state.motion.selectedKeyId = selectedKey?.id || state.motion.selectedKeyId;
   state.motion.playhead = selectedKey?.time ?? requestedTime;
   commit();
-  notifyApp(`현재 시간에 키 ${changedKeys.length}개를 추가했습니다.`);
+  const skipped = requestedSources.length - sources.length;
+  notifyApp(skipped
+    ? `잠긴 대상 ${skipped}개를 제외하고 키 ${changedKeys.length}개를 추가했습니다.`
+    : `현재 시간에 키 ${changedKeys.length}개를 추가했습니다.`);
 }
 
 function updateSelectedKey() {
-  materializeEvaluatedViewForEditing();
   const sourceId = activeSourceId();
   const keyframe = sourceId === "all"
     ? selectedKeyframe()
@@ -8245,9 +8298,19 @@ function updateSelectedKey() {
       ? selectedKeyframe()
       : selectKeyForSource(sourceId);
   if (!keyframe) return;
+  if (sourceEditLocked(keyframe.source)) {
+    notifyEditLocked(sourceLabel(keyframe.source));
+    return;
+  }
+  materializeEvaluatedViewForEditing(keyframe.source);
+  const previousPose = clone(keyframe.pose);
   const requestedTime = readTimelineTimeInput(keyframe.time);
   const cutGroup = keyframe.transition === "cut"
-    ? state.motion.keyframes.filter((entry) => entry.transition === "cut" && Math.abs(entry.time - keyframe.time) < 0.05)
+    ? state.motion.keyframes.filter((entry) => (
+      entry.transition === "cut"
+      && Math.abs(entry.time - keyframe.time) < 0.05
+      && !sourceEditLocked(entry.source)
+    ))
     : [keyframe];
   const time = cutGroup.length > 1
     ? availableGroupedKeyTime(requestedTime, cutGroup, MAX_TIMELINE_DURATION)
@@ -8256,13 +8319,18 @@ function updateSelectedKey() {
   cutGroup.forEach((entry) => {
     entry.time = time;
   });
-  keyframe.pose = poseForSource(keyframe.source);
+  const nextPose = poseForSource(keyframe.source);
+  keyframe.pose = keyframe.source === "camera"
+    ? mergeLockedCameraPose(nextPose, keyframe.pose)
+    : nextPose;
   const requestedPathMode = $("#keyPathSelect")?.value || pathModeForSegment(keyframe.segment, keyframe.source);
   applyPathModeToKeyframe(keyframe, requestedPathMode);
+  if (keyframe.source === "camera") {
+    keyframe.pose = mergeLockedCameraPose(keyframe.pose, previousPose);
+    applySourcePose("camera", keyframe.pose);
+  }
   state.motion.playhead = time;
   state.motion.keyframes = sortKeyframes(state.motion.keyframes);
-  state.reference.analysis.cutTimes = shotCutTimes();
-  state.reference.analysis.sceneCuts = state.reference.analysis.cutTimes.length;
   commit();
   notifyApp("선택한 키를 갱신했습니다.");
 }
@@ -8270,11 +8338,19 @@ function updateSelectedKey() {
 function deleteSelectedKey() {
   const keyframe = selectedKeyframe();
   if (!keyframe) return;
+  if (sourceEditLocked(keyframe.source)) {
+    notifyEditLocked(sourceLabel(keyframe.source));
+    return;
+  }
   state.motion.keyframes = state.motion.keyframes.filter((entry) => entry.id !== keyframe.id);
   const next = nearestKeyframe(keysForSource(keyframe.source), keyframe.time)
     || nearestKeyframe(sortKeyframes(state.motion.keyframes), keyframe.time);
   state.motion.selectedKeyId = next?.id || null;
-  if (next) applyKeyframeToStage(next);
+  if (next) {
+    setActiveSource(next.source);
+    selectSourceOnStage(next.source);
+    applyKeyframeToStage(next);
+  }
   else state.motion.selectedKeyId = null;
   commit();
   notifyApp("선택한 키를 삭제했습니다.");
@@ -8400,6 +8476,7 @@ function selectKeyframe(id) {
 }
 
 function scrubToTime(time) {
+  if (preview) pausePreview();
   const safeTime = clamp(time, 0, state.motion.duration);
   evaluatedViewState = interpolateStateAtTime(safeTime);
   syncUi();
@@ -8410,11 +8487,32 @@ function displayPlayhead() {
   return evaluatedViewState?.motion?.playhead ?? state.motion.playhead;
 }
 
-function materializeEvaluatedViewForEditing() {
+function restoreUncommittedState(startState) {
+  state = clone(startState);
+  evaluatedViewState = null;
+  sanitizeState();
+  const cut = currentCut();
+  if (cut) cut.blocking = state;
+  selected = selectedExists(selected) ? selected : { kind: "camera" };
+  selectKeyForSource(selectedSourceId() || activeSourceId());
+  syncUi();
+  draw();
+  syncProjectChrome();
+}
+
+function materializeEvaluatedViewForEditing(sourceId = selectedSourceId() || activeSourceId()) {
   if (!evaluatedViewState) return;
   state.motion.playhead = evaluatedViewState.motion.playhead;
-  state.camera = clone(evaluatedViewState.camera);
-  state.items = clone(evaluatedViewState.items);
+  if (sourceId === "all") {
+    state.camera = clone(evaluatedViewState.camera);
+    state.items = clone(evaluatedViewState.items);
+  } else if (sourceId === "camera") {
+    state.camera = clone(evaluatedViewState.camera);
+  } else {
+    const evaluatedItem = evaluatedViewState.items.find((item) => item.id === sourceId);
+    const itemIndex = state.items.findIndex((item) => item.id === sourceId);
+    if (evaluatedItem && itemIndex >= 0) state.items[itemIndex] = clone(evaluatedItem);
+  }
   evaluatedViewState = null;
 }
 
@@ -8441,81 +8539,62 @@ function lerpAngle(a, b, t) {
 }
 
 function playPreview() {
-  stopPreview();
+  if (preview) return;
+  const startTime = displayPlayhead() >= state.motion.duration - 0.001 ? 0 : displayPlayhead();
   const startedAt = performance.now();
-  const duration = state.motion.duration * 1000;
+  const duration = Math.max(0.001, state.motion.duration);
   preview = requestAnimationFrame(function frame(now) {
-    const t = ((now - startedAt) % duration) / duration;
-    updatePlayheadDisplay(t * state.motion.duration);
-    draw(interpolateState(t), { clean: false });
+    const elapsed = startTime + (now - startedAt) / 1000;
+    const time = Math.min(elapsed, duration);
+    evaluatedViewState = interpolateStateAtTime(time);
+    updatePlayheadDisplay(time);
+    draw(evaluatedViewState, { clean: false });
+    if (elapsed >= duration) {
+      preview = null;
+      syncPlaybackControls();
+      return;
+    }
     preview = requestAnimationFrame(frame);
   });
+  syncPlaybackControls();
+}
+
+function pausePreview() {
+  if (preview) cancelAnimationFrame(preview);
+  preview = null;
+  if (evaluatedViewState) {
+    updatePlayheadDisplay(evaluatedViewState.motion.playhead);
+    draw(evaluatedViewState, { clean: false });
+  }
+  syncPlaybackControls();
 }
 
 function stopPreview() {
   if (preview) cancelAnimationFrame(preview);
   preview = null;
+  evaluatedViewState = interpolateStateAtTime(0);
+  updatePlayheadDisplay(0);
+  draw(evaluatedViewState, { clean: false });
+  syncPlaybackControls();
+}
+
+function cancelPreview() {
+  if (preview) cancelAnimationFrame(preview);
+  preview = null;
+  evaluatedViewState = null;
+  updatePlayheadDisplay(state.motion.playhead);
   draw();
+  syncPlaybackControls();
 }
 
-function renderPrevisQuality() {
-  const report = computePrevisQuality();
-  const score = $("#qualityScore");
-  const notes = $("#qualityNotes");
-  if (!score || !notes) return;
-  score.textContent = `${report.score}/100`;
-  score.title = report.readiness;
-  notes.innerHTML = [...report.checks]
-    .sort((a, b) => Number(a.ok) - Number(b.ok))
-    .slice(0, 4)
-    .map((check) => `<span>${check.ok ? "확인" : "점검"} · ${escapeHtml(check.label)}</span>`)
-    .join("");
-}
-
-function renderPipelineSteps() {
-  const root = $("#pipelineSteps");
-  if (!root) return;
-  const report = computePrevisQuality();
-  const keyframes = sortKeyframes(state.motion.keyframes || []);
-  const movingSources = sourceDefinitions()
-    .filter((source) => keyframes.filter((keyframe) => keyframe.source === source.id).length > 1)
-    .map((source) => source.name);
-  const video = state.reference || {};
-  const videoLabel = video.analysis?.status === "ready"
-    ? "키 " + video.analysis.keyCount + "개"
-    : video.name
-      ? "준비됨"
-      : "없음";
-  const steps = [
-    {
-      label: "블로킹",
-      value: "키 " + keyframes.length + "개 · " + state.motion.duration.toFixed(1) + "초",
-      state: keyframes.length > sourceDefinitions().length ? "ready" : "warn",
-    },
-    {
-      label: "동선",
-      value: movingSources.length ? movingSources.join(", ") : "고정",
-      state: movingSources.length ? "ready" : "warn",
-    },
-    {
-      label: "소스 영상",
-      value: videoLabel,
-      state: videoLabel === "없음" ? "idle" : "ready",
-    },
-    {
-      label: "검수",
-      value: report.score + "/100 · " + report.readiness,
-      state: report.score >= 86 ? "ready" : report.score >= 70 ? "warn" : "idle",
-    },
-  ];
-  root.innerHTML = steps
-    .map((step) => `
-      <div class="pipeline-step is-${step.state}">
-        <span>${escapeHtml(step.label)}</span>
-        <strong>${escapeHtml(step.value)}</strong>
-      </div>
-    `)
-    .join("");
+function syncPlaybackControls() {
+  const playing = Boolean(preview);
+  const playButton = $("#playBtn");
+  const pauseButton = $("#pauseBtn");
+  const stopButton = $("#stopBtn");
+  if (playButton) playButton.disabled = playing;
+  if (pauseButton) pauseButton.disabled = !playing;
+  if (stopButton) stopButton.disabled = !playing && displayPlayhead() <= 0.001;
 }
 
 function computePrevisQuality(renderState = state) {
@@ -8543,8 +8622,6 @@ function computePrevisQuality(renderState = state) {
   const rightmostTime = keyframes.reduce((max, keyframe) => Math.max(max, keyframe.time), 0);
   const hasCameraKeys = keyframes.some((keyframe) => keyframe.source === "camera");
   const notesReady = String(renderState.sceneIntent || "").trim().length >= 32;
-  const hasSourceVideo = Boolean(renderState.reference?.name);
-  const hasVideoDraft = renderState.reference?.analysis?.status === "ready";
   const checks = [
     {
       id: "actors",
@@ -8601,12 +8678,6 @@ function computePrevisQuality(renderState = state) {
       label: movingSources.length ? `움직이는 대상 ${movingSources.length}개` : "움직일 대상에 두 번째 키 추가",
       ok: movingSources.length > 0,
       weight: 12,
-    },
-    {
-      id: "source_video",
-      label: hasVideoDraft ? "영상 초안 생성됨" : hasSourceVideo ? "영상 초안 만들기" : "영상 초안은 선택 사항",
-      ok: true,
-      weight: 0,
     },
     {
       id: "timeline_end",
@@ -8790,6 +8861,7 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
     scaleY: lerp(from.scaleY, to.scaleY, t),
     scaleZ: lerp(from.scaleZ, to.scaleZ, t),
     facing: lerpAngle(from.facing, to.facing, t),
+    bodyPose: from.type === "actor" ? interpolateBodyPose(from.bodyPose, to.bodyPose, t) : null,
     color: to.color,
     shape: to.shape,
     assetType: to.assetType,
@@ -8875,6 +8947,7 @@ function sanitizeCameraPoseFor(renderState, camera) {
     tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, -60, 60),
     focal: clamp(Number(camera.focal ?? renderState.camera.focal), 14, 135),
     trackingTargetId: sanitizeTrackingTargetId(camera.trackingTargetId ?? renderState.camera.trackingTargetId, renderState),
+    locks: sanitizeCameraLocks(renderState.camera.locks),
   };
   return syncCameraDerivedAim(sanitized, renderState);
 }
@@ -8892,21 +8965,18 @@ async function buildProductionPack() {
   const cameraFrame = await captureCameraFrameBlob(state);
   const storyboard = await captureStoryboardFrames();
   const storyboardContactSheet = await renderStoryboardContactSheet(storyboard);
-  const sourceVideoContactSheet = await captureReferenceContactSheet();
-  const manifest = buildPrevisManifest(quality, storyboard, sourceVideoContactSheet);
+  const manifest = buildPrevisManifest(quality, storyboard);
   const files = [
     { path: "manifest.json", content: JSON.stringify(manifest, null, 2) },
     { path: "project/frisframe.json", content: JSON.stringify({ app: SERVICE_NAME, state }, null, 2) },
     { path: "project/camera_plan.json", content: JSON.stringify(buildCameraPlan(), null, 2) },
     { path: "project/motion_keyframes.csv", content: buildMotionCsv() },
     { path: "project/framing_analysis.json", content: JSON.stringify(quality.framing, null, 2) },
-    { path: "project/source_video.json", content: JSON.stringify(buildSourceVideoManifest(), null, 2) },
     { path: "docs/shot_bible.md", content: buildShotBibleMarkdown(quality) },
     { path: "docs/live_action_brief.md", content: buildLiveActionBrief(quality) },
     { path: "docs/ai_generation_brief.md", content: buildAiGenerationBrief(quality) },
     { path: "docs/on_set_checklist.md", content: buildOnSetChecklist(quality) },
     { path: "docs/framing_analysis.md", content: buildFramingAnalysisMarkdown(quality.framing) },
-    { path: "docs/source_video_draft.md", content: buildSourceVideoDraftMarkdown() },
     { path: "docs/camera_storyboard.md", content: buildCameraStoryboardMarkdown(storyboard) },
     { path: "docs/seedance_prompt.md", content: buildSeedancePrompt() },
     { path: "docs/quality_report.json", content: JSON.stringify(quality, null, 2) },
@@ -8916,12 +8986,10 @@ async function buildProductionPack() {
     { path: "storyboard/contact_sheet.png", blob: storyboardContactSheet },
     ...storyboard.map((frame) => ({ path: frame.path, blob: frame.blob })),
   ];
-  if (referenceClipBlob) files.push({ path: "source-video/source_video" + referenceExtension(state.reference.name, state.reference.type), blob: referenceClipBlob });
-  if (sourceVideoContactSheet) files.push({ path: "source-video/contact_sheet.png", blob: sourceVideoContactSheet });
   return { manifest, files };
 }
 
-function buildPrevisManifest(quality, storyboard = [], sourceVideoContactSheet = null) {
+function buildPrevisManifest(quality, storyboard = []) {
   return {
     app: SERVICE_NAME,
     pipeline: "blocking + 3d-camera-previs production pack",
@@ -8938,7 +9006,6 @@ function buildPrevisManifest(quality, storyboard = [], sourceVideoContactSheet =
       readiness: quality.readiness,
       framingReviewCount: quality.framing.reviewCount,
     },
-    sourceVideo: buildSourceVideoManifest(),
     exports: ["Seedance prompt", "Blender previs", "Top-down blocking", "Camera storyboard"],
     storyboardFrames: storyboard.map((frame) => ({
       time: frame.time,
@@ -8950,13 +9017,11 @@ function buildPrevisManifest(quality, storyboard = [], sourceVideoContactSheet =
       "project/camera_plan.json",
       "project/motion_keyframes.csv",
       "project/framing_analysis.json",
-      "project/source_video.json",
       "docs/shot_bible.md",
       "docs/live_action_brief.md",
       "docs/ai_generation_brief.md",
       "docs/on_set_checklist.md",
       "docs/framing_analysis.md",
-      "docs/source_video_draft.md",
       "docs/camera_storyboard.md",
       "docs/seedance_prompt.md",
       "docs/quality_report.json",
@@ -8964,8 +9029,6 @@ function buildPrevisManifest(quality, storyboard = [], sourceVideoContactSheet =
       "media/topdown_blocking.png",
       "media/camera_frame_current.png",
       "storyboard/contact_sheet.png",
-      ...(referenceClipBlob ? ["source-video/source_video" + referenceExtension(state.reference.name, state.reference.type)] : []),
-      ...(sourceVideoContactSheet ? ["source-video/contact_sheet.png"] : []),
       ...storyboard.map((frame) => frame.path),
     ],
   };
@@ -8982,11 +9045,6 @@ function buildCameraPlan() {
     fps: state.motion.fps,
     position: { x: round(cam.x), y: round(cam.y), heightM: round(cam.height, 2), label: `(${pct(cam.x)}, ${pct(cam.y)}, ${round(cam.height, 2)}m)` },
     orientation: { panDeg: round(cam.panDeg, 1), tiltDeg: round(cam.tiltDeg, 1) },
-    sourceVideoSolve: {
-      motionType: state.reference.analysis?.cameraMotionType || "static",
-      interpretation: state.reference.calibration?.cameraInterpretation || "balanced",
-      stabilizationStrength: state.reference.calibration?.stabilizationStrength ?? 0.75,
-    },
     cameraKeyframes: keysForSource("camera").map((keyframe) => ({
       time: keyframe.time,
       transition: normalizeTransition(keyframe.transition),
@@ -8994,75 +9052,6 @@ function buildCameraPlan() {
       headingDeg: cameraHeadingDeg(sanitizeCameraPose(keyframe.pose)),
     })),
   };
-}
-
-function buildSourceVideoManifest() {
-  const reference = state.reference || sanitizeReference();
-  return {
-    sourceName: reference.name || "",
-    sourceType: reference.type || "",
-    sourceSizeBytes: reference.size || 0,
-    duration: round(reference.duration || 0, 2),
-    analysisRange: {
-      start: round(reference.start || 0, 2),
-      end: round(reference.end || reference.duration || 0, 2),
-    },
-    precision: reference.precision || "detailed",
-    showOverlay: reference.showOverlay !== false,
-    calibration: clone(reference.calibration || sanitizeReferenceCalibration()),
-    hasBundledClip: Boolean(referenceClipBlob),
-    draft: {
-      status: reference.analysis?.status || "idle",
-      keyCount: reference.analysis?.keyCount || 0,
-      actorCount: reference.analysis?.actorCount || 0,
-      motionScore: reference.analysis?.motionScore || 0,
-      tracking: reference.analysis?.tracking || "motion",
-      detectedFrames: reference.analysis?.detectedFrames || 0,
-      sampleCount: reference.analysis?.sampleCount || 0,
-      cameraConfidence: reference.analysis?.cameraConfidence || 0,
-      cameraMotionType: reference.analysis?.cameraMotionType || "static",
-      cameraPan: reference.analysis?.cameraPan || 0,
-      cameraZoom: reference.analysis?.cameraZoom || 0,
-      cameraJitter: reference.analysis?.cameraJitter || 0,
-      actorConfidence: reference.analysis?.actorConfidence || 0,
-      sceneCuts: reference.analysis?.sceneCuts || 0,
-      cutTimes: clone(reference.analysis?.cutTimes || []),
-    },
-  };
-}
-
-function buildMotionPrevisCompatibilityManifest(quality) {
-  return {
-    app: SERVICE_NAME,
-    compatibleWith: "motion-previs-studio production bundle concepts",
-    subjectMode: state.previs.mode,
-    motionPrevisImported: Boolean(state.motionPrevis.imported),
-    motionPrevisSource: state.motionPrevis.sourceName || "",
-    exportPresets: state.previs.exportPresets,
-    selectedLayers: state.previs.selectedLayers,
-    shotRange: { start: 0, end: state.motion.duration, duration: state.motion.duration },
-    qualityReport: {
-      score: quality.score,
-      readiness: motionPrevisReadiness(quality.score),
-      tracking: "Manual blocking",
-      camera: "Manual camera plan",
-      layers: state.previs.selectedLayers.length >= 6 ? "Excellent" : state.previs.selectedLayers.length >= 4 ? "Good" : "Review",
-      notes: quality.checks.map((check) => `${check.ok ? "OK" : "Review"}: ${check.label}`),
-    },
-    outputs: {
-      topdownMap: "media/topdown_blocking.png",
-      cameraFrame: "media/camera_frame_current.png",
-      storyboard: "storyboard/contact_sheet.png",
-      blenderScript: "blender/blender_previs_scene.py",
-      seedancePrompt: "docs/seedance_prompt.md",
-    },
-  };
-}
-
-function motionPrevisReadiness(score) {
-  if (score >= 80) return "Ready";
-  if (score >= 58) return "Review";
-  return "Blocked";
 }
 
 function buildShotBibleMarkdown(quality) {
@@ -9075,9 +9064,6 @@ function buildShotBibleMarkdown(quality) {
     "",
     "## Intent",
     state.sceneIntent || "No intent written.",
-    "",
-    "## Source Video",
-    sourceVideoSummaryMarkdown(),
     "",
     "## Camera",
     cameraMarkdown(),
@@ -9124,7 +9110,7 @@ function buildLiveActionBrief(quality) {
     "- Confirm the practical lens against the preview frame before rolling.",
     "- Mark the camera position and rehearse the planned pan, tilt, and tracking move.",
     "- Keep the relative spacing from the top-down map; scale the whole setup to the real location.",
-    "- Shoot one clean reference pass before performance variations.",
+    "- Shoot one clean rehearsal pass before performance variations.",
     "",
   ].join("\n");
 }
@@ -9136,11 +9122,8 @@ function buildAiGenerationBrief(quality) {
     `Readiness: ${quality.score}/100 · ${quality.readiness}`,
     "",
     "## Primary Instruction",
-    "Use the included top-down blocking map and camera-frame storyboard as control references, not as visual style references.",
+    "Use the included top-down blocking map and camera-frame storyboard as composition guides, not as visual style guides.",
     "Generate cinematic live-action footage with realistic scale, lighting, people, props, lens behavior, and camera timing.",
-    "",
-    "## Source Video",
-    sourceVideoSummaryMarkdown(),
     "",
     "## Preserve",
     "- Camera position, lens feel, pan, tilt, and field-of-view relationship.",
@@ -9178,7 +9161,7 @@ function buildOnSetChecklist(quality) {
     "- Check that no important subject leaves the intended camera frame.",
     "",
     "## AI Input Capture",
-    "- Record one clean wide reference pass of the blocking.",
+    "- Record one clean wide rehearsal pass of the blocking.",
     "- Record one camera-frame match pass if using this as Seedance or AI video input.",
     "- Keep timing close to the exported duration and keyframe beats.",
     "",
@@ -9229,58 +9212,6 @@ function buildFramingAnalysisMarkdown(framing = analyzeFraming()) {
   ].join("\n");
 }
 
-function buildReferenceAnalysisBrief(quality) {
-  return [
-    `# Reference Analysis Brief · ${state.sceneTitle || "Untitled blocking"}`,
-    "",
-    "This combines the manual blocking map with Motion Previs-style source planning.",
-    "",
-    "## Source",
-    referenceSummaryMarkdown(),
-    "",
-    "## Control Layers",
-    selectedLayerMarkdown(),
-    "",
-    "## Motion Previs Import",
-    motionPrevisSummaryMarkdown(),
-    "",
-    "## Export Presets",
-    selectedPresetMarkdown(),
-    "",
-    "## Readiness",
-    `- Score: ${quality.score}/100 · ${quality.readiness}`,
-    ...quality.checks.map((check) => `- ${check.ok ? "OK" : "Review"}: ${check.label}`),
-    "",
-  ].join("\n");
-}
-
-function buildMotionPrevisBridgeMarkdown(quality) {
-  return [
-    `# Motion Previs Bridge · ${state.sceneTitle || "Untitled blocking"}`,
-    "",
-    "This file explains how the imported Motion Previs analysis is being used inside the manual blocking plan.",
-    "",
-    "## Imported Analysis",
-    motionPrevisSummaryMarkdown(),
-    "",
-    "## Current Blocking Translation",
-    `- Reference mode: ${previsModes[state.previs.mode].label}.`,
-    `- Target: ${previsTargets[state.previs.target]}.`,
-    `- Timeline duration: ${state.motion.duration.toFixed(1)}s at ${state.motion.fps}fps.`,
-    `- Camera keys: ${keysForSource("camera").length}.`,
-    "",
-    "## Readiness",
-    `- ${SERVICE_NAME}: ${quality.score}/100 · ${quality.readiness}.`,
-    `- Motion Previs bridge: ${state.motionPrevis.imported ? "linked" : "not linked"}.`,
-    "",
-    "## Hand-off",
-    "- Use the Motion Previs files for extracted pose, depth, masks, camera solve, and control-layer guidance.",
-    "- Use this app's top-down map, camera storyboard, and framing analysis for spatial blocking and on-set marks.",
-    "- Resolve any framing warnings before using the reference video in Seedance or before taping the real location.",
-    "",
-  ].join("\n");
-}
-
 function framingSummaryMarkdown(framing) {
   if (!framing || !framing.samples?.length) return "- No framing samples.";
   const lines = [
@@ -9290,69 +9221,6 @@ function framingSummaryMarkdown(framing) {
   if (framing.notes.length) lines.push(...framing.notes.map((note) => `- ${note}.`));
   else lines.push("- All sampled subjects sit inside the planned camera frame.");
   return lines.join("\n");
-}
-
-function motionPrevisSummaryMarkdown() {
-  const imported = state.motionPrevis || {};
-  if (!imported.imported) return "- No Motion Previs analysis imported yet.";
-  const lines = [
-    `- Source: ${imported.sourceName || "Unknown source"}.`,
-    `- Pose frames: ${imported.frameCount || 0}. Camera frames: ${imported.cameraMoveFrames || 0}. Sample FPS: ${imported.sampleFps || 0}.`,
-  ];
-  if (imported.qualityReport?.score != null) lines.push(`- Imported quality: ${imported.qualityReport.score}/100 · ${imported.qualityReport.readiness}.`);
-  if (imported.poseDiagnostics?.length) lines.push(...imported.poseDiagnostics.slice(0, 4).map((note) => `- Diagnostic: ${note}`));
-  if (imported.shotBible?.length) lines.push(`- Shot bible entries: ${imported.shotBible.length}.`);
-  const availableFiles = Object.entries(imported.files || {}).filter(([, value]) => value).map(([key]) => key);
-  if (availableFiles.length) lines.push(`- Available bundle files: ${availableFiles.slice(0, 12).join(", ")}.`);
-  return lines.join("\n");
-}
-
-function sourceVideoSummaryMarkdown() {
-  const reference = state.reference || sanitizeReference();
-  const lines = [];
-  if (reference.name) lines.push(`- Source clip: ${reference.name}${reference.size ? ` (${formatBytes(reference.size)})` : ""}.`);
-  if (reference.duration) lines.push(`- Duration: ${reference.duration.toFixed(1)}s.`);
-  if (reference.analysis?.status === "ready") {
-    const calibration = reference.calibration || sanitizeReferenceCalibration();
-    const direction = { 0: "right", 90: "down", 180: "left", 270: "up" }[calibration.rotation] || "right";
-    lines.push(`- Analysis range: ${reference.start.toFixed(1)}s-${reference.end.toFixed(1)}s · ${reference.precision === "fast" ? "fast" : "detailed"} pass · ${reference.analysis.sampleCount} samples.`);
-    lines.push(`- Draft: ${reference.analysis.keyCount} timing beats from ${reference.analysis.actorCount} actor track(s).`);
-    lines.push(reference.analysis.tracking === "vision"
-      ? `- Person tracking: detected in ${reference.analysis.detectedFrames} sampled frame(s).`
-      : "- Person tracking: motion-based fallback.");
-    const cutTimes = (reference.analysis.cutTimes || []).map((time) => `${Number(time).toFixed(1)}s`).join(", ");
-    lines.push(`- Solve confidence: camera ${reference.analysis.cameraConfidence}/100 (${cameraMotionLabels[reference.analysis.cameraMotionType] || reference.analysis.cameraMotionType}) · actors ${reference.analysis.actorConfidence}/100 · scene cuts ${reference.analysis.sceneCuts}${cutTimes ? ` at ${cutTimes}` : ""}.`);
-    lines.push(`- Camera signal: pan ${round(reference.analysis.cameraPan, 4)} · zoom ${round(reference.analysis.cameraZoom, 4)} · jitter ${round(reference.analysis.cameraJitter, 3)}.`);
-    lines.push(`- Floor-map calibration: ${calibration.anchorToCurrent ? "anchored to the current actor marks" : "centered automatically"}; video-right maps ${direction}; lateral ${Math.round(calibration.lateralScale * 100)}%; depth ${Math.round(calibration.depthScale * 100)}%; camera gain ${Math.round(calibration.cameraGain * 100)}%; interpretation ${calibration.cameraInterpretation}; stabilization ${Math.round(calibration.stabilizationStrength * 100)}%.`);
-    lines.push(`- Motion signal: ${reference.analysis.motionScore}/100. Review camera and actor placement in 2D or 3D.`);
-  }
-  if (!lines.length) lines.push("- No source video attached. This was built directly from blocking.");
-  return lines.join("\n");
-}
-
-function referenceSummaryMarkdown() {
-  return sourceVideoSummaryMarkdown();
-}
-
-function buildSourceVideoDraftMarkdown() {
-  return [
-    `# Source Video Draft · ${state.sceneTitle || "Untitled blocking"}`,
-    "",
-    "The source video is translated into editable timing, camera, and actor blocking keys. It is a starting point for previs, not a locked camera solve.",
-    "",
-    "## Source",
-    sourceVideoSummaryMarkdown(),
-    "",
-    "## Result",
-    `- Timeline: ${state.motion.duration.toFixed(1)}s at ${state.motion.fps}fps.`,
-    `- Camera keys: ${keysForSource("camera").length}.`,
-    `- Actor marks: ${state.items.filter((item) => item.type === "actor").length}.`,
-    "",
-    "## Next Pass",
-    "- Verify actor positions against the source shot in 2D or 3D.",
-    "- Adjust camera height, lens, pan, tilt, and timing before handoff.",
-    "",
-  ].join("\n");
 }
 
 function selectedLayerMarkdown() {
@@ -9547,7 +9415,7 @@ async function captureCameraFrameBlob(renderState = state) {
   if (!window.THREE || !initThreeView()) throw new Error("3D 카메라 프레임을 준비하지 못했습니다.");
   let blob = null;
   await withCameraFrameCapture(async () => {
-    renderThreeView(renderState, true);
+    renderThreeView(renderState, true, { guide: false });
     await nextFrame();
     blob = await canvasToBlob(threeView.frameCanvas, "image/png");
   });
@@ -9563,7 +9431,7 @@ async function captureStoryboardFrames() {
     for (let index = 0; index < times.length; index += 1) {
       const time = times[index];
       const renderState = interpolateStateAtTime(time);
-      renderThreeView(renderState, true);
+      renderThreeView(renderState, true, { guide: false });
       await nextFrame();
       const safeTime = String(Math.round(time * 10)).padStart(4, "0");
       const path = `storyboard/frame_${String(index + 1).padStart(2, "0")}_${safeTime}.png`;
@@ -9666,64 +9534,6 @@ async function renderStoryboardContactSheet(storyboard) {
   return canvasToBlob(sheet, "image/png");
 }
 
-async function captureReferenceContactSheet() {
-  if (!referenceClipBlob) return null;
-  const video = $("#referencePreview");
-  if (!video || !video.src) return null;
-  await ensureVideoMetadata(video);
-  const duration = Number.isFinite(video.duration) ? video.duration : 0;
-  if (!duration) return null;
-
-  const start = clamp(state.reference.start || 0, 0, duration);
-  const end = clamp(state.reference.end || duration, start, duration);
-  const span = Math.max(0.1, end - start);
-  const times = [start, start + span * 0.5, end].map((time) => clamp(time, 0, duration));
-  const tileW = 420;
-  const tileH = Math.round(tileW / (aspectMap[state.aspect] || 16 / 9));
-  const labelH = 34;
-  const gap = 18;
-  const margin = 24;
-  const sheet = document.createElement("canvas");
-  sheet.width = margin * 2 + times.length * tileW + (times.length - 1) * gap;
-  sheet.height = margin * 2 + tileH + labelH;
-  const context = sheet.getContext("2d");
-  context.fillStyle = "#0b0e12";
-  context.fillRect(0, 0, sheet.width, sheet.height);
-  context.fillStyle = "#f2f5ef";
-  context.font = "800 18px system-ui, sans-serif";
-  context.fillText(state.reference.name || "Reference clip", margin, 22);
-
-  for (let index = 0; index < times.length; index += 1) {
-    await seekVideo(video, times[index]);
-    const x = margin + index * (tileW + gap);
-    const y = margin;
-    context.drawImage(video, x, y, tileW, tileH);
-    context.strokeStyle = "#3b4b55";
-    context.lineWidth = 2;
-    context.strokeRect(x, y, tileW, tileH);
-    context.fillStyle = "#ff6b55";
-    context.font = "800 14px ui-monospace, monospace";
-    context.fillText(`${times[index].toFixed(1)}s`, x, y + tileH + 24);
-  }
-
-  return canvasToBlob(sheet, "image/png");
-}
-
-function ensureVideoMetadata(video) {
-  if (video.readyState >= 1) return Promise.resolve();
-  return new Promise((resolve) => {
-    video.addEventListener("loadedmetadata", resolve, { once: true });
-  });
-}
-
-function seekVideo(video, time) {
-  return new Promise((resolve) => {
-    const done = () => resolve();
-    video.addEventListener("seeked", done, { once: true });
-    video.currentTime = clamp(time, 0, video.duration || time);
-  });
-}
-
 function imageFromBlob(blob) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
@@ -9738,29 +9548,6 @@ function imageFromBlob(blob) {
     };
     image.src = url;
   });
-}
-
-function referenceExtension(name, type) {
-  const match = String(name || "").match(/\.[a-z0-9]{2,6}$/i);
-  if (match) return match[0].toLowerCase();
-  if (type === "video/mp4") return ".mp4";
-  if (type === "video/webm") return ".webm";
-  if (type === "video/quicktime") return ".mov";
-  return ".video";
-}
-
-function referenceRangeDuration() {
-  const reference = state.reference || {};
-  const end = Number(reference.end || reference.duration || 0);
-  const start = Number(reference.start || 0);
-  return Math.max(0, end - start);
-}
-
-function formatBytes(bytes) {
-  const value = Number(bytes || 0);
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines = 2) {
@@ -9793,14 +9580,50 @@ async function renderTopdownPngBlob() {
   return canvasToBlob(offscreen, "image/png");
 }
 
-async function exportPng() {
-  const size = exportSize();
+async function exportBlockingPlanImage() {
+  if (!beginMediaExport()) return;
+  const exportDocument = clone(state);
+  const time = clamp(Number(displayPlayhead() || 0), 0, exportDocument.motion.duration);
+  const exportState = interpolateRenderStateAtTime(exportDocument, time);
+  exportState.showGrid = true;
+  exportState.showCamera = true;
+  exportState.showNames = true;
+  exportState.cleanExport = false;
+  exportState.planReferenceExport = true;
+  exportState.motion.selectedKeyId = "";
+  const size = exportSize(exportState);
   const offscreen = document.createElement("canvas");
   offscreen.width = size.width;
   offscreen.height = size.height;
-  renderToCanvas(offscreen, state, { clean: true });
-  const blob = await canvasToBlob(offscreen, "image/png");
-  presentExport(blob, `${slug(state.sceneTitle)}_blocking.png`, "PNG 이미지", { type: "image", blob });
+  const previousSelection = selected;
+  const previousSnapGuide = pathSnapGuide;
+  try {
+    selected = null;
+    pathSnapGuide = null;
+    renderToCanvas(offscreen, exportState, { clean: true });
+    const blob = await canvasToBlob(offscreen, "image/png");
+    presentExport(
+      blob,
+      `${slug(exportState.sceneTitle)}_blocking_plan_${formatFrameTime(time)}.png`,
+      "2D 블로킹 가이드 PNG",
+      {
+        type: "image",
+        blob,
+        caption: `@plan · ${time.toFixed(1)}초 배치 · 전체 동선과 키 포함`,
+        notes: [
+          "3D 가이드 영상과 함께 첨부하면 카메라와 피사체의 월드 공간 이동을 구분하는 데 도움이 됩니다.",
+          "최종 영상에는 평면도와 표식을 그리지 않고, 배치와 이동 의미만 적용하도록 사용합니다.",
+        ],
+      },
+    );
+  } catch (error) {
+    presentExportError(error?.message || "2D 블로킹 이미지를 준비하지 못했습니다.");
+  } finally {
+    selected = previousSelection;
+    pathSnapGuide = previousSnapGuide;
+    endMediaExport();
+    draw();
+  }
 }
 
 async function renderCameraFrameBlobAtTime(time, documentState, size = exportSize(documentState)) {
@@ -9809,7 +9632,7 @@ async function renderCameraFrameBlobAtTime(time, documentState, size = exportSiz
     documentState,
     clamp(Number(time || 0), 0, documentState.motion.duration),
   );
-  renderThreeView(renderState, true, size);
+  renderThreeView(renderState, true, { ...size, guide: false });
   await nextFrame();
   const blob = await canvasToBlob(threeView.frameCanvas, "image/png");
   resizeThreeView();
@@ -9978,7 +9801,7 @@ async function exportStoryboardContactSheets(capacity) {
   if (![4, 6, 12].includes(capacity)) return;
   const entries = storyboardEntriesForScope(true);
   if (!entries.length) {
-    notifyApp("현재 범위와 상태에 해당하는 컷이 없습니다.");
+    notifyApp("전체 시나리오에서 이 상태에 해당하는 컷이 없습니다.");
     return;
   }
   if (!beginMediaExport()) return;
@@ -10029,6 +9852,663 @@ function formatFrameTime(time) {
   return `${Number(time || 0).toFixed(2).replace(".", "-")}s`;
 }
 
+function managedProjectDocument() {
+  syncActiveCutDocument(false);
+  return {
+    app: SERVICE_NAME,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    savedAt: isoNow(),
+    project: clone(project),
+  };
+}
+
+function managedProjectRecoveryKey(projectId = managedProjectId) {
+  return projectId ? `${PROJECT_RECOVERY_KEY_PREFIX}${projectId}` : "";
+}
+
+function cancelManagedProjectRecovery() {
+  if (managedRecoveryTimer) clearTimeout(managedRecoveryTimer);
+  managedRecoveryTimer = null;
+}
+
+function scheduleManagedProjectRecovery() {
+  if (managedRecoveryTimer || !managedProjectId || suppressManagedAutosave) return;
+  managedRecoveryTimer = setTimeout(() => {
+    managedRecoveryTimer = null;
+    writeManagedProjectRecoveryNow();
+  }, 350);
+}
+
+function writeManagedProjectRecoveryNow() {
+  cancelManagedProjectRecovery();
+  if (!managedProjectId || !project || suppressManagedAutosave) return false;
+  try {
+    const documentPayload = managedProjectDocument();
+    const record = createRecoveryRecord({
+      projectId: managedProjectId,
+      revision: managedProjectRevision,
+      document: documentPayload,
+    });
+    window.localStorage.setItem(managedProjectRecoveryKey(), JSON.stringify(record));
+    managedRecoveryWarningShown = false;
+    return true;
+  } catch {
+    if (!managedRecoveryWarningShown) {
+      managedRecoveryWarningShown = true;
+      notifyApp("브라우저 복구본을 남기지 못했습니다. 프로젝트 저장을 다시 확인하세요.");
+    }
+    return false;
+  }
+}
+
+function readManagedProjectRecovery(projectId) {
+  const key = managedProjectRecoveryKey(projectId);
+  if (!key) return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const record = parseRecoveryRecord(raw);
+    if (!record) window.localStorage.removeItem(key);
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+function clearManagedProjectRecovery(projectId = managedProjectId) {
+  const key = managedProjectRecoveryKey(projectId);
+  if (!key) return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Recovery is optional when browser storage is unavailable.
+  }
+}
+
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const upstreamSignal = options.signal;
+  let timedOut = false;
+  const abortFromUpstream = () => controller.abort(upstreamSignal.reason);
+  if (upstreamSignal?.aborted) abortFromUpstream();
+  else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(resource, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (!timedOut) throw error;
+    const timeoutError = new Error("서버 응답 시간이 초과되었습니다. 연결을 확인한 뒤 다시 시도하세요.");
+    timeoutError.name = "TimeoutError";
+    throw timeoutError;
+  } finally {
+    clearTimeout(timeoutId);
+    upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+  }
+}
+
+async function readApiError(response, fallback) {
+  const payload = await response.json().catch(() => ({}));
+  const error = new Error(payload.error || fallback);
+  error.status = response.status;
+  error.code = payload.code || "";
+  error.payload = payload;
+  return error;
+}
+
+function scheduleFirstTutorial() {
+  if (!hasSeenTutorial()) setTimeout(() => startTutorial(0), 650);
+}
+
+function isProjectConnectionError(error) {
+  return error?.name === "TimeoutError"
+    || error instanceof TypeError
+    || /failed to fetch|networkerror|network request failed/i.test(String(error?.message || error));
+}
+
+function projectConnectionHelp(error) {
+  if (isProjectConnectionError(error)) {
+    return `
+      <strong>FrisFrame 프로젝트 서버에 연결할 수 없습니다.</strong>
+      <span>Google AI Studio나 파일 미리보기가 아니라 로컬 FrisFrame 주소에서 작업해야 프로젝트를 저장할 수 있습니다.</span>
+      <a class="primary-btn" href="${escapeHtml(window.location.origin)}/">로컬 FrisFrame 열기</a>`;
+  }
+  return `<strong>프로젝트 작업을 완료하지 못했습니다.</strong><span>${escapeHtml(error?.message || error)}</span>`;
+}
+
+async function resolveManagedProjectRecovery(payload) {
+  const storage = payload?.storage || {};
+  const serverDocument = payload?.document;
+  const serverProject = projectFromPayload(serverDocument);
+  const recovery = readManagedProjectRecovery(storage.id);
+  const recoveryState = classifyRecovery(recovery, {
+    projectId: storage.id,
+    revision: storage.revision,
+    document: serverDocument,
+  });
+  if (recoveryState === "none") return { project: serverProject, storage, recovered: false };
+  if (recoveryState === "same") {
+    clearManagedProjectRecovery(storage.id);
+    return { project: serverProject, storage, recovered: false };
+  }
+  if (recoveryState === "restore") {
+    const restore = confirm("저장 완료 전에 닫힌 편집 내용이 있습니다. 마지막 복구본을 이어서 열까요?");
+    if (restore) {
+      return { project: projectFromPayload(recovery.document), storage, recovered: true };
+    }
+    clearManagedProjectRecovery(storage.id);
+    return { project: serverProject, storage, recovered: false };
+  }
+
+  const preserve = confirm("서버 저장본과 별도로 남은 편집 복구본이 있습니다. 덮어쓰지 않고 새 프로젝트 사본으로 보존할까요?");
+  if (!preserve) {
+    clearManagedProjectRecovery(storage.id);
+    return { project: serverProject, storage, recovered: false };
+  }
+  const recoveryDocument = clone(recovery.document);
+  recoveryDocument.project.title = `${recoveryDocument.project.title || "프로젝트"} (복구본)`;
+  recoveryDocument.savedAt = isoNow();
+  const response = await fetchWithTimeout("/api/projects/store", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ document: recoveryDocument }),
+  });
+  if (!response.ok) throw await readApiError(response, "복구 사본을 보존하지 못했습니다.");
+  const result = await response.json();
+  clearManagedProjectRecovery(storage.id);
+  return {
+    project: projectFromPayload(recoveryDocument),
+    storage: {
+      id: result.id,
+      revision: Number(result.revision || 1),
+      updatedAt: result.updatedAt || recoveryDocument.savedAt,
+    },
+    recovered: false,
+    preservedCopy: true,
+  };
+}
+
+async function createManagedProject() {
+  const title = $("#projectCreateInput").value.trim();
+  if (!title) {
+    notifyApp("프로젝트 제목을 입력하세요.");
+    $("#projectCreateInput").focus();
+    return false;
+  }
+  const nextProject = pendingProjectCreationMode === "current"
+    ? (() => {
+      syncActiveCutDocument(false);
+      return clone(project);
+    })()
+    : createDefaultProject(defaultState());
+  const now = isoNow();
+  nextProject.title = title;
+  nextProject.updatedAt = now;
+  if (pendingProjectCreationMode === "blank") nextProject.createdAt = now;
+  const documentPayload = {
+    app: SERVICE_NAME,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    savedAt: now,
+    project: clone(nextProject),
+  };
+  const button = $("#projectCreateSaveBtn");
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = "<span>만드는 중...</span>";
+  try {
+    const response = await fetchWithTimeout("/api/projects/store", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ document: documentPayload }),
+    });
+    if (!response.ok) throw await readApiError(response, "프로젝트를 만들지 못했습니다.");
+    const result = await response.json();
+    suppressManagedAutosave = true;
+    clearManagedProjectBinding();
+    loadProjectDocument(nextProject);
+    managedProjectId = result.id;
+    managedProjectRevision = Number(result.revision || 1);
+    managedProjectUpdatedAt = result.updatedAt || now;
+    rememberManagedProject(managedProjectId);
+    clearManagedProjectRecovery(managedProjectId);
+    setProjectSaveStatus("saved");
+    suppressManagedAutosave = false;
+    setWorkspaceMode("blocking");
+    $("#projectCreateDialog").close();
+    if ($("#projectLibraryDialog").open) $("#projectLibraryDialog").close();
+    notifyApp(`‘${title}’ 프로젝트를 만들었습니다.`);
+    scheduleFirstTutorial();
+    return true;
+  } catch (error) {
+    suppressManagedAutosave = false;
+    const errorBox = $("#projectCreateError");
+    errorBox.innerHTML = projectConnectionHelp(error);
+    errorBox.hidden = false;
+    return false;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
+    refreshLucideIcons();
+  }
+}
+
+async function saveManagedProject({ interactive = false } = {}) {
+  if (managedSaveInFlight) {
+    if (interactive) notifyApp("현재 프로젝트를 저장하고 있습니다.");
+    return false;
+  }
+  if (!managedProjectId) {
+    if (interactive) openProjectCreateDialog({ mode: "current" });
+    return false;
+  }
+  if (managedSaveConflict) {
+    if (!interactive) return false;
+    if (confirm("다른 창의 저장본과 충돌한 상태입니다. 현재 편집본을 새 프로젝트로 보존할까요?")) {
+      clearManagedProjectBinding();
+      setProjectSaveStatus("changed");
+      openProjectCreateDialog({ mode: "current" });
+    }
+    return false;
+  }
+  const documentPayload = managedProjectDocument();
+  const savedFingerprint = captureProjectSnapshot();
+  let preserveAsCopy = false;
+  managedSaveInFlight = true;
+  setProjectSaveStatus("saving");
+  try {
+    const response = await fetchWithTimeout("/api/projects/store", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: managedProjectId || undefined,
+        revision: managedProjectId ? managedProjectRevision : undefined,
+        document: documentPayload,
+      }),
+    });
+    if (!response.ok) throw await readApiError(response, "프로젝트를 저장하지 못했습니다.");
+    const result = await response.json();
+    managedProjectId = result.id;
+    managedProjectRevision = Number(result.revision || 1);
+    managedProjectUpdatedAt = result.updatedAt || isoNow();
+    managedSaveConflict = false;
+    rememberManagedProject(managedProjectId);
+    const unchangedDuringSave = captureProjectSnapshot() === savedFingerprint;
+    if (unchangedDuringSave) clearManagedProjectRecovery(managedProjectId);
+    setProjectSaveStatus(unchangedDuringSave ? "saved" : "changed");
+    notifyApp(interactive ? "프로젝트를 저장했습니다." : "변경 내용을 자동 저장했습니다.");
+    return true;
+  } catch (error) {
+    if (error.status === 409 || error.code === "revision_conflict") {
+      managedSaveConflict = true;
+      setProjectSaveStatus("conflict");
+      notifyApp("다른 창의 저장본과 충돌해 자동 저장을 멈췄습니다.");
+      if (interactive) {
+        preserveAsCopy = confirm("다른 창에서 이 프로젝트가 먼저 저장되었습니다. 현재 편집본을 새 프로젝트로 보존할까요?");
+      }
+    } else {
+      setProjectSaveStatus("error");
+      if (interactive) alert(`프로젝트를 저장하지 못했습니다. ${error.message}`);
+      else notifyApp("자동 저장에 실패했습니다. 상단 저장 버튼으로 다시 시도하세요.");
+    }
+    return false;
+  } finally {
+    managedSaveInFlight = false;
+    if (projectSaveStatus === "changed" && !managedSaveConflict) scheduleManagedAutosave();
+    if (preserveAsCopy) {
+      clearManagedProjectBinding();
+      setProjectSaveStatus("changed");
+      setTimeout(() => saveManagedProject({ interactive: true }), 0);
+    }
+  }
+}
+
+function formatProjectDate(value) {
+  if (!value) return "기록 없음";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatProjectDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  const remainder = total % 60;
+  return minutes ? `${minutes}분 ${remainder}초` : `${remainder}초`;
+}
+
+function renderProjectVersions() {
+  const root = $("#projectVersionsList");
+  if (!projectVersionItems.length) {
+    root.innerHTML = `
+      <div class="project-version-empty">
+        <i data-lucide="history" aria-hidden="true"></i>
+        <strong>이전 저장본이 아직 없습니다</strong>
+        <span>프로젝트를 두 번 이상 저장하면 이곳에 표시됩니다.</span>
+      </div>`;
+    refreshLucideIcons();
+    return;
+  }
+  root.innerHTML = projectVersionItems.map((version) => `
+    <article class="project-version-row">
+      <div>
+        <strong>${escapeHtml(version.title || project.title || "프로젝트")}</strong>
+        <span>${escapeHtml(formatProjectDate(version.savedAt))} · 저장본 ${Number(version.revision)}</span>
+      </div>
+      <button type="button" class="text-btn" data-version-revision="${Number(version.revision)}">
+        <i data-lucide="rotate-ccw" aria-hidden="true"></i><span>복원</span>
+      </button>
+    </article>`).join("");
+  refreshLucideIcons();
+}
+
+async function openProjectVersions() {
+  $("#projectMenu").open = false;
+  if (!managedProjectId) {
+    notifyApp("프로젝트를 먼저 저장하면 최근 저장본을 볼 수 있습니다.");
+    return;
+  }
+  const dialog = $("#projectVersionsDialog");
+  const root = $("#projectVersionsList");
+  root.innerHTML = '<div class="project-version-loading">최근 저장본을 불러오는 중...</div>';
+  if (!dialog.open) dialog.showModal();
+  try {
+    const response = await fetchWithTimeout(`/api/projects/versions?id=${encodeURIComponent(managedProjectId)}`);
+    if (!response.ok) throw await readApiError(response, "최근 저장본을 불러오지 못했습니다.");
+    const payload = await response.json();
+    projectVersionItems = Array.isArray(payload.versions) ? payload.versions : [];
+    renderProjectVersions();
+  } catch (error) {
+    root.innerHTML = `<div class="project-version-empty"><i data-lucide="cloud-off" aria-hidden="true"></i><strong>저장본을 불러오지 못했습니다</strong><span>${escapeHtml(error.message)}</span></div>`;
+    refreshLucideIcons();
+  }
+}
+
+async function restoreProjectVersion(versionRevision) {
+  const version = projectVersionItems.find((entry) => Number(entry.revision) === Number(versionRevision));
+  if (!version || !managedProjectId || managedSaveInFlight) return;
+  const restore = confirm(`${formatProjectDate(version.savedAt)}의 저장본 ${version.revision}로 복원할까요?\n현재 저장본도 복구 이력에 남습니다.`);
+  if (!restore) return;
+  writeManagedProjectRecoveryNow();
+  try {
+    const response = await fetchWithTimeout("/api/projects/version/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: managedProjectId,
+        revision: managedProjectRevision,
+        versionRevision: version.revision,
+      }),
+    });
+    if (!response.ok) throw await readApiError(response, "이전 저장본을 복원하지 못했습니다.");
+    const payload = await response.json();
+    suppressManagedAutosave = true;
+    loadProjectDocument(projectFromPayload(payload.document));
+    managedProjectRevision = Number(payload.storage.revision || managedProjectRevision + 1);
+    managedProjectUpdatedAt = payload.storage.updatedAt || isoNow();
+    clearManagedProjectRecovery(managedProjectId);
+    setProjectSaveStatus("saved");
+    suppressManagedAutosave = false;
+    $("#projectVersionsDialog").close();
+    notifyApp(`저장본 ${version.revision}을 복원했습니다.`);
+  } catch (error) {
+    suppressManagedAutosave = false;
+    if (error.status === 409 || error.code === "revision_conflict") {
+      managedSaveConflict = true;
+      setProjectSaveStatus("conflict");
+    }
+    alert(`이전 저장본을 복원하지 못했습니다. ${error.message}`);
+  }
+}
+
+function renderProjectLibrary() {
+  const list = $("#projectLibraryList");
+  if (!list) return;
+  const query = $("#projectLibrarySearch").value.trim().toLocaleLowerCase("ko");
+  const filtered = projectLibraryItems.filter((entry) => String(entry.title || "").toLocaleLowerCase("ko").includes(query));
+  const trashMode = projectLibraryTab === "trash";
+  $("#projectLibrarySummary").textContent = query
+    ? `${filtered.length}개 검색됨 · ${trashMode ? "휴지통" : "내 프로젝트"}`
+    : `${filtered.length}개 프로젝트 · ${trashMode ? "휴지통" : "최근 작업 순"}`;
+  if (!filtered.length) {
+    list.innerHTML = `
+      <div class="project-library-empty">
+        <i data-lucide="${query ? "search-x" : trashMode ? "trash-2" : "folder-plus"}" aria-hidden="true"></i>
+        <strong>${query ? "검색 결과가 없습니다" : trashMode ? "휴지통이 비어 있습니다" : "저장된 프로젝트가 없습니다"}</strong>
+        <p>${query ? "다른 프로젝트 이름으로 검색해 보세요." : trashMode ? "삭제한 프로젝트가 이곳에 표시됩니다." : "새 프로젝트를 만들면 이 목록에서 관리할 수 있습니다."}</p>
+      </div>`;
+    refreshLucideIcons();
+    return;
+  }
+  list.innerHTML = filtered.map((entry) => {
+    const current = entry.id === managedProjectId;
+    const activeActions = `
+      <button type="button" class="icon-btn" data-project-action="open" data-project-id="${entry.id}" title="열기" aria-label="${escapeHtml(entry.title)} 열기"><i data-lucide="folder-open"></i></button>
+      <button type="button" class="icon-btn" data-project-action="rename" data-project-id="${entry.id}" title="이름 변경" aria-label="${escapeHtml(entry.title)} 이름 변경"><i data-lucide="pencil"></i></button>
+      <button type="button" class="icon-btn" data-project-action="duplicate" data-project-id="${entry.id}" title="복제" aria-label="${escapeHtml(entry.title)} 복제"><i data-lucide="copy"></i></button>
+      <button type="button" class="icon-btn danger" data-project-action="trash" data-project-id="${entry.id}" title="휴지통으로 이동" aria-label="${escapeHtml(entry.title)} 휴지통으로 이동"><i data-lucide="trash-2"></i></button>`;
+    const trashActions = `
+      <button type="button" class="icon-btn" data-project-action="restore" data-project-id="${entry.id}" title="복원" aria-label="${escapeHtml(entry.title)} 복원"><i data-lucide="rotate-ccw"></i></button>
+      <button type="button" class="icon-btn danger" data-project-action="delete" data-project-id="${entry.id}" title="영구 삭제" aria-label="${escapeHtml(entry.title)} 영구 삭제"><i data-lucide="trash-2"></i></button>`;
+    return `
+      <article class="project-library-row${current ? " is-current" : ""}" data-project-row="${entry.id}">
+        <div class="project-library-title">
+          <strong>${escapeHtml(entry.title || "새 프로젝트")}${current ? '<span class="project-library-current">현재 열림</span>' : ""}</strong>
+          <span>수정 ${escapeHtml(formatProjectDate(entry.updatedAt))}</span>
+        </div>
+        <div class="project-library-meta">
+          <strong>${Number(entry.sceneCount || 0)}씬 · ${Number(entry.cutCount || 0)}컷</strong>
+          <span>${escapeHtml(formatProjectDuration(entry.durationSeconds))}</span>
+        </div>
+        <div class="project-library-time">${trashMode ? `삭제 ${escapeHtml(formatProjectDate(entry.deletedAt))}` : `최근 열기 ${escapeHtml(formatProjectDate(entry.openedAt || entry.updatedAt))}`}</div>
+        <div class="project-library-actions">${trashMode ? trashActions : activeActions}</div>
+      </article>`;
+  }).join("");
+  refreshLucideIcons();
+}
+
+async function refreshProjectLibrary() {
+  const summary = $("#projectLibrarySummary");
+  summary.textContent = "프로젝트를 불러오는 중...";
+  $("#projectLibraryList").innerHTML = "";
+  try {
+    const response = await fetchWithTimeout(`/api/projects?trash=${projectLibraryTab === "trash" ? "1" : "0"}`);
+    if (!response.ok) throw await readApiError(response, "프로젝트 목록을 불러오지 못했습니다.");
+    const payload = await response.json();
+    projectLibraryItems = Array.isArray(payload.projects) ? payload.projects : [];
+    renderProjectLibrary();
+  } catch (error) {
+    projectLibraryItems = [];
+    summary.textContent = "프로젝트 목록을 불러오지 못했습니다.";
+    $("#projectLibraryList").innerHTML = `<div class="project-library-empty"><i data-lucide="cloud-off"></i>${projectConnectionHelp(error)}</div>`;
+    refreshLucideIcons();
+  }
+}
+
+function setProjectLibraryRequired(required) {
+  const dialog = $("#projectLibraryDialog");
+  dialog.classList.toggle("is-required", Boolean(required));
+  $("#projectLibraryLead").textContent = required
+    ? "프로젝트를 새로 만들거나 기존 프로젝트를 열어야 작업을 시작할 수 있습니다."
+    : "프로젝트를 선택하거나 새로 만들어 작업을 이어가세요.";
+}
+
+async function openProjectLibrary(required = !managedProjectId) {
+  const dialog = $("#projectLibraryDialog");
+  setProjectLibraryRequired(required);
+  projectLibraryTab = "active";
+  $("#projectLibrarySearch").value = "";
+  $$("#projectLibraryTabs [data-project-library-tab]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.projectLibraryTab === projectLibraryTab);
+  });
+  if (!dialog.open) dialog.showModal();
+  await refreshProjectLibrary();
+}
+
+async function postProjectAction(action, body) {
+  const response = await fetchWithTimeout(`/api/projects/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw await readApiError(response, "프로젝트 작업을 완료하지 못했습니다.");
+  return response.json();
+}
+
+async function openManagedProject(projectId) {
+  if (projectId === managedProjectId) {
+    $("#projectLibraryDialog").close();
+    notifyApp("현재 열려 있는 프로젝트입니다.");
+    return;
+  }
+  if ((managedProjectId || hasUnsavedProjectChanges()) && !confirmProjectReplacement("다른 프로젝트를 열면")) return;
+  if (hasUnsavedProjectChanges()) writeManagedProjectRecoveryNow();
+  try {
+    const response = await fetchWithTimeout(`/api/projects/load?id=${encodeURIComponent(projectId)}`);
+    if (!response.ok) throw await readApiError(response, "프로젝트를 열지 못했습니다.");
+    const payload = await response.json();
+    const resolved = await resolveManagedProjectRecovery(payload);
+    suppressManagedAutosave = true;
+    clearManagedProjectBinding();
+    loadProjectDocument(resolved.project);
+    managedProjectId = resolved.storage.id;
+    managedProjectRevision = Number(resolved.storage.revision || 1);
+    managedProjectUpdatedAt = resolved.storage.updatedAt || "";
+    rememberManagedProject(managedProjectId);
+    suppressManagedAutosave = false;
+    setProjectSaveStatus(resolved.recovered ? "changed" : "saved");
+    setWorkspaceMode("storyboard");
+    $("#projectLibraryDialog").close();
+    notifyApp(resolved.recovered ? "마지막 편집 복구본을 열었습니다." : resolved.preservedCopy ? "복구본을 새 프로젝트로 보존했습니다." : "프로젝트를 열었습니다.");
+    scheduleFirstTutorial();
+  } catch (error) {
+    suppressManagedAutosave = false;
+    alert(`프로젝트를 열지 못했습니다. ${error.message}`);
+  }
+}
+
+async function resumeLastManagedProject() {
+  let projectId = "";
+  try {
+    projectId = window.localStorage.getItem(LAST_MANAGED_PROJECT_KEY) || "";
+  } catch {
+    return false;
+  }
+  if (!projectId) return false;
+  try {
+    const response = await fetchWithTimeout(`/api/projects/load?id=${encodeURIComponent(projectId)}`);
+    if (!response.ok) throw await readApiError(response, "최근 프로젝트를 열지 못했습니다.");
+    const payload = await response.json();
+    const resolved = await resolveManagedProjectRecovery(payload);
+    suppressManagedAutosave = true;
+    loadProjectDocument(resolved.project);
+    managedProjectId = resolved.storage.id;
+    managedProjectRevision = Number(resolved.storage.revision || 1);
+    managedProjectUpdatedAt = resolved.storage.updatedAt || "";
+    rememberManagedProject(managedProjectId);
+    suppressManagedAutosave = false;
+    setProjectSaveStatus(resolved.recovered ? "changed" : "saved");
+    notifyApp(resolved.recovered ? "저장 전 마지막 편집을 복구했습니다." : resolved.preservedCopy ? "복구본을 새 프로젝트로 보존했습니다." : "최근 프로젝트를 이어서 열었습니다.");
+    return true;
+  } catch (error) {
+    suppressManagedAutosave = false;
+    notifyApp(`최근 프로젝트를 열지 못했습니다. ${error.message}`);
+    return false;
+  }
+}
+
+async function runProjectLibraryAction(action, projectId) {
+  const entry = projectLibraryItems.find((item) => item.id === projectId);
+  if (!entry) return;
+  try {
+    if (action === "open") {
+      await openManagedProject(projectId);
+      return;
+    }
+    if (action === "rename") {
+      pendingProjectRenameId = projectId;
+      $("#projectRenameInput").value = entry.title || "새 프로젝트";
+      $("#projectRenameDialog").showModal();
+      requestAnimationFrame(() => $("#projectRenameInput").select());
+      return;
+    } else if (action === "duplicate") {
+      await postProjectAction("duplicate", { id: projectId });
+      notifyApp("프로젝트 복사본을 만들었습니다.");
+    } else if (action === "trash") {
+      const suffix = projectId === managedProjectId && hasUnsavedProjectChanges() ? " 저장하지 않은 변경은 포함되지 않습니다." : "";
+      if (!confirm(`‘${entry.title}’ 프로젝트를 휴지통으로 이동할까요?${suffix}`)) return;
+      await postProjectAction("trash", { id: projectId });
+      if (projectId === managedProjectId) {
+        suppressManagedAutosave = true;
+        clearManagedProjectBinding();
+        loadProjectDocument(createDefaultProject(defaultState()));
+        setProjectSaveStatus("changed");
+        suppressManagedAutosave = false;
+        setProjectLibraryRequired(true);
+      }
+      notifyApp("프로젝트를 휴지통으로 이동했습니다.");
+    } else if (action === "restore") {
+      await postProjectAction("restore", { id: projectId });
+      notifyApp("프로젝트를 복원했습니다.");
+    } else if (action === "delete") {
+      if (!confirm(`‘${entry.title}’ 프로젝트를 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+      await postProjectAction("delete", { id: projectId });
+      notifyApp("프로젝트를 영구 삭제했습니다.");
+    }
+    await refreshProjectLibrary();
+  } catch (error) {
+    alert(`프로젝트 작업을 완료하지 못했습니다. ${error.message}`);
+  }
+}
+
+async function applyProjectRename() {
+  const projectId = pendingProjectRenameId;
+  const entry = projectLibraryItems.find((item) => item.id === projectId);
+  const title = $("#projectRenameInput").value.trim();
+  if (!projectId || !entry) return;
+  if (!title) {
+    notifyApp("프로젝트 이름을 입력하세요.");
+    $("#projectRenameInput").focus();
+    return;
+  }
+  if (title === entry.title) {
+    $("#projectRenameDialog").close();
+    return;
+  }
+  const button = $("#projectRenameSaveBtn");
+  button.disabled = true;
+  try {
+    if (projectId === managedProjectId) {
+      if (managedSaveInFlight) {
+        notifyApp("현재 저장이 끝난 뒤 이름을 다시 변경해 주세요.");
+        return;
+      }
+      project.title = title;
+      project.updatedAt = isoNow();
+      setProjectSaveStatus("changed");
+      syncProjectChrome();
+      const saved = await saveManagedProject({ interactive: true });
+      if (!saved) return;
+    } else {
+      await postProjectAction("rename", { id: projectId, title, revision: entry.revision });
+    }
+    $("#projectRenameDialog").close();
+    pendingProjectRenameId = "";
+    notifyApp("프로젝트 이름을 변경했습니다.");
+    await refreshProjectLibrary();
+  } catch (error) {
+    alert(`프로젝트 이름을 변경하지 못했습니다. ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function exportJson() {
   syncActiveCutDocument(false);
   const payload = {
@@ -10040,8 +10520,7 @@ function exportJson() {
   const text = JSON.stringify(payload, null, 2);
   const blob = new Blob([text], { type: "application/json" });
   presentExport(blob, `${slug(project.title)}_storyboard_project.json`, "스토리보드 프로젝트 JSON", { type: "text", text });
-  setProjectSaveStatus("prepared");
-  notifyApp("프로젝트 저장 프리뷰를 준비했습니다.");
+  notifyApp("JSON 백업 프리뷰를 준비했습니다.");
 }
 
 async function importJson(event) {
@@ -10052,11 +10531,15 @@ async function importJson(event) {
     const payload = JSON.parse(text);
     const nextProject = projectFromPayload(payload);
     if (!confirmProjectReplacement("프로젝트를 불러오면")) return;
+    suppressManagedAutosave = true;
+    clearManagedProjectBinding();
     loadProjectDocument(nextProject);
-    setProjectSaveStatus("saved");
-    notifyApp("프로젝트를 불러왔습니다.");
+    setProjectSaveStatus("changed");
+    suppressManagedAutosave = false;
+    notifyApp("JSON 백업을 불러왔습니다. 프로젝트로 저장할 수 있습니다.");
     setWorkspaceMode("storyboard");
   } catch (error) {
+    suppressManagedAutosave = false;
     alert(`프로젝트를 불러오지 못했습니다. ${error?.message || error}`);
   } finally {
     event.target.value = "";
@@ -10076,7 +10559,7 @@ async function shareProject() {
   shareBtn.disabled = true;
   shareBtn.innerHTML = `<span>공유 중...</span>`;
   try {
-    const response = await fetch("/api/project/save", {
+    const response = await fetchWithTimeout("/api/project/save", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -10088,7 +10571,8 @@ async function shareProject() {
       throw new Error(errorText);
     }
     const result = await response.json();
-    const shareUrl = `${window.location.origin}${window.location.pathname}?project=${result.id}`;
+    const shareToken = encodeURIComponent(result.shareToken || "");
+    const shareUrl = `${window.location.origin}${window.location.pathname}?project=${result.id}${shareToken ? `#share=${shareToken}` : ""}`;
     const shareDialog = $("#shareDialog");
     const shareLinkInput = $("#shareLinkInput");
     shareLinkInput.value = shareUrl;
@@ -10115,21 +10599,27 @@ async function copyShareLink() {
   }
 }
 
-async function loadSharedProject(id) {
+async function loadSharedProject(id, shareToken = "") {
   notifyApp("공유 프로젝트를 불러오는 중...");
   try {
-    const response = await fetch(`/api/project/load?id=${encodeURIComponent(id)}`);
+    const response = await fetchWithTimeout(`/api/project/load?id=${encodeURIComponent(id)}`, {
+      headers: shareToken ? { "X-FrisFrame-Share": shareToken } : {},
+    });
     if (!response.ok) {
       const errorText = await response.json().then(d => d.error).catch(() => "오류가 발생했습니다.");
       throw new Error(errorText);
     }
     const payload = await response.json();
     const nextProject = projectFromPayload(payload);
+    suppressManagedAutosave = true;
+    clearManagedProjectBinding();
     loadProjectDocument(nextProject);
-    setProjectSaveStatus("saved");
-    notifyApp("공유 프로젝트를 불러왔습니다.");
+    setProjectSaveStatus("changed");
+    suppressManagedAutosave = false;
+    notifyApp("공유 프로젝트를 열었습니다. 저장하면 내 프로젝트 사본이 됩니다.");
     setWorkspaceMode("storyboard");
   } catch (error) {
+    suppressManagedAutosave = false;
     alert(`공유 프로젝트를 불러오지 못했습니다: ${error.message}`);
   }
 }
@@ -10157,16 +10647,19 @@ function renderToCanvas(target, renderState, options = {}) {
 }
 
 async function exportVideo() {
-  if (!beginMediaExport()) return;
   const exportState = clone(state);
+  const fps = clamp(Math.round(Number(exportState.motion.fps || 24)), 12, 60);
+  const frameCount = Math.max(2, Math.round(exportState.motion.duration * fps));
+  if (frameCount > 1800 && !confirm(
+    `${frameCount.toLocaleString()}프레임을 준비합니다. 시간이 오래 걸리고 저장 공간이 많이 필요할 수 있습니다. 계속할까요?`,
+  )) return;
+  if (!beginMediaExport()) return;
   if (!initThreeView()) {
     presentExportError("3D 카메라 프레임을 준비하지 못했습니다.");
     endMediaExport();
     return;
   }
   const size = exportVideoSize(exportState);
-  const fps = clamp(Math.round(Number(exportState.motion.fps || 24)), 12, 60);
-  const frameCount = Math.max(2, Math.round(exportState.motion.duration * fps));
   const previousSelection = clone(selected);
   let jobId = "";
   try {
@@ -10231,17 +10724,18 @@ async function exportVideo() {
     renderMediaExportBusy();
     const blob = await finishMp4ExportJob(jobId);
     jobId = "";
-    presentExport(blob, `${slug(exportState.sceneTitle)}_camera_preview.mp4`, "3D 카메라 영상 H.264 MP4", {
+    const filename = `${slug(exportState.sceneTitle)}_previs_preview.mp4`;
+    presentExport(blob, filename, "프리비즈 H.264 MP4", {
       type: "video",
       blob,
       caption: `${exportState.motion.duration.toFixed(1)}초 · ${fps}FPS · ${frameCount}프레임`,
     });
   } catch (error) {
     if (jobId) await cancelMp4ExportJob(jobId);
-    presentExportError(error?.message || "MP4 카메라 영상을 만들지 못했습니다.");
+    presentExportError(error?.message || "MP4 프리비즈 영상을 만들지 못했습니다.");
   } finally {
     selected = previousSelection;
-    stopPreview();
+    cancelPreview();
     resizeThreeView();
     renderThreeView(interpolateStateAtTime(displayPlayhead()), true);
     mediaExportProgress = "";
@@ -10257,27 +10751,27 @@ function exportVideoSize(renderState = state) {
 }
 
 async function startMp4ExportJob(settings) {
-  const response = await fetch("/api/mp4/start", {
+  const response = await fetchWithTimeout("/api/mp4/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
-  });
+  }, 20000);
   const payload = await readExportResponse(response);
   if (!payload.jobId) throw new Error("MP4 작업을 시작하지 못했습니다.");
   return payload.jobId;
 }
 
 async function uploadMp4ExportFrame(jobId, index, blob) {
-  const response = await fetch(`/api/mp4/frame?job=${encodeURIComponent(jobId)}&index=${index}`, {
+  const response = await fetchWithTimeout(`/api/mp4/frame?job=${encodeURIComponent(jobId)}&index=${index}`, {
     method: "POST",
     headers: { "Content-Type": "image/jpeg" },
     body: blob,
-  });
+  }, 45000);
   await readExportResponse(response);
 }
 
 async function finishMp4ExportJob(jobId) {
-  const response = await fetch(`/api/mp4/finish?job=${encodeURIComponent(jobId)}`, { method: "POST" });
+  const response = await fetchWithTimeout(`/api/mp4/finish?job=${encodeURIComponent(jobId)}`, { method: "POST" }, 15 * 60 * 1000);
   if (!response.ok) {
     const payload = await readExportResponse(response);
     throw new Error(payload.error || "MP4 인코딩에 실패했습니다.");
@@ -10288,7 +10782,7 @@ async function finishMp4ExportJob(jobId) {
 
 async function cancelMp4ExportJob(jobId) {
   try {
-    await fetch(`/api/mp4/cancel?job=${encodeURIComponent(jobId)}`, { method: "POST" });
+    await fetchWithTimeout(`/api/mp4/cancel?job=${encodeURIComponent(jobId)}`, { method: "POST" }, 10000);
   } catch {
     // The server also clears unfinished jobs when it stops.
   }
@@ -10320,12 +10814,14 @@ function endMediaExport() {
 
 function renderMediaExportBusy() {
   const labels = {
+    "#blockingPlanBtn": "2D 블로킹 이미지",
+    "#blockingPlanPanelBtn": "2D 블로킹",
     "#frameBtn": "현재 프레임",
     "#framePanelBtn": "현재 프레임",
     "#framePairBtn": "시작·끝 프레임",
     "#framePairPanelBtn": "시작·끝",
-    "#videoBtn": "카메라 영상",
-    "#videoPanelBtn": "카메라 영상",
+    "#videoBtn": "프리비즈 영상",
+    "#videoPanelBtn": "프리비즈 영상",
   };
   Object.entries(labels).forEach(([selector, label]) => {
     const button = $(selector);
@@ -10350,13 +10846,20 @@ function buildSeedancePrompt() {
   const props = state.items.filter((item) => item.type === "prop");
   const keyframes = sortKeyframes(state.motion.keyframes);
   const framing = analyzeFraming();
+  const motionResponsibility = buildSeedanceGuideSegments(state);
   const lines = [
     `Scene: ${state.sceneTitle || "Untitled blocking"}`,
     "",
-    "Use @video_1 as the blocking and camera-plan reference.",
-    state.reference?.name ? "The attached source clip was translated into editable timing and movement beats. Preserve its motion rhythm, then refine the placement in this plan." : null,
-    "Do not copy the graphic style, grid, colored icons, labels, UI, or diagram look.",
+    "Use @video as a visual blocking guide. Read the animated anchors and arrows directly from the video.",
+    "For each moving subject: the hollow circle is the segment start, the bright dot is the current root position, the crosshair target is the next destination, and the arrow shows the remaining travel direction.",
+    "Expanding radial arrows mean the subject moves toward the locked camera; contracting radial arrows mean the subject moves farther away.",
+    "CAM labels describe camera responsibility. SUBJ labels and teal guides describe subject root-position movement.",
+    "All HUD, paths, anchors, arrows, markers, labels, and guide graphics are annotations only. Use their motion meaning, but do not reproduce the graphics in the final video.",
+    "Do not copy the graphic style, colored proxy models, UI, or diagram look.",
     "Final output must be cinematic live-action footage with realistic people, props, space, lighting, and camera behavior.",
+    "",
+    "Motion responsibility by segment:",
+    ...motionResponsibility,
     "",
     `Camera: position (${pct(cam.x)}, ${pct(cam.y)}) at ${round(cam.height, 2)}m height, pan ${round(cam.panDeg, 1)}°, tilt ${round(cam.tiltDeg, 1)}°, approximate ${cam.focal}mm lens / ${fov}° horizontal field of view, facing ${angle}° on the top-down map.`,
     "",
@@ -10371,23 +10874,38 @@ function buildSeedancePrompt() {
       ? props.map((item) => `- @${item.name}: ${positionText(item)}, facing ${Math.round(item.facing)}°.`)
       : ["- none"]),
     "",
-    "Source video:",
-    state.reference?.name ? `- Attached source: ${state.reference.name}.` : "- No source video attached; use the blocking plan directly.",
-    state.reference?.analysis?.status === "ready" ? `- Generated draft: ${state.reference.analysis.keyCount} beats, ${state.reference.analysis.actorCount} tracked actor(s).` : null,
     ...(framing.notes.length ? framing.notes.map((note) => `- Framing review: ${note}.`) : ["- Framing review: all sampled subjects stay inside the planned frame."]),
     "",
     "Blocking intent:",
-    state.sceneIntent || "Preserve the broad spatial relationship and timing from the reference.",
+    state.sceneIntent || "Preserve the broad spatial relationship and timing from the blocking plan.",
     "",
-    "Constraints: preserve the broad camera path, actor spacing, facing directions, and prop relationships from the reference video. Treat it as previsualization, not final art direction.",
+    "Constraints: preserve the broad camera path, actor spacing, facing directions, and prop relationships from the blocking plan. Treat it as previsualization, not final art direction.",
   ].filter((line) => line !== null);
   return lines.join("\n");
+}
+
+function buildSeedanceGuideSegments(renderState) {
+  const duration = Number(renderState.motion?.duration || 0);
+  const times = new Set([0, duration]);
+  (renderState.motion?.keyframes || []).forEach((keyframe) => times.add(clamp(Number(keyframe.time), 0, duration)));
+  const sortedTimes = [...times].sort((a, b) => a - b);
+  if (sortedTimes.length < 2) return ["- Entire shot: CAM: LOCKED; SUBJ: HOLD."];
+  const lines = [];
+  for (let index = 1; index < sortedTimes.length; index += 1) {
+    const start = sortedTimes[index - 1];
+    const end = sortedTimes[index];
+    if (end - start < 0.001) continue;
+    const sample = interpolateRenderStateAtTime(renderState, (start + end) / 2);
+    const analysis = analyzeBlockingGuide(sample);
+    lines.push(`- ${start.toFixed(1)}-${end.toFixed(1)}s: ${cameraGuideLabel(analysis, sample)}; ${subjectGuideLabel(analysis, sample)}.`);
+  }
+  return lines.length ? lines : ["- Entire shot: CAM: LOCKED; SUBJ: HOLD."];
 }
 
 function keyframeSummary(keyframe) {
   if (keyframe.source === "camera") {
     const camera = sanitizeCameraPose(keyframe.pose);
-    return `camera (${pct(camera.x)}, ${pct(camera.y)}) at pan ${round(camera.panDeg, 1)}° and tilt ${round(camera.tiltDeg, 1)}°`;
+    return `H ${round(camera.height, 2)}m · camera (${pct(camera.x)}, ${pct(camera.y)}) · pan ${round(camera.panDeg, 1)}° · tilt ${round(camera.tiltDeg, 1)}°`;
   }
   const item = sanitizeSourcePose(keyframe.source, keyframe.pose);
   return `@${item.name} ${positionText(item)} facing ${Math.round(item.facing)}°`;
@@ -10446,6 +10964,16 @@ function renderExportPreview(body, preview) {
     text.textContent = String(preview.text || "");
     section.append(text);
   }
+  if (Array.isArray(preview.notes) && preview.notes.length) {
+    const notes = document.createElement("ul");
+    notes.className = "export-preview-notes";
+    preview.notes.forEach((note) => {
+      const item = document.createElement("li");
+      item.textContent = note;
+      notes.append(item);
+    });
+    section.append(notes);
+  }
   body.append(section);
 }
 
@@ -10495,7 +11023,9 @@ function createExportPreviewFigure(blob, caption, mediaType) {
         }, 2200);
       } catch (error) {
         console.error("image clipboard copy failed", error);
-        status.textContent = "이 브라우저에서는 이미지 복사를 사용할 수 없습니다";
+        status.textContent = window.frisframeDesktop?.isDesktop
+          ? "이미지를 복사하지 못했습니다"
+          : "이 브라우저에서는 이미지 복사를 사용할 수 없습니다";
       } finally {
         copyButton.disabled = false;
       }
@@ -10507,10 +11037,15 @@ function createExportPreviewFigure(blob, caption, mediaType) {
 }
 
 async function copyImageBlobToClipboard(blob) {
+  const pngBlob = blob.type === "image/png" ? blob : await convertImageBlobToPng(blob);
+  if (typeof window.frisframeDesktop?.copyImage === "function") {
+    const result = await window.frisframeDesktop.copyImage(new Uint8Array(await pngBlob.arrayBuffer()));
+    if (!result?.ok) throw new Error("Desktop image clipboard write failed.");
+    return;
+  }
   if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
     throw new Error("Image clipboard API is unavailable.");
   }
-  const pngBlob = blob.type === "image/png" ? blob : await convertImageBlobToPng(blob);
   await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
 }
 
@@ -10559,8 +11094,7 @@ $("#exportDownloadBtn").addEventListener("click", (event) => {
   pendingExport = null;
   $("#exportDialog").close();
   if (completedExport.filename.endsWith("_storyboard_project.json")) {
-    setProjectSaveStatus("saved");
-    notifyApp("프로젝트 파일을 저장했습니다.");
+    notifyApp("프로젝트 JSON 백업을 저장했습니다.");
   }
   revokePendingExportUrls(completedExport, 2000);
 });
@@ -10712,23 +11246,38 @@ function init() {
   commit();
   window.addEventListener("resize", () => {
     resizeCanvas();
-    drawReferenceOverlay();
   });
   window.addEventListener("beforeunload", (event) => {
-    if (!hasUnsavedProjectChanges()) return;
+    if (!hasUnsavedProjectChanges()) {
+      clearManagedProjectRecovery();
+      return;
+    }
+    writeManagedProjectRecoveryNow();
+    if (window.frisframeDesktop?.isDesktop) return;
     event.preventDefault();
     event.returnValue = "";
   });
   resizeCanvas();
+  requestAnimationFrame(() => centerStageOnContent());
   refreshLucideIcons();
   
   const urlParams = new URLSearchParams(window.location.search);
   const shareId = urlParams.get("project");
-  if (shareId) {
-    loadSharedProject(shareId);
-  }
-  
-  if (!hasSeenTutorial()) setTimeout(() => startTutorial(0), 650);
+  const shareToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("share") || "";
+  const startupProject = shareId
+    ? loadSharedProject(shareId, shareToken)
+    : resumeLastManagedProject();
+  Promise.resolve(startupProject).then((loaded) => {
+    if (!shareId && !loaded) {
+      openProjectLibrary(true);
+      return;
+    }
+    requestAnimationFrame(() => {
+      resizeCanvas();
+      centerStageOnContent();
+    });
+    scheduleFirstTutorial();
+  });
 }
 
 init();

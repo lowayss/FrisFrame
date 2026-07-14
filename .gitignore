@@ -1,0 +1,13 @@
+*.db
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.venv-electron/
+dist-runtime/
+release/
+build/pyinstaller-work/
+build/pyinstaller-spec/
+build/icon.iconset/
+build/icon-source.png
+vendor/*.min.js
