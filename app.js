@@ -2766,6 +2766,47 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
     marker.userData.previewHidden = true;
     marker.userData.jointId = jointId;
     parent.add(marker);
+
+    // ── NEW: 3D Rotation Gizmo Rings for Selected Joint ──
+    if (selectedJoint) {
+      const ringRadius = radius * scale * 2.8;
+      const tubeRadius = radius * scale * 0.15;
+
+      // X Axis - Red Ring (Rotated around Y so normal is X)
+      const xRing = new THREE.Mesh(
+        new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 32),
+        new THREE.MeshBasicMaterial({ color: "#ff3b30", depthTest: false, transparent: true, opacity: 0.82 })
+      );
+      xRing.rotation.y = Math.PI / 2;
+      xRing.userData.gizmoAxis = "x";
+      xRing.userData.jointId = jointId;
+      xRing.userData.previewHidden = true;
+      xRing.renderOrder = 35;
+      marker.add(xRing);
+
+      // Y Axis - Green Ring (Rotated around X so normal is Y)
+      const yRing = new THREE.Mesh(
+        new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 32),
+        new THREE.MeshBasicMaterial({ color: "#34c759", depthTest: false, transparent: true, opacity: 0.82 })
+      );
+      yRing.rotation.x = Math.PI / 2;
+      yRing.userData.gizmoAxis = "y";
+      yRing.userData.jointId = jointId;
+      yRing.userData.previewHidden = true;
+      yRing.renderOrder = 35;
+      marker.add(yRing);
+
+      // Z Axis - Blue Ring (Normal is already Z)
+      const zRing = new THREE.Mesh(
+        new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 32),
+        new THREE.MeshBasicMaterial({ color: "#007aff", depthTest: false, transparent: true, opacity: 0.82 })
+      );
+      zRing.userData.gizmoAxis = "z";
+      zRing.userData.jointId = jointId;
+      zRing.userData.previewHidden = true;
+      zRing.renderOrder = 35;
+      marker.add(zRing);
+    }
   };
   const addBone = (parent, length, topRadius, bottomRadius, material, name, jointId = "") => {
     cylinder(parent, topRadius, bottomRadius, length, material, [0, -length / 2, 0], null, name, jointId);
@@ -3387,6 +3428,7 @@ function beginThreeDrag(event) {
         pointerId: event.pointerId,
         actorId: actor.id,
         jointId: editor.jointId,
+        gizmoAxis: editor.gizmoAxis || null,
         x: event.clientX,
         y: event.clientY,
         startRotation: clone(current.bodyPose[editor.jointId]),
@@ -3538,6 +3580,31 @@ function pickThreeEditor(event) {
   const hits = threeView.raycaster.intersectObjects(threeView.world.children, true);
   for (const hit of hits) {
     let object = hit.object;
+
+    // ── Check if we directly hit a 3D rotation gizmo ring ──
+    if (object.userData && object.userData.gizmoAxis) {
+      let temp = object;
+      let actorId = null;
+      while (temp && temp !== threeView.world) {
+        if (temp.userData?.editor?.kind === "item") {
+          const itemObj = state.items.find(i => i.id === temp.userData.editor.id);
+          if (itemObj && itemObj.type === "actor") {
+            actorId = itemObj.id;
+            break;
+          }
+        }
+        temp = temp.parent;
+      }
+      if (actorId) {
+        return {
+          kind: "poseJoint",
+          actorId,
+          jointId: object.userData.jointId,
+          gizmoAxis: object.userData.gizmoAxis
+        };
+      }
+    }
+
     let jointId = null;
     let actorId = null;
     while (object && object !== threeView.world) {
@@ -3571,12 +3638,26 @@ function updateThreePoseDrag(event) {
   const rotation = actor.bodyPose[threeDrag.jointId];
   const dx = event.clientX - threeDrag.x;
   const dy = event.clientY - threeDrag.y;
-  const sensitivity = event.altKey ? 0.18 : 0.42;
-  rotation.x = clamp(threeDrag.startRotation.x - dy * sensitivity, definition.x[0], definition.x[1]);
-  if (event.shiftKey) {
-    rotation.z = clamp(threeDrag.startRotation.z + dx * sensitivity, definition.z[0], definition.z[1]);
+  
+  if (threeDrag.gizmoAxis) {
+    // ── Dedicated axis dragging from the 3D Gizmo Rings ──
+    const sensitivity = event.altKey ? 0.18 : 0.42;
+    if (threeDrag.gizmoAxis === "x") {
+      rotation.x = clamp(threeDrag.startRotation.x - dy * sensitivity, definition.x[0], definition.x[1]);
+    } else if (threeDrag.gizmoAxis === "y") {
+      rotation.y = clamp(threeDrag.startRotation.y + dx * sensitivity, definition.y[0], definition.y[1]);
+    } else if (threeDrag.gizmoAxis === "z") {
+      rotation.z = clamp(threeDrag.startRotation.z + dx * sensitivity, definition.z[0], definition.z[1]);
+    }
   } else {
-    rotation.y = clamp(threeDrag.startRotation.y + dx * sensitivity, definition.y[0], definition.y[1]);
+    // ── Fallback general limb dragging ──
+    const sensitivity = event.altKey ? 0.18 : 0.42;
+    rotation.x = clamp(threeDrag.startRotation.x - dy * sensitivity, definition.x[0], definition.x[1]);
+    if (event.shiftKey) {
+      rotation.z = clamp(threeDrag.startRotation.z + dx * sensitivity, definition.z[0], definition.z[1]);
+    } else {
+      rotation.y = clamp(threeDrag.startRotation.y + dx * sensitivity, definition.y[0], definition.y[1]);
+    }
   }
   actor.bodyPose = sanitizeBodyPose(actor.bodyPose);
   threeDrag.changed = true;
