@@ -1,6 +1,6 @@
 {
   "name": "frisframe-desktop",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "FrisFrame desktop previs studio",
   "main": "electron/main.cjs",

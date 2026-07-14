@@ -2767,8 +2767,8 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
     marker.userData.jointId = jointId;
     parent.add(marker);
   };
-  const addBone = (parent, length, topRadius, bottomRadius, material, name) => {
-    cylinder(parent, topRadius, bottomRadius, length, material, [0, -length / 2, 0], null, name);
+  const addBone = (parent, length, topRadius, bottomRadius, material, name, jointId = "") => {
+    cylinder(parent, topRadius, bottomRadius, length, material, [0, -length / 2, 0], null, name, jointId);
   };
 
   addMesh(model, new THREE.BoxGeometry(0.34 * scale, 0.2 * scale, 0.22 * scale), jointMaterial, [0, 0.84, 0], null, "pelvis");
@@ -2778,9 +2778,9 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
   model.add(torso);
   joint(torso, 0.09, [0, 0, 0], "chestJoint", "chest");
   addPoseHandle(torso, 0.09, "chest");
-  cylinder(torso, 0.19, 0.17, 0.28, bodyMaterial, [0, 0.2, 0], null, "abdomen");
-  cylinder(torso, 0.24, 0.19, 0.42, chestMaterial, [0, 0.5, 0], null, "chest");
-  cylinder(torso, 0.07, 0.075, 0.1, jointMaterial, [0, 0.77, 0], null, "neck");
+  cylinder(torso, 0.19, 0.17, 0.28, bodyMaterial, [0, 0.2, 0], null, "abdomen", "chest");
+  cylinder(torso, 0.24, 0.19, 0.42, chestMaterial, [0, 0.5, 0], null, "chest", "chest");
+  cylinder(torso, 0.07, 0.075, 0.1, jointMaterial, [0, 0.77, 0], null, "neck", "chest");
 
   const head = rotateJoint(new THREE.Group(), "head");
   head.position.set(0, 0.86 * scale, 0);
@@ -2788,13 +2788,18 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
   joint(head, 0.07, [0, 0, 0], "headJoint", "head");
   addPoseHandle(head, 0.08, "head");
   const skull = addMesh(head, new THREE.SphereGeometry(0.16 * scale, 24, 18), chestMaterial, [0, 0.11, 0], null, "head");
+  skull.userData.jointId = "head";
   skull.scale.set(0.92, 1.08, 0.96);
   [-1, 1].forEach((side) => {
-    addMesh(head, new THREE.SphereGeometry(0.034 * scale, 14, 10), eyeWhiteMaterial, [side * 0.057, 0.145, 0.139], null, `eyeWhite${side}`);
-    addMesh(head, new THREE.SphereGeometry(0.015 * scale, 12, 8), pupilMaterial, [side * 0.057, 0.145, 0.168], null, `pupil${side}`);
+    const eyeWhite = addMesh(head, new THREE.SphereGeometry(0.034 * scale, 14, 10), eyeWhiteMaterial, [side * 0.057, 0.145, 0.139], null, `eyeWhite${side}`);
+    eyeWhite.userData.jointId = "head";
+    const pupil = addMesh(head, new THREE.SphereGeometry(0.015 * scale, 12, 8), pupilMaterial, [side * 0.057, 0.145, 0.168], null, `pupil${side}`);
+    pupil.userData.jointId = "head";
   });
-  addMesh(head, new THREE.ConeGeometry(0.026 * scale, 0.07 * scale, 12), chestMaterial, [0, 0.092, 0.17], [Math.PI / 2, 0, 0], "nose");
-  addMesh(head, new THREE.BoxGeometry(0.075 * scale, 0.012 * scale, 0.012 * scale), mouthMaterial, [0, 0.035, 0.156], null, "mouth");
+  const nose = addMesh(head, new THREE.ConeGeometry(0.026 * scale, 0.07 * scale, 12), chestMaterial, [0, 0.092, 0.17], [Math.PI / 2, 0, 0], "nose");
+  nose.userData.jointId = "head";
+  const mouth = addMesh(head, new THREE.BoxGeometry(0.075 * scale, 0.012 * scale, 0.012 * scale), mouthMaterial, [0, 0.035, 0.156], null, "mouth");
+  mouth.userData.jointId = "head";
 
   [-1, 1].forEach((side) => {
     const suffix = side < 0 ? "L" : "R";
@@ -2805,14 +2810,14 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
     torso.add(shoulder);
     joint(shoulder, 0.075, [0, 0, 0], `shoulder${suffix}`, upperArmId);
     addPoseHandle(shoulder, 0.075, upperArmId);
-    addBone(shoulder, 0.36, 0.065, 0.075, bodyMaterial, upperArmId);
+    addBone(shoulder, 0.36, 0.065, 0.075, bodyMaterial, upperArmId, upperArmId);
 
     const elbow = rotateJoint(new THREE.Group(), lowerArmId);
     elbow.position.set(0, -0.38 * scale, 0);
     shoulder.add(elbow);
     joint(elbow, 0.058, [0, 0, 0], `elbow${suffix}`, lowerArmId);
     addPoseHandle(elbow, 0.06, lowerArmId);
-    addBone(elbow, 0.34, 0.052, 0.06, bodyMaterial, lowerArmId);
+    addBone(elbow, 0.34, 0.052, 0.06, bodyMaterial, lowerArmId, lowerArmId);
     joint(elbow, 0.062, [0, -0.36, 0], `hand${suffix}`, lowerArmId);
 
     const upperLegId = `upperLeg${suffix}`;
@@ -2822,15 +2827,15 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
     model.add(hip);
     joint(hip, 0.085, [0, 0, 0], `hip${suffix}`, upperLegId);
     addPoseHandle(hip, 0.085, upperLegId);
-    addBone(hip, 0.38, 0.09, 0.105, bodyMaterial, upperLegId);
+    addBone(hip, 0.38, 0.09, 0.105, bodyMaterial, upperLegId, upperLegId);
 
     const knee = rotateJoint(new THREE.Group(), lowerLegId);
     knee.position.set(0, -0.4 * scale, 0);
     hip.add(knee);
     joint(knee, 0.07, [0, 0, 0], `knee${suffix}`, lowerLegId);
     addPoseHandle(knee, 0.07, lowerLegId);
-    addBone(knee, 0.3, 0.065, 0.075, bodyMaterial, lowerLegId);
-    addMesh(knee, new THREE.BoxGeometry(0.15 * scale, 0.09 * scale, 0.26 * scale), jointMaterial, [0, -0.34, 0.07], null, `foot${suffix}`);
+    addBone(knee, 0.3, 0.065, 0.075, bodyMaterial, lowerLegId, lowerLegId);
+    addMesh(knee, new THREE.BoxGeometry(0.15 * scale, 0.09 * scale, 0.26 * scale), jointMaterial, [0, -0.34, 0.07], null, `foot${suffix}`, lowerLegId);
   });
   return model;
 }
@@ -3533,9 +3538,23 @@ function pickThreeEditor(event) {
   const hits = threeView.raycaster.intersectObjects(threeView.world.children, true);
   for (const hit of hits) {
     let object = hit.object;
+    let jointId = null;
+    let actorId = null;
     while (object && object !== threeView.world) {
-      if (threeEditMode === "pose" && object.userData?.poseJoint) {
+      if (object.userData?.poseJoint) {
         return { kind: "poseJoint", ...clone(object.userData.poseJoint) };
+      }
+      if (object.userData?.jointId) {
+        jointId = object.userData.jointId;
+      }
+      if (object.userData?.editor?.kind === "item") {
+        const itemObj = state.items.find(i => i.id === object.userData.editor.id);
+        if (itemObj && itemObj.type === "actor") {
+          actorId = itemObj.id;
+        }
+      }
+      if (threeEditMode === "pose" && jointId && actorId) {
+        return { kind: "poseJoint", actorId, jointId };
       }
       if (object.userData?.editor) return clone(object.userData.editor);
       object = object.parent;

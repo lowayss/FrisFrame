@@ -26,7 +26,7 @@ python3 quality_check.py
 
 ## macOS 데스크톱 앱
 
-Apple Silicon용 설치 이미지는 `release/FrisFrame-0.2.4-arm64.dmg`입니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
+Apple Silicon용 설치 이미지는 `release/FrisFrame-0.2.5-arm64.dmg`입니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
 
 기존 로컬 서버 프로젝트를 데스크톱 앱으로 처음 옮기고 패키지를 다시 만드는 명령은 다음과 같습니다.
 
