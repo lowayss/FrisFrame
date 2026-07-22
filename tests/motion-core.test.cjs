@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 
 const {
   activeMotionSegment,
+  cameraDirectionVector,
   circularArcPoint,
   constrainPathEndpoint,
   finiteNumber,
@@ -9,6 +10,7 @@ const {
   normalizePathMode,
   normalizeTransition,
   poseFieldsChanged,
+  rescaleKeyframeTimes,
   samplePlanarPath,
   transitionProgress,
 } = require("../motion-core.js");
@@ -25,6 +27,13 @@ near(transitionProgress(0.5, 0, 1, "linear"), 0.5);
 near(transitionProgress(0.25, 0, 1, "smooth"), 0.125);
 assert.equal(transitionProgress(0.99, 0, 1, "hold"), 0);
 assert.equal(transitionProgress(1, 0, 1, "cut"), 1);
+
+const straightDown = cameraDirectionVector(25, -90);
+near(straightDown.x, 0, 0.000001);
+near(straightDown.y, -1, 0.000001);
+near(straightDown.z, 0, 0.000001);
+const nearVertical = cameraDirectionVector(180, 89);
+near(Math.asin(nearVertical.y) * 180 / Math.PI, 89, 0.0001);
 
 assert.equal(normalizePathMode("drone", "camera"), "drone");
 assert.equal(normalizePathMode("drone", "actor"), "straight");
@@ -83,5 +92,15 @@ const guideKeys = [
 assert.equal(motionSegments(guideKeys).length, 2);
 assert.equal(activeMotionSegment(guideKeys, 1)?.end.id, "b");
 assert.equal(activeMotionSegment(guideKeys, 3), null, "hold segments do not report continuous movement");
+
+const originalTiming = [
+  { id: "start", time: 0 },
+  { id: "middle", time: 3 },
+  { id: "end", time: 6 },
+];
+assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 6).map((key) => key.time), [0, 3, 6]);
+assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 12).map((key) => key.time), [0, 6, 12]);
+assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 0).map((key) => key.time), [0, 3, 6]);
+assert.deepEqual(originalTiming.map((key) => key.time), [0, 3, 6], "rescaling must not mutate the source array");
 
 console.log("motion-core: transitions and path constraints passed");

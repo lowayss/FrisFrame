@@ -61,6 +61,24 @@ const propCatalog = {
   tree: { label: "나무", category: "자연", kind: "nature", height: 3.4, footprint: 1.25 },
   forest: { label: "나무 묶음", category: "자연", kind: "nature", height: 3.8, footprint: 2.8 },
   room: { label: "실내 공간", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
+  wall_i: { label: "ㅡ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
+  wall_l: { label: "ㄱ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
+  wall_u: { label: "ㄷ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
+  desk: { label: "사무용 책상", category: "가구", kind: "furniture", height: 0.78, footprint: 1.1 },
+  blackboard: { label: "칠판", category: "가구", kind: "furniture", height: 1.8, footprint: 2.0 },
+  partition: { label: "파티션", category: "공간", kind: "architecture", height: 1.6, footprint: 1.0 },
+  wall: { label: "가벽 (3m)", category: "공간", kind: "architecture", height: 3.0, footprint: 3.0 },
+  "corridor-wall": { label: "복도 벽", category: "공간", kind: "architecture", height: 1.78, footprint: 3.0 },
+  "train-wall": { label: "기차 차벽", category: "공간", kind: "architecture", height: 1.78, footprint: 3.0 },
+  elevator: { label: "엘리베이터", category: "공간", kind: "architecture", height: 2.8, footprint: 1.6 },
+  door: { label: "문", category: "공간", kind: "architecture", height: 2.2, footprint: 1.0 },
+  window: { label: "창문", category: "공간", kind: "architecture", height: 1.0, footprint: 1.2 },
+  sink: { label: "세면대", category: "가전", kind: "appliance", height: 0.88, footprint: 0.6 },
+  toilet: { label: "변기", category: "가전", kind: "appliance", height: 0.8, footprint: 0.65 },
+  bathtub: { label: "욕조", category: "가전", kind: "appliance", height: 0.65, footprint: 1.5 },
+  "train-seat": { label: "기차 좌석", category: "가구", kind: "furniture", height: 1.1, footprint: 0.85 },
+  stairs: { label: "계단", category: "공간", kind: "architecture", height: 1.2, footprint: 1.8 },
+  slope: { label: "경사", category: "공간", kind: "architecture", height: 1.0, footprint: 3.0 },
   sofa: { label: "소파", category: "가구", kind: "furniture", height: 0.9, footprint: 1.45 },
   "dining-table": { label: "테이블", category: "가구", kind: "furniture", height: 0.82, footprint: 1.2 },
   chair: { label: "의자", category: "가구", kind: "furniture", height: 1.0, footprint: 0.65 },
@@ -78,29 +96,44 @@ const environmentPresets = {
   living: {
     label: "거실",
     items: [
-      ["room", "거실", 0.51, 0.51, 0, 1],
-      ["sofa", "소파", 0.39, 0.53, 0, 1],
-      ["television", "TV", 0.64, 0.48, 180, 1],
-      ["dining-table", "거실 테이블", 0.5, 0.62, 0, 0.72],
+      ["room", "거실", 0.5, 0.5, 0, 2.0],
+      ["television", "TV", 0.5, 0.302, 180, 1.3],
+      ["cabinet", "거실장", 0.5, 0.302, 180, 1.3],
+      ["sofa", "메인 소파", 0.5, 0.525, 0, 1.2],
+      ["dining-table", "식탁", 0.611, 0.599, 90, 1.1],
+      ["chair", "의자 1", 0.583, 0.599, 90, 1.0],
+      ["chair", "의자 2", 0.639, 0.599, 270, 1.0],
+      ["refrigerator", "냉장고", 0.375, 0.327, 180, 1.1],
+      ["window", "거실 창", 0.339, 0.5, 90, 1.4, 0.6],
+      ["door", "현관문", 0.339, 0.327, 90, 1.1],
     ],
   },
   kitchen: {
     label: "주방",
     items: [
-      ["room", "주방", 0.51, 0.51, 0, 1],
-      ["refrigerator", "냉장고", 0.35, 0.37, 90, 1],
-      ["stove", "레인지", 0.47, 0.37, 90, 1],
-      ["dining-table", "식탁", 0.54, 0.58, 0, 1],
-      ["chair", "의자", 0.54, 0.7, 270, 1],
+      ["room", "주방", 0.5, 0.5, 0, 1.8],
+      ["refrigerator", "대형 냉장고", 0.375, 0.312, 180, 1.1],
+      ["stove", "인덕션 레인지", 0.444, 0.312, 180, 1.1],
+      ["sink", "개수대 싱크", 0.542, 0.312, 180, 1.2],
+      ["dining-table", "식탁", 0.542, 0.574, 0, 1.1],
+      ["chair", "의자 A", 0.514, 0.574, 90, 1.0],
+      ["chair", "의자 B", 0.569, 0.574, 270, 1.0],
+      ["window", "환기창", 0.542, 0.302, 180, 1.1, 1.1],
+      ["door", "주방문", 0.361, 0.599, 90, 1.1],
     ],
   },
   bedroom: {
     label: "침실",
     items: [
-      ["room", "침실", 0.51, 0.51, 0, 1],
-      ["bed", "침대", 0.46, 0.5, 0, 1],
-      ["cabinet", "수납장", 0.69, 0.39, 180, 1],
-      ["television", "TV", 0.66, 0.58, 180, 0.72],
+      ["room", "침실", 0.5, 0.5, 0, 1.8],
+      ["bed", "침대", 0.444, 0.426, 180, 1.2],
+      ["cabinet", "협탁 L", 0.375, 0.327, 180, 0.8],
+      ["cabinet", "옷장", 0.597, 0.327, 180, 1.3],
+      ["television", "벽걸이 TV", 0.444, 0.623, 0, 1.1],
+      ["desk", "화장대 책상", 0.597, 0.599, 270, 1.1],
+      ["chair", "화장대 의자", 0.561, 0.599, 90, 1.0],
+      ["window", "침실 창", 0.361, 0.549, 90, 1.3, 0.7],
+      ["door", "방문", 0.389, 0.673, 0, 1.1],
     ],
   },
   forest: {
@@ -114,6 +147,101 @@ const environmentPresets = {
   car: {
     label: "차 안",
     items: [["car", "자동차", 0.52, 0.52, 0, 1]],
+  },
+  office: {
+    label: "사무실",
+    items: [
+      ["room", "사무실", 0.5, 0.5, 0, 2.0],
+      ["desk", "책상 A1", 0.467, 0.475, 90, 1.1],
+      ["chair", "의자 A1", 0.439, 0.475, 90, 1.0],
+      ["desk", "책상 A2", 0.533, 0.475, 270, 1.1],
+      ["chair", "의자 A2", 0.561, 0.475, 270, 1.0],
+      ["partition", "파티션", 0.5, 0.475, 0, 1.2],
+      ["cabinet", "캐비닛", 0.403, 0.302, 180, 1.2],
+      ["refrigerator", "정수기 냉장고", 0.597, 0.302, 180, 1.1],
+      ["window", "사무실 창 1", 0.339, 0.451, 90, 1.3, 0.8],
+      ["window", "사무실 창 2", 0.339, 0.599, 90, 1.3, 0.8],
+      ["door", "사무실 문", 0.661, 0.574, 270, 1.1],
+    ],
+  },
+  classroom: {
+    label: "교실",
+    items: [
+      ["room", "교실", 0.5, 0.5, 0, 2.0],
+      ["blackboard", "칠판", 0.5, 0.302, 0, 1.8],
+      ["desk", "앞좌석 책상 L", 0.450, 0.451, 0, 1.1],
+      ["chair", "앞좌석 의자 L", 0.450, 0.490, 180, 1.0],
+      ["desk", "앞좌석 책상 R", 0.550, 0.451, 0, 1.1],
+      ["chair", "앞좌석 의자 R", 0.550, 0.490, 180, 1.0],
+      ["desk", "뒷좌석 책상 L", 0.450, 0.574, 0, 1.1],
+      ["chair", "뒷좌석 의자 L", 0.450, 0.614, 180, 1.0],
+      ["desk", "뒷좌석 책상 R", 0.550, 0.574, 0, 1.1],
+      ["chair", "뒷좌석 의자 R", 0.550, 0.614, 180, 1.0],
+      ["window", "교실 창문", 0.339, 0.5, 90, 1.4, 0.9],
+      ["door", "교실 문", 0.661, 0.648, 270, 1.1],
+    ],
+  },
+  corridor: {
+    label: "복도",
+    items: [
+      ["corridor-wall", "왼쪽 벽", 0.439, 0.5, 90, 4.5],
+      ["corridor-wall", "오른쪽 벽", 0.561, 0.5, 90, 4.5],
+      ["door", "사무실 문", 0.439, 0.401, 90, 1.2],
+      ["elevator", "엘리베이터", 0.561, 0.599, 270, 1.3],
+    ],
+  },
+  elevator_lobby: {
+    label: "엘리베이터 로비",
+    items: [
+      ["room", "로비", 0.5, 0.5, 0, 2.0],
+      ["elevator", "1호기 엘리베이터", 0.458, 0.302, 0, 1.2],
+      ["elevator", "2호기 엘리베이터", 0.542, 0.302, 0, 1.2],
+      ["sofa", "대기용 소파 L", 0.394, 0.549, 90, 1.1],
+      ["sofa", "대기용 소파 R", 0.606, 0.549, 270, 1.1],
+      ["door", "비상문", 0.339, 0.451, 90, 1.1],
+    ],
+  },
+  bathroom: {
+    label: "화장실",
+    items: [
+      ["room", "화장실", 0.5, 0.5, 0, 1.6],
+      ["bathtub", "욕조", 0.403, 0.549, 90, 1.2],
+      ["toilet", "변기", 0.467, 0.362, 0, 1.1],
+      ["sink", "세면대", 0.533, 0.362, 0, 1.2],
+      ["washing-machine", "세탁기", 0.597, 0.599, 270, 1.1],
+      ["cabinet", "수납장", 0.617, 0.451, 270, 1.2],
+      ["window", "환기창", 0.5, 0.327, 0, 1.1, 1.3],
+      ["door", "욕실문", 0.617, 0.623, 270, 1.0],
+    ],
+  },
+  train_cabin: {
+    label: "기차 객실",
+    items: [
+      ["train-wall", "좌측 차벽 1", 0.45, 0.33, 90, 3.5],
+      ["train-wall", "좌측 차벽 2", 0.45, 0.67, 90, 3.5],
+      ["train-wall", "우측 차벽 1", 0.55, 0.33, 90, 3.5],
+      ["train-wall", "우측 차벽 2", 0.55, 0.67, 90, 3.5],
+      ["train-seat", "좌석 A1", 0.475, 0.377, 180, 1.1],
+      ["train-seat", "좌석 A2", 0.475, 0.475, 0, 1.1],
+      ["train-seat", "좌석 B1", 0.525, 0.377, 180, 1.1],
+      ["train-seat", "좌석 B2", 0.525, 0.475, 0, 1.1],
+      ["train-seat", "좌석 A3", 0.475, 0.574, 180, 1.1],
+      ["train-seat", "좌석 A4", 0.475, 0.673, 0, 1.1],
+      ["train-seat", "좌석 B3", 0.525, 0.574, 180, 1.1],
+      ["train-seat", "좌석 B4", 0.525, 0.673, 0, 1.1],
+      ["window", "좌측 창문 1", 0.45, 0.426, 90, 1.2, 0.8],
+      ["window", "좌측 창문 2", 0.45, 0.623, 90, 1.2, 0.8],
+      ["window", "우측 창문 1", 0.55, 0.426, 90, 1.2, 0.8],
+      ["window", "우측 창문 2", 0.55, 0.623, 90, 1.2, 0.8],
+    ],
+  },
+  slope_hill: {
+    label: "언덕길 (경사/고도)",
+    items: [
+      ["slope", "오르막길", 0.389, 0.5, 90, 2.5],
+      ["stairs", "내리막 계단", 0.611, 0.5, 270, 2.5],
+      ["tree", "언덕 위 나무", 0.5, 0.327, 0, 1.8],
+    ],
   },
 };
 
@@ -130,18 +258,25 @@ const MAX_FOCUS_HEIGHT = 4;
 const CINEMATIC_FACE_SCREEN_Y = 0.3;
 const motionCore = window.FrisFrameMotionCore;
 if (!motionCore) throw new Error("동선 계산 엔진을 불러오지 못했습니다.");
+const timelineCore = window.FrisFrameTimelineCore;
+if (!timelineCore) throw new Error("타임라인 편집 엔진을 불러오지 못했습니다.");
 const projectRecoveryCore = window.FrisFrameProjectRecoveryCore;
 if (!projectRecoveryCore) throw new Error("프로젝트 복구 엔진을 불러오지 못했습니다.");
 const storyboardCore = window.StoryboardCore;
 if (!storyboardCore) throw new Error("스토리보드 구성 엔진을 불러오지 못했습니다.");
 const poseCore = window.FrisFramePoseCore;
 if (!poseCore) throw new Error("배우 포즈 엔진을 불러오지 못했습니다.");
-const PROJECT_SCHEMA_VERSION = 6;
+const cameraDraftingCore = window.FrisFrameCameraDraftingCore;
+if (!cameraDraftingCore) throw new Error("카메라 초안 엔진을 불러오지 못했습니다.");
+const multiCameraCore = window.FrisFrameMultiCameraCore;
+if (!multiCameraCore) throw new Error("멀티카메라 엔진을 불러오지 못했습니다.");
+const PROJECT_SCHEMA_VERSION = 11;
 const SERVICE_NAME = "FrisFrame";
 const LAST_MANAGED_PROJECT_KEY = "frisframe:last-managed-project";
 const PROJECT_RECOVERY_KEY_PREFIX = "frisframe:project-recovery:v1:";
 const {
   activeMotionSegment,
+  cameraDirectionVector,
   circularArcPoint,
   constrainPathEndpoint,
   finiteNumber,
@@ -149,9 +284,22 @@ const {
   normalizePathMode,
   normalizeTransition,
   poseFieldsChanged,
+  rescaleKeyframeTimes,
   samplePlanarPath,
   transitionProgress,
 } = motionCore;
+const {
+  collisionEpsilon: timelineCollisionEpsilon,
+  expandSynchronizedCutSelection,
+  moveSelection: moveTimelineSelection,
+  normalizedSelection: normalizeTimelineSelectionIds,
+  pasteTimes: resolveTimelinePasteTimes,
+  sameTime: sameTimelineTime,
+  scaleSelection: scaleTimelineSelection,
+  selectionRange: timelineSelectionRange,
+  snapStep: timelineSnapStep,
+  snapTime: snapTimelineTimeCore,
+} = timelineCore;
 const {
   classifyRecovery,
   createRecoveryRecord,
@@ -165,8 +313,20 @@ const {
   interpolateBodyPose,
   mirrorBodyPose,
   presetBodyPose,
+  proceduralLocomotion,
   sanitizeBodyPose,
 } = poseCore;
+const {
+  STAGE_COORD_MIN,
+  STAGE_COORD_MAX,
+  CAMERA_HEIGHT_MIN,
+  CAMERA_HEIGHT_MAX,
+  CAMERA_TILT_MIN,
+  CAMERA_TILT_MAX,
+  CAMERA_FOCAL_MIN,
+  CAMERA_FOCAL_MAX,
+  draftCameraFromText,
+} = cameraDraftingCore;
 
 const keyTransitionLabels = {
   smooth: "부드럽게",
@@ -189,6 +349,24 @@ const pathModeLabels = {
 
 const actorPathModes = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"];
 const cameraPathModes = [...actorPathModes, "drone", "jib-up", "jib-down"];
+const actorLocomotionModes = {
+  auto: "속도에 따라 자동",
+  pose: "포즈 유지",
+  walk: "걷기",
+  run: "달리기",
+};
+const cameraSensorFormats = {
+  "full-frame": { label: "풀프레임", widthMm: 36 },
+  "super-35": { label: "Super 35", widthMm: 24.89 },
+  "aps-c": { label: "APS-C", widthMm: 23.6 },
+  custom: { label: "직접 입력", widthMm: 36 },
+};
+const CAMERA_SENSOR_WIDTH_MIN = 8;
+const CAMERA_SENSOR_WIDTH_MAX = 70;
+const CAMERA_APERTURE_MIN = 0.7;
+const CAMERA_APERTURE_MAX = 32;
+const CAMERA_FOCUS_DISTANCE_MIN = 0.1;
+const CAMERA_FOCUS_DISTANCE_MAX = 1000;
 const CAMERA_GUIDE_FIELDS = ["x", "y", "height", "panDeg", "tiltDeg", "focal", "trackingTargetId"];
 const ITEM_GUIDE_FIELDS = ["x", "y", "facing", "size", "scaleX", "scaleY", "scaleZ", "visible"];
 
@@ -258,6 +436,11 @@ const defaultState = () => {
   showCamera: true,
   cleanExport: true,
   blenderControls: true,
+  cameraSetup: {
+    sensorFormat: "full-frame",
+    sensorWidthMm: 36,
+    apertureFStop: 2.8,
+  },
   camera: {
     x: 0.92,
     y: 0.48,
@@ -268,6 +451,7 @@ const defaultState = () => {
     panDeg: 180,
     tiltDeg: -6,
     focal: 85,
+    focusDistanceM: 5,
     trackingTargetId: "",
     locks: {
       position: false,
@@ -289,6 +473,7 @@ const defaultState = () => {
       shape: "circle",
       facing: 0,
       bodyPose: defaultBodyPose(),
+      locomotionMode: "auto",
       placementMode: "manual",
       mountId: "",
       seatIndex: 0,
@@ -351,19 +536,36 @@ let keyBadgeDrag = null;
 let curveHandleDrag = null;
 let pathSnapGuide = null;
 let timelineDrag = null;
+let suppressTimelineMarkerClick = false;
+let timelineSelectedKeyIds = new Set();
+let timelinePrimaryKeyId = null;
+let timelineSelectionAnchorId = null;
+let timelineClipboard = null;
+let timelineSnapMode = loadTimelineSnapMode();
+let timelineFocused = false;
 let stageRect = { x: 0, y: 0, w: 1, h: 1 };
 const STAGE_ZOOM_MIN = 1;
 const STAGE_ZOOM_MAX = 4;
 const STAGE_WORLD_LONG_EDGE = 36;
 const STAGE_GRID_STEP_METERS = 1.5;
 const THREE_ORBIT_RADIUS_MIN = 0.15;
-const THREE_ORBIT_RADIUS_MAX = 39;
+const THREE_ORBIT_RADIUS_MAX = 120;
+const CAMERA_FRAME_WIDTH_KEY = "frisframe:camera-frame-width";
+const CAMERA_FRAME_POSITION_KEY = "frisframe:camera-frame-position";
+const CAMERA_FRAME_MIN_WIDTH = 240;
+const CAMERA_FRAME_MAX_WIDTH = 760;
 let stageZoom = 1;
 let stagePanDrag = null;
 let stageSpaceHeld = false;
 let stageSpacePanUsed = false;
 let preview = null;
 let viewMode = "2d";
+let cameraPreviewMode = "single";
+let cameraFrameWidth = loadCameraFrameWidth();
+let cameraFramePosition = loadCameraFramePosition();
+let cameraFrameResizeDrag = null;
+let cameraFrameMoveDrag = null;
+let cameraFrameResizeRenderQueued = false;
 let threeView = null;
 let threeDrag = null;
 let threeEditMode = "move";
@@ -371,7 +573,12 @@ let selectedPoseActorId = state.items[0].id;
 let selectedPoseJoint = "chest";
 let selectedPoseCategory = "";
 let poseClipboard = null;
+const liveSourceEdits = new Map();
 const CUSTOM_POSES_KEY = "frisframe:custom-poses";
+
+function clearLiveSourceEdits() {
+  liveSourceEdits.clear();
+}
 let pendingExport = null;
 let evaluatedViewState = null;
 let mediaExportBusy = false;
@@ -417,8 +624,27 @@ function radToDegSigned(rad) {
   return (rad * 180) / Math.PI;
 }
 
-function focalToFov(focal) {
-  return (2 * Math.atan(36 / (2 * focal)) * 180) / Math.PI;
+function focalToFov(focal, sensorWidthMm = 36) {
+  const safeFocal = clamp(finiteNumber(focal, 50), CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX);
+  const safeWidth = clamp(finiteNumber(sensorWidthMm, 36), CAMERA_SENSOR_WIDTH_MIN, CAMERA_SENSOR_WIDTH_MAX);
+  return (2 * Math.atan(safeWidth / (2 * safeFocal)) * 180) / Math.PI;
+}
+
+function sanitizeCameraSetup(setup = {}) {
+  const requestedFormat = cameraSensorFormats[setup?.sensorFormat] ? setup.sensorFormat : "full-frame";
+  const presetWidth = cameraSensorFormats[requestedFormat].widthMm;
+  const width = clamp(finiteNumber(setup?.sensorWidthMm, presetWidth), CAMERA_SENSOR_WIDTH_MIN, CAMERA_SENSOR_WIDTH_MAX);
+  const matchingFormat = Object.entries(cameraSensorFormats)
+    .find(([id, value]) => id !== "custom" && Math.abs(value.widthMm - width) < 0.01)?.[0];
+  return {
+    sensorFormat: requestedFormat === "custom" ? "custom" : matchingFormat || "custom",
+    sensorWidthMm: Number(width.toFixed(2)),
+    apertureFStop: Number(clamp(finiteNumber(setup?.apertureFStop, 2.8), CAMERA_APERTURE_MIN, CAMERA_APERTURE_MAX).toFixed(1)),
+  };
+}
+
+function cameraSensorWidth(renderState = state) {
+  return sanitizeCameraSetup(renderState?.cameraSetup).sensorWidthMm;
 }
 
 function horizontalFovToVerticalFov(horizontalFov, aspect) {
@@ -443,18 +669,15 @@ function cameraOrientationFromLegacy(camera, renderState = state) {
   const horizontal = Math.hypot(dx, dz);
   return {
     panDeg: horizontal > 0.0001 ? normalizePanDeg(radToDeg(Math.atan2(dz, dx))) : 180,
-    tiltDeg: clamp(radToDegSigned(Math.atan2(dy, Math.max(0.0001, horizontal))), -60, 60),
+    tiltDeg: clamp(radToDegSigned(Math.atan2(dy, Math.max(0.0001, horizontal))), -90, 90),
   };
 }
 
 function cameraDirection(camera) {
-  const pan = degToRad(normalizePanDeg(camera?.panDeg ?? 180));
-  const tilt = degToRad(clamp(Number(camera?.tiltDeg ?? 0), -60, 60));
-  return {
-    x: Math.cos(tilt) * Math.cos(pan),
-    y: Math.sin(tilt),
-    z: Math.cos(tilt) * Math.sin(pan),
-  };
+  return cameraDirectionVector(
+    normalizePanDeg(camera?.panDeg ?? 180),
+    clamp(Number(camera?.tiltDeg ?? 0), CAMERA_TILT_MIN, CAMERA_TILT_MAX),
+  );
 }
 
 function syncCameraDerivedAim(camera, renderState = state, distanceM = 6) {
@@ -463,7 +686,7 @@ function syncCameraDerivedAim(camera, renderState = state, distanceM = 6) {
   const horizontalScale = Math.max(0.01, Math.hypot(direction.x, direction.z));
   camera.aimX = Number(camera.x) + (direction.x / horizontalScale) * distanceM / size.width;
   camera.aimY = Number(camera.y) + (direction.z / horizontalScale) * distanceM / size.depth;
-  camera.focusHeight = clamp(Number(camera.height || 1.6) + Math.tan(degToRad(camera.tiltDeg || 0)) * distanceM, -4, 8);
+  camera.focusHeight = clamp(Number(camera.height || 1.6) + Math.tan(degToRad(camera.tiltDeg || 0)) * distanceM, -10, 40);
   return camera;
 }
 
@@ -492,6 +715,8 @@ function defaultCutMetadata(blocking = state) {
     camera: "",
     intent: String(blocking.sceneIntent || ""),
     notes: "",
+    continuity: { overrides: {} },
+    snapshots: { A: null, B: null },
     shotType: "미정",
     status: blocking.motion?.keyframes?.length ? "blocking" : "draft",
     thumbnailTime: 0,
@@ -512,6 +737,8 @@ function createCut(blocking = defaultState(), metadata = {}) {
   cut.camera = String(metadata.camera || "");
   cut.intent = String(metadata.intent ?? documentState.sceneIntent ?? "");
   cut.notes = String(metadata.notes || "");
+  cut.continuity = storyboardCore.normalizedContinuity(metadata.continuity);
+  cut.snapshots = sanitizeCutSnapshots(metadata.snapshots);
   cut.shotType = String(metadata.shotType || "미정");
   cut.status = ["draft", "blocking", "review", "approved"].includes(metadata.status)
     ? metadata.status
@@ -523,6 +750,27 @@ function createCut(blocking = defaultState(), metadata = {}) {
   cut.blocking.sceneTitle = cut.title;
   cut.blocking.sceneIntent = cut.intent || cut.camera || "";
   return cut;
+}
+
+function sanitizeCutSnapshots(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    A: sanitizeCutSnapshot(source.A, "A"),
+    B: sanitizeCutSnapshot(source.B, "B"),
+  };
+}
+
+function sanitizeCutSnapshot(value, slot) {
+  if (!value || typeof value !== "object" || !value.document?.blocking) return null;
+  const document = storyboardCore.cutSnapshotDocument({
+    ...value.document,
+    blocking: sanitizeBlockingDocument(value.document.blocking),
+  });
+  return {
+    name: String(value.name || `${slot}안`).trim().slice(0, 60) || `${slot}안`,
+    createdAt: String(value.createdAt || isoNow()),
+    document,
+  };
 }
 
 function createScene(cuts = [createCut()], metadata = {}) {
@@ -576,13 +824,31 @@ function findProjectCut(sceneId, cutId) {
 function syncActiveCutDocument(touch = true) {
   const cut = currentCut();
   if (!cut) return;
+  syncActiveCameraProfile();
   cut.blocking = state;
   cut.title = String(state.sceneTitle || cut.title || "새 컷");
   cut.intent = String(state.sceneIntent || cut.intent || "");
   if (touch) {
+    markCutCreativeChanged(cut);
     cut.updatedAt = isoNow();
     project.updatedAt = cut.updatedAt;
   }
+}
+
+function projectCutLocation(cut) {
+  for (const scene of project?.scenes || []) {
+    const index = scene.cuts.indexOf(cut);
+    if (index >= 0) return { scene, index };
+  }
+  return null;
+}
+
+function markCutCreativeChanged(cut) {
+  const location = projectCutLocation(cut);
+  if (!location) return;
+  if (cut.status === "approved") cut.status = "review";
+  const following = location.scene.cuts[location.index + 1];
+  if (following?.status === "approved") following.status = "review";
 }
 
 function captureProjectSnapshot() {
@@ -599,6 +865,7 @@ function pushProjectHistory() {
 
 function restoreProjectSnapshot(json) {
   const saved = JSON.parse(json);
+  clearLiveSourceEdits();
   clearStoryboardThumbnailCache();
   cutRuntime.clear();
   project = sanitizeProjectDocument(saved.project);
@@ -611,12 +878,13 @@ function restoreProjectSnapshot(json) {
   history = [];
   future = [];
   sanitizeState();
+  resetTimelineRuntime();
   cut.blocking = state;
   history = [snapshot()];
-  selectKeyForSource(activeSourceId());
   setProjectSaveStatus("changed");
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   if (workspaceMode === "storyboard") renderStoryboardWorkspace();
 }
 
@@ -722,6 +990,11 @@ function saveCurrentCutRuntime() {
     history: [...history],
     future: [...future],
     selected: clone(selected),
+    timeline: {
+      selectedKeyIds: [...timelineSelectedKeyIds],
+      primaryKeyId: primaryTimelineKeyId(),
+      rangeAnchorId: timelineSelectionAnchorId,
+    },
   });
 }
 
@@ -729,6 +1002,7 @@ function switchProjectCut(sceneId, cutId, options = {}) {
   const target = findProjectCut(sceneId, cutId);
   if (!target.scene || !target.cut) return false;
   cancelPreview();
+  clearLiveSourceEdits();
   syncActiveCutDocument(false);
   saveCurrentCutRuntime();
   drag = null;
@@ -745,15 +1019,17 @@ function switchProjectCut(sceneId, cutId, options = {}) {
   selected = runtime?.selected && selectedExists(runtime.selected) ? runtime.selected : { kind: "camera" };
   history = runtime?.history?.length ? [...runtime.history] : [snapshot()];
   future = runtime?.future?.length ? [...runtime.future] : [];
-  selectKeyForSource(selectedSourceId() || activeSourceId());
+  restoreTimelineRuntime(runtime?.timeline);
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   syncProjectChrome();
   if (options.renderStoryboard !== false && workspaceMode === "storyboard") renderStoryboardWorkspace();
   return true;
 }
 
 function loadProjectDocument(nextProject) {
+  clearLiveSourceEdits();
   clearStoryboardThumbnailCache();
   cutRuntime.clear();
   projectHistory = [];
@@ -768,8 +1044,8 @@ function loadProjectDocument(nextProject) {
   history = [];
   future = [];
   sanitizeState();
+  resetTimelineRuntime();
   firstScene.cuts[0].blocking = state;
-  selectKeyForSource(activeSourceId());
   commit();
   syncProjectChrome();
 }
@@ -805,6 +1081,14 @@ function remapBlockingIds(blockingInput) {
       mountId: keyframe.pose.mountId ? itemIds.get(keyframe.pose.mountId) || "" : "",
     } : keyframe.pose,
   }));
+  blocking.cameras = (blocking.cameras || []).map((profile) => ({
+    ...profile,
+    keyframes: (profile.keyframes || []).map((keyframe) => ({
+      ...keyframe,
+      id: uid(),
+      source: "camera",
+    })),
+  }));
   blocking.motion.hiddenSources = (blocking.motion?.hiddenSources || [])
     .map((sourceId) => sourceId === "camera" ? "camera" : itemIds.get(sourceId))
     .filter(Boolean);
@@ -832,94 +1116,12 @@ function createContinuityBlocking(template = state) {
   return remapBlockingIds(fresh);
 }
 
-function draftCameraFromText(draft, actorX = 0.32, actorY = 0.46) {
-  const combined = [draft.title, draft.action, draft.dialogue, draft.camera, draft.intent]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  // 1. Determine distance & focal preset
-  let distance = 0.60;
-  let focal = 50;
-
-  if (/익스트림\s*클로즈|extreme\s*close|ecu|초근접/.test(combined)) {
-    distance = 0.22;
-    focal = 100;
-  } else if (/클로즈|close[ -]?up|cu/.test(combined)) {
-    distance = 0.35;
-    focal = 85;
-  } else if (/바스트|medium\s*close|mcu/.test(combined)) {
-    distance = 0.50;
-    focal = 50;
-  } else if (/미디엄|medium|ms/.test(combined)) {
-    distance = 0.70;
-    focal = 35;
-  } else if (/풀\s*샷|full\s*shot|fs/.test(combined)) {
-    distance = 1.00;
-    focal = 28;
-  } else if (/와이드|wide|롱\s*샷|long\s*shot|ws|els|익스트림\s*롱/.test(combined)) {
-    distance = 1.40;
-    focal = 21;
-  }
-
-  // 2. Determine angle direction
-  let angleRad = Math.PI; // default: looking left (from right side of actor)
-  if (/측면|옆면|profile|lateral|side/.test(combined)) {
-    angleRad = -Math.PI / 2; // looking from below (Y+)
-  } else if (/후면|뒷모습|뒤쪽|rear|back/.test(combined)) {
-    angleRad = 0; // looking from left (X-)
-  } else if (/정면|앞모습|front|frontal/.test(combined)) {
-    angleRad = Math.PI; // looking from right (X+)
-  }
-
-  // 3. Height & Tilt
-  let height = 1.6;
-  let focusHeight = 1.1;
-  let tiltDeg = -6;
-
-  if (/수직|버티컬|vertical|overhead|탑샷/.test(combined)) {
-    height = 4.2;
-    focusHeight = 0;
-    tiltDeg = -88;
-  } else if (/하이|high/.test(combined)) {
-    height = 3.0;
-    focusHeight = 0.8;
-    tiltDeg = -25;
-  } else if (/로우|낮은|low|바닥|ground/.test(combined)) {
-    height = 0.4;
-    focusHeight = 1.3;
-    tiltDeg = 15;
-  }
-
-  const cameraX = actorX + Math.cos(angleRad) * distance;
-  const cameraY = actorY + Math.sin(angleRad) * distance;
-
-  return {
-    x: Math.min(1.99, Math.max(0.01, cameraX)),
-    y: Math.min(1.99, Math.max(0.01, cameraY)),
-    aimX: actorX,
-    aimY: actorY,
-    height,
-    focusHeight,
-    tiltDeg,
-    focal: draft.focal ? clamp(Number(draft.focal), 14, 135) : focal,
-    panDeg: Math.round((radToDeg(angleRad + Math.PI) + 360) % 360),
-    trackingTargetId: "",
-    locks: {
-      position: false,
-      orientation: false,
-      lens: false,
-      height: false,
-    }
-  };
-}
-
 function createCutFromTextDraft(draft) {
   const blocking = defaultState();
   blocking.sceneTitle = draft.title || "새 컷";
   blocking.sceneIntent = [draft.intent, draft.camera].filter(Boolean).join("\n");
   if (draft.duration) blocking.motion.duration = clamp(Number(draft.duration), 1, MAX_TIMELINE_DURATION);
-  
+
   // Apply visual-guided smart camera layout
   const firstActor = blocking.items.find((item) => item.type === "actor") || { x: 0.32, y: 0.46 };
   blocking.camera = draftCameraFromText(draft, firstActor.x, firstActor.y);
@@ -945,87 +1147,111 @@ function sceneFromTextDraft(draft) {
   });
 }
 
-function cutIssueList(cut) {
-  const issues = [];
-  if (!String(cut.title || "").trim()) issues.push("컷 제목 없음");
-  if (!String(cut.action || "").trim()) issues.push("액션 설명 없음");
+function cutIssueFindings(cut) {
+  const findings = [];
+  if (!String(cut.title || "").trim()) findings.push({ id: "required:title", kind: "required", severity: "warning", message: "컷 제목 없음" });
+  if (!String(cut.action || "").trim()) findings.push({ id: "required:action", kind: "required", severity: "warning", message: "액션 설명 없음" });
   const keys = cut.blocking?.motion?.keyframes || [];
-  if (!keys.length) issues.push("키프레임 없음");
-  if (!keys.some((keyframe) => keyframe.source === "camera")) issues.push("카메라 키 없음");
-  issues.push(...continuityIssuesForCut(cut));
-  return issues;
+  if (!keys.length) findings.push({ id: "required:keyframes", kind: "required", severity: "warning", message: "키프레임 없음" });
+  if (!keys.some((keyframe) => keyframe.source === "camera")) findings.push({ id: "required:camera-key", kind: "required", severity: "warning", message: "카메라 키 없음" });
+  const continuity = storyboardCore.normalizedContinuity(cut.continuity);
+  continuityFindingsForCut(cut).forEach((finding) => {
+    findings.push({
+      ...finding,
+      overridden: storyboardCore.findingIsOverridden(finding, continuity),
+      override: continuity.overrides[finding.id] || null,
+    });
+  });
+  return findings;
 }
 
-function continuityIssuesForCut(cut) {
+function cutIssueList(cut) {
+  return cutIssueFindings(cut).filter((finding) => !finding.overridden).map((finding) => finding.message);
+}
+
+function continuityFindingsForCut(cut) {
   const location = project?.scenes?.map((scene) => ({ scene, index: scene.cuts.indexOf(cut) }))
     .find((entry) => entry.index >= 0);
   if (!location || location.index === 0) return [];
   const previousCut = location.scene.cuts[location.index - 1];
-  return continuityIssues(previousCut?.blocking, cut?.blocking);
+  return continuityFindings(previousCut, cut);
 }
 
-function continuityIssues(previousBlocking, currentBlocking) {
+function continuityFindings(previousCut, currentCut) {
+  const previousBlocking = previousCut?.blocking;
+  const currentBlocking = currentCut?.blocking;
   if (!previousBlocking || !currentBlocking) return [];
-  const previous = interpolateRenderStateAtTime(previousBlocking, previousBlocking.motion?.duration || 0);
-  const current = interpolateRenderStateAtTime(currentBlocking, 0);
-  const issues = [];
-  if (previous.aspect !== current.aspect) issues.push(`연속성: 화면비 ${previous.aspect} → ${current.aspect}`);
-  const currentByIdentity = new Map(current.items.map((item) => [continuityIdentity(item), item]));
-  previous.items.forEach((before) => {
-    const after = currentByIdentity.get(continuityIdentity(before));
-    if (!after) {
-      if (before.type === "actor") issues.push(`연속성: @${before.name}이 다음 컷에서 사라짐`);
-      return;
-    }
-    if (before.type === "prop" && before.assetType !== after.assetType) {
-      issues.push(`연속성: ${before.name} 소품 종류가 바뀜`);
-    }
-    if (before.color !== after.color) issues.push(`연속성: ${before.name} 색상이 바뀜`);
-    if (before.type === "actor" && (before.mountId ? "mounted" : "free") !== (after.mountId ? "mounted" : "free")) {
-      issues.push(`연속성: @${before.name} 탑승 상태가 바뀜`);
-    }
-    const beforePose = resolvedItemPose(before, previous);
-    const afterPose = resolvedItemPose(after, current);
-    const size = stageWorldSize(current);
-    const jump = Math.hypot((beforePose.x - afterPose.x) * size.width, (beforePose.y - afterPose.y) * size.depth);
-    if (before.type === "actor" && jump > 0.75) issues.push(`연속성: @${before.name} 위치가 ${jump.toFixed(1)}m 이동`);
-    const facingChange = Math.abs((((afterPose.facing - beforePose.facing) % 360) + 540) % 360 - 180);
-    if (before.type === "actor" && facingChange > 45) issues.push(`연속성: @${before.name} 방향이 ${Math.round(facingChange)}° 바뀜`);
+  const previousDuration = Number(previousBlocking.motion?.duration || 0);
+  const currentDuration = Number(currentBlocking.motion?.duration || 0);
+  const previous = resolvedContinuityState(previousBlocking, previousDuration);
+  const current = resolvedContinuityState(currentBlocking, 0);
+  return storyboardCore.continuityReport({
+    previousCutId: previousCut.id,
+    previous,
+    current,
+    previousMotion: continuityBoundaryMotion(previousBlocking, Math.max(0, previousDuration - 0.5), previousDuration),
+    currentMotion: continuityBoundaryMotion(currentBlocking, 0, Math.min(currentDuration, 0.5)),
+    worldSize: stageWorldSize(currentBlocking),
   });
-  return issues.slice(0, 8);
 }
 
 function continuityIdentity(item) {
-  return String(item.continuityId || `${item.type}:${String(item.name || "").trim().toLowerCase()}`);
+  return storyboardCore.continuityIdentity(item);
+}
+
+function resolvedContinuityState(blocking, time) {
+  const evaluated = interpolateRenderStateAtTime(blocking, time);
+  return {
+    ...evaluated,
+    items: evaluated.items.map((item) => resolvedItemPose(item, evaluated)),
+  };
+}
+
+function continuityBoundaryMotion(blocking, startTime, endTime) {
+  if (endTime - startTime < 0.05) return {};
+  const start = resolvedContinuityState(blocking, startTime);
+  const end = resolvedContinuityState(blocking, endTime);
+  const endByIdentity = new Map(end.items.map((item) => [continuityIdentity(item), item]));
+  return Object.fromEntries(start.items.flatMap((item) => {
+    if (item.type !== "actor") return [];
+    const identity = continuityIdentity(item);
+    const next = endByIdentity.get(identity);
+    if (!next) return [];
+    return [[identity, { x: next.x - item.x, y: next.y - item.y }]];
+  }));
 }
 
 function snapshot() {
   return JSON.stringify(state);
 }
 
-function commit() {
-  evaluatedViewState = null;
+function commit({ preserveSourceIds = [] } = {}) {
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  preserveLiveSourcePreview(evaluatedViewState, preserveSourceIds);
+  applyActiveCameraTracking(evaluatedViewState, state);
   applyCameraTracking(state);
+  syncActiveCameraProfile();
   history.push(snapshot());
   if (history.length > 80) history.shift();
   future = [];
   syncActiveCutDocument();
   setProjectSaveStatus("changed");
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   syncProjectChrome();
 }
 
 function restore(json) {
+  clearLiveSourceEdits();
   state = JSON.parse(json);
-  evaluatedViewState = null;
   sanitizeState();
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   const cut = currentCut();
   if (cut) cut.blocking = state;
   selected = selectedExists(selected) ? selected : { kind: "camera" };
   setProjectSaveStatus("changed");
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   syncProjectChrome();
 }
 
@@ -1076,7 +1302,8 @@ function applyResponsivePanelDefaults() {
 }
 
 function sanitizeState() {
-  state.version = 5;
+  const previousStateVersion = Math.max(0, finiteNumber(state.version, 0));
+  state.version = 7;
   state.spacePresetId = environmentPresets[state.spacePresetId] ? state.spacePresetId : "";
   state.previs = state.previs || {};
   state.previs.mode = previsModes[state.previs.mode] ? state.previs.mode : "full-scene";
@@ -1085,21 +1312,37 @@ function sanitizeState() {
   state.previs.exportPresets = normalizeSelection(state.previs.exportPresets, exportPresets, ["seedance", "blender"]);
   delete state.reference;
   delete state.motionPrevis;
+  state.cameraSetup = sanitizeCameraSetup(state.cameraSetup);
   state.items = (state.items || []).map((item) => sanitizeItemPose(item));
   sanitizeAutoMountRelationships(state);
   state.groups = sanitizeManualGroups(state.groups, state);
   migrateLegacyMountsToGroups(state);
   state.groups = sanitizeManualGroups(state.groups, state);
-  const cameraOrientation = cameraOrientationFromLegacy(state.camera, state);
+  const legacyCameraKeyframes = Array.isArray(state.motion?.keyframes)
+    ? state.motion.keyframes.filter((keyframe) => keyframe?.source === "camera")
+    : [];
+  state.cameras = multiCameraCore.normalizeProfiles(state.cameras, state.camera, legacyCameraKeyframes, state.cameraSetup);
+  state.cameras = state.cameras.slice(0, 4);
+  if (previousStateVersion < 7) {
+    state.cameras.forEach((profile) => {
+      profile.keyframes = removeLegacyImplicitInitialKeys(profile.keyframes);
+    });
+  }
+  state.activeCameraId = multiCameraCore.resolveActiveId(state.activeCameraId, state.cameras);
+  const activeCameraProfile = multiCameraCore.profileFor(state.cameras, state.activeCameraId);
+  const cameraInput = activeCameraProfile?.camera || state.camera;
+  state.cameraSetup = sanitizeCameraSetup(activeCameraProfile?.cameraSetup || state.cameraSetup);
+  const cameraOrientation = cameraOrientationFromLegacy(cameraInput, state);
   state.camera = {
-    x: clamp(finiteNumber(state.camera?.x, 0.92), 0.02, 0.98),
-    y: clamp(finiteNumber(state.camera?.y, 0.48), 0.02, 0.98),
-    height: clamp(finiteNumber(state.camera?.height, 1.6), 0.4, 3),
-    panDeg: normalizePanDeg(Number.isFinite(Number(state.camera?.panDeg)) ? state.camera.panDeg : cameraOrientation.panDeg),
-    tiltDeg: clamp(Number.isFinite(Number(state.camera?.tiltDeg)) ? Number(state.camera.tiltDeg) : cameraOrientation.tiltDeg, -60, 60),
-    focal: clamp(finiteNumber(state.camera?.focal, 85), 14, 135),
-    trackingTargetId: sanitizeTrackingTargetId(state.camera?.trackingTargetId, state),
-    locks: sanitizeCameraLocks(state.camera?.locks),
+    x: clamp(finiteNumber(cameraInput?.x, 0.92), STAGE_COORD_MIN, STAGE_COORD_MAX),
+    y: clamp(finiteNumber(cameraInput?.y, 0.48), STAGE_COORD_MIN, STAGE_COORD_MAX),
+    height: clamp(finiteNumber(cameraInput?.height, 1.6), CAMERA_HEIGHT_MIN, CAMERA_HEIGHT_MAX),
+    panDeg: normalizePanDeg(Number.isFinite(Number(cameraInput?.panDeg)) ? cameraInput.panDeg : cameraOrientation.panDeg),
+    tiltDeg: clamp(Number.isFinite(Number(cameraInput?.tiltDeg)) ? Number(cameraInput.tiltDeg) : cameraOrientation.tiltDeg, CAMERA_TILT_MIN, CAMERA_TILT_MAX),
+    focal: clamp(finiteNumber(cameraInput?.focal, 85), CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX),
+    focusDistanceM: clamp(finiteNumber(cameraInput?.focusDistanceM, 5), CAMERA_FOCUS_DISTANCE_MIN, CAMERA_FOCUS_DISTANCE_MAX),
+    trackingTargetId: sanitizeTrackingTargetId(cameraInput?.trackingTargetId, state),
+    locks: sanitizeCameraLocks(cameraInput?.locks),
   };
   syncCameraDerivedAim(state.camera, state);
   state.motion = state.motion || {};
@@ -1108,29 +1351,22 @@ function sanitizeState() {
   state.motion.playhead = clamp(finiteNumber(state.motion.playhead, 0), 0, state.motion.duration);
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources);
   state.motion.timelineView = state.motion.timelineView === "split" ? "split" : "combined";
+  const activeProfileKeyframes = multiCameraCore.cameraKeyframes(activeCameraProfile?.keyframes);
   state.motion.keyframes = normalizeKeyframes(state.motion.keyframes)
     .filter((keyframe) => !isSourceHidden(keyframe.source));
+  if (previousStateVersion < 7) {
+    state.motion.keyframes = removeLegacyImplicitInitialKeys(state.motion.keyframes);
+  }
+  const normalizedCameraKeyframes = normalizeKeyframes(activeProfileKeyframes);
+  state.motion.keyframes = [
+    ...state.motion.keyframes.filter((keyframe) => keyframe.source !== "camera"),
+    ...normalizedCameraKeyframes,
+  ];
   const groupedFollowerIds = new Set(state.groups
     .flatMap((group) => group.members.filter((member) => member.itemId !== group.leaderId).map((member) => member.itemId)));
   state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !groupedFollowerIds.has(keyframe.source));
-  if (!state.motion.keyframes.length) {
-    if (state.motion.start) {
-      state.motion.keyframes.push(...splitLegacyKeyframe({
-        label: "키 1",
-        time: 0,
-        camera: clone(state.motion.start.camera || state.camera),
-        items: clone(state.motion.start.items || state.items),
-      }));
-    }
-    if (state.motion.end) {
-      state.motion.keyframes.push(...splitLegacyKeyframe({
-        label: `키 ${state.motion.keyframes.length + 1}`,
-        time: state.motion.duration,
-        camera: clone(state.motion.end.camera || state.camera),
-        items: clone(state.motion.end.items || state.items),
-      }));
-    }
-  }
+  // Legacy start/end poses are no longer promoted to timeline keys. A key is
+  // created only by an explicit keyframe action from the user.
   delete state.motion.start;
   delete state.motion.end;
   state.motion.keyframes = state.motion.keyframes.filter((keyframe) => !isSourceHidden(keyframe.source));
@@ -1143,6 +1379,211 @@ function sanitizeState() {
     ? state.motion.selectedKeyId
     : state.motion.keyframes[0]?.id || null;
   state.aspect = aspectMap[state.aspect] ? state.aspect : "16:9";
+  state.annotations = Array.isArray(state.annotations) ? state.annotations : [];
+}
+
+function removeLegacyImplicitInitialKeys(keyframes) {
+  const keys = Array.isArray(keyframes) ? keyframes : [];
+  const counts = new Map();
+  keys.forEach((keyframe) => {
+    const source = String(keyframe?.source || "camera");
+    counts.set(source, (counts.get(source) || 0) + 1);
+  });
+  return keys.filter((keyframe) => {
+    const source = String(keyframe?.source || "camera");
+    const isImplicitInitialKey = counts.get(source) === 1
+      && Math.abs(finiteNumber(keyframe?.time, 0)) < 0.001
+      && String(keyframe?.label || "키 1").trim() === "키 1"
+      && !String(keyframe?.note || "").trim();
+    return !isImplicitInitialKey;
+  });
+}
+
+function activeCameraProfile(renderState = state) {
+  const profiles = multiCameraCore.normalizeProfiles(
+    renderState?.cameras,
+    renderState?.camera,
+    renderState?.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera"),
+    renderState?.cameraSetup,
+  );
+  const id = multiCameraCore.resolveActiveId(renderState?.activeCameraId, profiles);
+  return multiCameraCore.profileFor(profiles, id);
+}
+
+function cameraPreviewProfiles(renderState = state) {
+  return multiCameraCore.normalizeProfiles(
+    renderState?.cameras,
+    renderState?.camera,
+    renderState?.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera"),
+    renderState?.cameraSetup,
+  );
+}
+
+function cameraPreviewProfile(renderState = state, profileId = null) {
+  const profiles = cameraPreviewProfiles(renderState);
+  const activeId = multiCameraCore.resolveActiveId(renderState?.activeCameraId, profiles);
+  const profile = multiCameraCore.profileFor(profiles, profileId || activeId);
+  if (!profile) return null;
+
+  // The active camera object is the live source of truth. Its profile can lag
+  // behind while a keyframe is being evaluated or a control is being dragged.
+  if (profile.id !== activeId) return profile;
+  return {
+    ...profile,
+    camera: clone(renderState.camera),
+    cameraSetup: clone(renderState.cameraSetup),
+    keyframes: clone(renderState.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera")) || [],
+  };
+}
+
+function cameraPreviewDocument(renderState = state, profileId = null) {
+  const profiles = cameraPreviewProfiles(renderState);
+  const activeId = multiCameraCore.resolveActiveId(renderState?.activeCameraId, profiles);
+  const profile = multiCameraCore.profileFor(profiles, profileId || activeId);
+  if (!profile) return clone(renderState);
+
+  const previewState = multiCameraCore.applyProfile(renderState, profile.id);
+  if (profile.id === activeId) {
+    previewState.camera = clone(renderState.camera);
+    previewState.cameraSetup = clone(renderState.cameraSetup);
+    previewState.motion.keyframes = multiCameraCore.mergeCameraKeyframes(
+      previewState.motion.keyframes,
+      renderState.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera") || [],
+    );
+  }
+  return applyCameraTracking(previewState);
+}
+
+function syncActiveCameraProfile(renderState = state) {
+  if (!renderState || !Array.isArray(renderState.cameras)) return;
+  const profile = renderState.cameras.find((entry) => entry.id === renderState.activeCameraId)
+    || renderState.cameras[0];
+  if (!profile) return;
+  profile.camera = clone(renderState.camera);
+  profile.cameraSetup = clone(renderState.cameraSetup);
+  profile.keyframes = clone((renderState.motion?.keyframes || [])
+    .filter((keyframe) => keyframe.source === "camera"));
+}
+
+function cameraDocumentForProfile(documentState, profileId) {
+  if (documentState === state) syncActiveCameraProfile(documentState);
+  return multiCameraCore.applyProfile(documentState, profileId);
+}
+
+function cameraProfileName(renderState = state) {
+  return activeCameraProfile(renderState)?.name || "카메라";
+}
+
+function cameraProfileCount(renderState = state) {
+  return multiCameraCore.normalizeProfiles(renderState?.cameras, renderState?.camera, [], renderState?.cameraSetup).length;
+}
+
+function switchActiveCamera(profileId) {
+  const current = activeCameraProfile();
+  if (!current || current.id === profileId) return;
+  const nextProfile = state.cameras.find((profile) => profile.id === profileId);
+  if (!nextProfile) return;
+  syncActiveCameraProfile();
+  // Unkeyed camera edits are preview-only and use the generic "camera" source.
+  // Never carry that preview pose into another camera rig when changing the
+  // active profile; the outgoing rig has already been persisted above.
+  liveSourceEdits.delete("camera");
+  // Camera selection is a read-only operation for every rig transform. Keep an
+  // authoritative snapshot so normalization or preview evaluation cannot move
+  // any camera merely because another camera became active.
+  const preservedCameraTransforms = new Map(state.cameras.map((profile) => [
+    profile.id,
+    clone(profile.camera),
+  ]));
+  state.activeCameraId = nextProfile.id;
+  state.camera = clone(nextProfile.camera) || {};
+  state.cameraSetup = sanitizeCameraSetup(nextProfile.cameraSetup || state.cameraSetup);
+  applyCameraTracking(state);
+  selected = { kind: "camera" };
+  sanitizeState();
+  state.cameras.forEach((profile) => {
+    const preserved = preservedCameraTransforms.get(profile.id);
+    if (preserved) profile.camera = clone(preserved);
+  });
+  const preservedActive = state.cameras.find((profile) => profile.id === state.activeCameraId);
+  if (preservedActive?.camera) {
+    state.camera = clone(preservedActive.camera);
+    applyCameraTracking(state);
+  }
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  syncActiveCutDocument(false);
+  setProjectSaveStatus("changed");
+  syncUi();
+  draw(evaluatedViewState);
+  syncProjectChrome();
+  notifyApp(`${nextProfile.name}을(를) 편집합니다.`);
+}
+
+function duplicateCameraProfile(profileId = state.activeCameraId) {
+  syncActiveCameraProfile();
+  const source = state.cameras.find((profile) => profile.id === profileId) || activeCameraProfile();
+  if (!source) return;
+  const index = state.cameras.length;
+  const duplicateCamera = clone(source.camera);
+  // A duplicated camera should be immediately visible on the field. Keep the
+  // framing settings, but place the new rig in a nearby slot instead of
+  // stacking it exactly under the source camera.
+  const displayOffsets = [
+    { x: 0.06, y: 0.06 },
+    { x: -0.06, y: 0.06 },
+    { x: 0.06, y: -0.06 },
+    { x: -0.06, y: -0.06 },
+  ];
+  const offset = displayOffsets[index % displayOffsets.length];
+  duplicateCamera.x = clamp(finiteNumber(duplicateCamera.x, state.camera.x) + offset.x, STAGE_COORD_MIN, STAGE_COORD_MAX);
+  duplicateCamera.y = clamp(finiteNumber(duplicateCamera.y, state.camera.y) + offset.y, STAGE_COORD_MIN, STAGE_COORD_MAX);
+  const copy = multiCameraCore.createProfile(
+    uid(),
+    `카메라 ${String.fromCharCode(65 + Math.min(index, 25))}`,
+    multiCameraCore.DEFAULT_COLORS[index % multiCameraCore.DEFAULT_COLORS.length],
+    duplicateCamera,
+    (source.keyframes || []).map((keyframe) => ({ ...clone(keyframe), id: uid(), source: "camera" })),
+    source.cameraSetup,
+  );
+  state.cameras.push(copy);
+  state = cameraDocumentForProfile(state, copy.id);
+  selected = { kind: "camera" };
+  sanitizeState();
+  commit();
+  revealCameraRigRow(copy.id);
+  notifyApp(`${copy.name}을(를) 추가했습니다.`);
+}
+
+function addCameraProfile() {
+  if (state.cameras.length >= 4) {
+    notifyApp("멀티카메라는 최대 4대까지 사용할 수 있습니다.");
+    return;
+  }
+  duplicateCameraProfile(state.activeCameraId);
+}
+
+function deleteCameraProfile(profileId = state.activeCameraId) {
+  if (state.cameras.length <= 1) {
+    notifyApp("카메라는 최소 1대가 필요합니다.");
+    return;
+  }
+  const target = state.cameras.find((profile) => profile.id === profileId);
+  if (!target || !confirm(`${target.name}을(를) 삭제할까요?\n이 카메라의 구도와 키프레임이 삭제됩니다.`)) return;
+  syncActiveCameraProfile();
+  state.cameras = state.cameras.filter((profile) => profile.id !== profileId);
+  const next = state.cameras[0];
+  state = cameraDocumentForProfile(state, next.id);
+  selected = { kind: "camera" };
+  sanitizeState();
+  commit();
+  notifyApp(`${target.name}을(를) 삭제했습니다.`);
+}
+
+function revealCameraRigRow(profileId) {
+  const row = [...document.querySelectorAll(".camera-rig-row")]
+    .find((entry) => entry.dataset.cameraId === profileId);
+  if (!row) return;
+  row.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 function sanitizeCameraLocks(locks = {}) {
@@ -1207,7 +1648,10 @@ function mergeLockedCameraPose(nextPose, previousPose = {}) {
     next.tiltDeg = previousPose.tiltDeg;
     next.trackingTargetId = previousPose.trackingTargetId;
   }
-  if (locks.lens) next.focal = previousPose.focal;
+  if (locks.lens) {
+    next.focal = previousPose.focal;
+    next.focusDistanceM = previousPose.focusDistanceM;
+  }
   if (locks.height) next.height = previousPose.height;
   next.locks = locks;
   return sanitizeCameraPose(next);
@@ -1241,9 +1685,26 @@ function selectedItem() {
   return state.items.find((item) => item.id === selected.id) || null;
 }
 
+function selectedPoseActor() {
+  const current = selectedItem();
+  if (current?.type === "actor") return current;
+  const remembered = state.items.find((item) => item.id === selectedPoseActorId && item.type === "actor");
+  if (remembered) {
+    selected = { kind: "item", id: remembered.id };
+    return remembered;
+  }
+  const firstActor = state.items.find((item) => item.type === "actor" && item.visible !== false);
+  if (firstActor) {
+    selected = { kind: "item", id: firstActor.id };
+    selectedPoseActorId = firstActor.id;
+  }
+  return firstActor || null;
+}
+
 function sourceDefinitions(renderState = state) {
+  const cameraProfile = activeCameraProfile(renderState);
   return [
-    { id: "camera", type: "camera", name: "카메라", color: "#71b8ff" },
+    { id: "camera", type: "camera", name: cameraProfile?.name || "카메라", color: cameraProfile?.color || "#71b8ff" },
     ...renderState.items.map((item) => ({
       id: item.id,
       type: item.type,
@@ -1370,10 +1831,87 @@ function ensureDurationCovers(time) {
   return state.motion.duration;
 }
 
+function advancePlayheadAfterKeyframe(time = state.motion.playhead) {
+  const requestedTime = Number((clamp(Number(time) || 0, 0, MAX_TIMELINE_DURATION) + 3).toFixed(2));
+  const nextTime = Math.min(requestedTime, MAX_TIMELINE_DURATION);
+  ensureDurationCovers(nextTime);
+  state.motion.playhead = nextTime;
+  return nextTime;
+}
+
 function poseForSource(sourceId) {
   if (sourceId === "camera") return clone(state.camera);
   const item = state.items.find((entry) => entry.id === sourceId);
   return item ? clone(item) : null;
+}
+
+function liveKeyframeForSource(sourceId, time = state.motion.playhead) {
+  return keysForSource(sourceId).find((entry) => timelineTimesMatch(entry.time, time)) || null;
+}
+
+function rememberLiveSourceEdit(sourceId) {
+  if (!sourceId) return;
+  const currentPose = poseForSource(sourceId);
+  if (!currentPose) return;
+  const time = state.motion.playhead;
+  // Scene edits and timeline keys are independent. Even when a key exists at
+  // this time, keep the edited scene pose as a preview without rewriting it.
+  liveSourceEdits.set(sourceId, { time, pose: currentPose });
+}
+
+function clearLiveSourceEdit(sourceId, time = state.motion.playhead) {
+  const pending = liveSourceEdits.get(sourceId);
+  if (!pending || timelineTimesMatch(pending.time, time)) liveSourceEdits.delete(sourceId);
+}
+
+function applyLiveSourceEdits(renderState, time) {
+  liveSourceEdits.forEach((entry, sourceId) => {
+    if (!timelineTimesMatch(entry.time, time)) return;
+    if (sourceId === "camera") {
+      renderState.camera = syncCameraDerivedAim(
+        sanitizeCameraPoseFor(renderState, entry.pose),
+        renderState,
+      );
+      return;
+    }
+    const itemIndex = renderState.items.findIndex((item) => item.id === sourceId);
+    if (itemIndex < 0) return;
+    const fallback = renderState.items[itemIndex];
+    renderState.items[itemIndex] = preserveItemStructure(
+      sanitizeItemPose({ ...fallback, ...entry.pose, id: sourceId }),
+      fallback,
+    );
+  });
+  return renderState;
+}
+
+function updateExistingSourceKeyframe(sourceId, time = state.motion.playhead) {
+  const keyframe = keysForSource(sourceId)
+    .find((entry) => timelineTimesMatch(entry.time, time));
+  const currentPose = poseForSource(sourceId);
+  if (!keyframe || !currentPose) return false;
+  keyframe.pose = sourceId === "camera"
+    ? mergeLockedCameraPose(currentPose, keyframe.pose)
+    : sanitizeSourcePose(sourceId, currentPose);
+  clearLiveSourceEdit(sourceId, time);
+  return true;
+}
+
+function preserveLiveSourcePreview(renderState, sourceIds = []) {
+  if (!renderState || !Array.isArray(sourceIds)) return renderState;
+  sourceIds.filter(Boolean).forEach((sourceId) => {
+    rememberLiveSourceEdit(sourceId);
+    const currentPose = poseForSource(sourceId);
+    if (!currentPose) return;
+    if (sourceId === "camera") {
+      renderState.camera = currentPose;
+      return;
+    }
+    const itemIndex = renderState.items.findIndex((item) => item.id === sourceId);
+    if (itemIndex >= 0) renderState.items[itemIndex] = currentPose;
+  });
+  renderState.motion.playhead = state.motion.playhead;
+  return renderState;
 }
 
 function captureSourceKeyframe(sourceId, time = state.motion?.playhead ?? 0, label, pathMode = "straight") {
@@ -1405,13 +1943,13 @@ function captureCameraHeightKeyframe() {
   setActiveSource("camera");
   selectSourceOnStage("camera");
   const requestedTime = readTimelineTimeInput(state.motion.playhead);
-  const existing = keysForSource("camera").find((keyframe) => Math.abs(keyframe.time - requestedTime) < 0.05);
+  const existing = keysForSource("camera").find((keyframe) => timelineTimesMatch(keyframe.time, requestedTime));
   if (existing) {
     existing.pose = sanitizeCameraPose({ ...existing.pose, height: state.camera.height });
-    state.motion.selectedKeyId = existing.id;
-    state.motion.playhead = existing.time;
+    setTimelineSelection([existing.id], existing.id);
+    advancePlayheadAfterKeyframe(existing.time);
     commit();
-    notifyApp(`${existing.time.toFixed(1)}초 카메라 키의 높이만 갱신했습니다.`);
+    notifyApp(`${existing.time.toFixed(1)}초 카메라 키의 높이를 갱신했습니다.`);
     return;
   }
   const time = availableKeyTime(requestedTime, "camera", { maxTime: MAX_TIMELINE_DURATION });
@@ -1421,9 +1959,11 @@ function captureCameraHeightKeyframe() {
   if (!keyframe) return;
   applyPathModeToKeyframe(keyframe, pathMode);
   state.motion.keyframes.push(keyframe);
-  state.motion.selectedKeyId = keyframe.id;
+  setTimelineSelection([keyframe.id], keyframe.id);
   state.motion.playhead = keyframe.time;
   state.motion.keyframes = sortKeyframes(state.motion.keyframes);
+  clearLiveSourceEdit("camera", keyframe.time);
+  advancePlayheadAfterKeyframe(keyframe.time);
   commit();
   notifyApp(`${keyframe.time.toFixed(1)}초에 카메라 높이 키를 추가했습니다.`);
 }
@@ -1564,6 +2104,9 @@ function preserveItemStructure(pose, definition) {
     name: definition.name,
     assetType: definition.assetType,
     placementMode: definition.placementMode || "manual",
+    locomotionMode: definition.type === "actor" && actorLocomotionModes[definition.locomotionMode]
+      ? definition.locomotionMode
+      : "auto",
     mountId: definition.mountId || "",
     seatIndex: Number(definition.seatIndex || 0),
     motionEnabled: definition.motionEnabled !== false,
@@ -1575,12 +2118,13 @@ function sanitizeCameraPose(camera) {
   if (!camera) return clone(state.camera);
   const orientation = cameraOrientationFromLegacy(camera, state);
   const sanitized = {
-    x: clamp(finiteNumber(camera.x, state.camera.x), 0.02, 0.98),
-    y: clamp(finiteNumber(camera.y, state.camera.y), 0.02, 0.98),
-    height: clamp(finiteNumber(camera.height, state.camera.height ?? 1.6), 0.4, 3),
+    x: clamp(finiteNumber(camera.x, state.camera.x), STAGE_COORD_MIN, STAGE_COORD_MAX),
+    y: clamp(finiteNumber(camera.y, state.camera.y), STAGE_COORD_MIN, STAGE_COORD_MAX),
+    height: clamp(finiteNumber(camera.height, state.camera.height ?? 1.6), CAMERA_HEIGHT_MIN, CAMERA_HEIGHT_MAX),
     panDeg: normalizePanDeg(Number.isFinite(Number(camera.panDeg)) ? camera.panDeg : orientation.panDeg),
-    tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, -60, 60),
-    focal: clamp(finiteNumber(camera.focal, state.camera.focal), 14, 135),
+    tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, CAMERA_TILT_MIN, CAMERA_TILT_MAX),
+    focal: clamp(finiteNumber(camera.focal, state.camera.focal), CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX),
+    focusDistanceM: clamp(finiteNumber(camera.focusDistanceM, state.camera.focusDistanceM ?? 5), CAMERA_FOCUS_DISTANCE_MIN, CAMERA_FOCUS_DISTANCE_MAX),
     trackingTargetId: sanitizeTrackingTargetId(camera.trackingTargetId ?? state.camera.trackingTargetId, state),
     locks: sanitizeCameraLocks(camera.locks ?? state.camera.locks),
   };
@@ -1599,18 +2143,26 @@ function trackingOrientation(item, camera = state.camera, renderState = state) {
   const dz = (item.y - camera.y) * size.depth;
   const horizontalDistance = Math.max(0.05, Math.hypot(dx, dz));
   const subjectHeight = item.type === "actor"
-    ? 1.78 * Number(item.size || 1)
-    : propDefinition(item.assetType).height * Number(item.size || 1) * Number(item.scaleY || 1) * 0.55;
+    ? actorFocusHeight(item)
+    : Number(item.mountedHeight || 0)
+      + propDefinition(item.assetType).height * Number(item.size || 1) * Number(item.scaleY || 1) * 0.55;
   const aspect = aspectMap[renderState.aspect] || 16 / 9;
-  const verticalFov = degToRad(horizontalFovToVerticalFov(focalToFov(camera.focal), aspect));
+  const verticalFov = degToRad(horizontalFovToVerticalFov(focalToFov(camera.focal, cameraSensorWidth(renderState)), aspect));
   const faceAngle = Math.atan2(subjectHeight - Number(camera.height || 1.6), horizontalDistance);
   const framingOffset = Math.atan(
     (0.5 - CINEMATIC_FACE_SCREEN_Y) * 2 * Math.tan(verticalFov / 2),
   );
   return {
     panDeg: normalizePanDeg(radToDeg(Math.atan2(dz, dx))),
-    tiltDeg: clamp(radToDegSigned(faceAngle - framingOffset), -60, 60),
+    tiltDeg: clamp(radToDegSigned(faceAngle - framingOffset), -90, 90),
   };
+}
+
+function actorFocusHeight(item) {
+  const scale = Number(item?.size || 1);
+  const base = Number(item?.verticalOffset || 0) + Number(item?.mountedHeight || 0);
+  const pitchAmount = clamp(Math.abs(Number(item?.pitch || 0)) / 90, 0, 1);
+  return base + lerp(1.78, 0.45, pitchAmount) * scale;
 }
 
 function applyCameraTracking(renderState) {
@@ -1634,6 +2186,17 @@ function applyCameraTracking(renderState) {
   return renderState;
 }
 
+function applyActiveCameraTracking(renderState, sourceState = renderState) {
+  if (!renderState?.camera) return renderState;
+  // Tracking is a camera-level setting. A keyed framing pose must not erase
+  // the target selected in the camera panel during interpolation.
+  renderState.camera.trackingTargetId = sanitizeTrackingTargetId(
+    sourceState?.camera?.trackingTargetId,
+    renderState,
+  );
+  return applyCameraTracking(renderState);
+}
+
 function sanitizeItemPoses(items) {
   if (!Array.isArray(items)) return clone(state.items);
   return items.map((item) => sanitizeItemPose(item));
@@ -1654,10 +2217,14 @@ function sanitizeItemPose(item) {
     shape: item.shape || "circle",
     facing: finiteNumber(item.facing, 0) % 360,
     bodyPose: type === "actor" ? sanitizeBodyPose(item.bodyPose) : null,
+    locomotionMode: type === "actor" && actorLocomotionModes[item.locomotionMode] ? item.locomotionMode : "auto",
     assetType,
     scaleX: clamp(finiteNumber(item.scaleX, 1), 0.25, 3.5),
     scaleY: clamp(finiteNumber(item.scaleY, 1), 0.25, 3.5),
     scaleZ: clamp(finiteNumber(item.scaleZ, 1), 0.25, 3.5),
+    verticalOffset: type === "actor" ? clamp(finiteNumber(item.verticalOffset, 0), -1, 5) : 0,
+    pitch: type === "actor" ? clamp(finiteNumber(item.pitch, 0), -90, 90) : 0,
+    mountedHeight: type === "prop" ? clamp(finiteNumber(item.mountedHeight, 0), -1, 5) : 0,
     placementMode: type === "actor" && (item.placementMode === "auto" || item.mountId) ? "auto" : "manual",
     mountId: type === "actor" ? String(item.mountId || "") : "",
     seatIndex: type === "actor" ? Math.max(0, Math.round(finiteNumber(item.seatIndex, 0))) : 0,
@@ -1910,8 +2477,105 @@ function selectedKeyframeExists(id) {
   return Boolean(id && state.motion.keyframes?.some((keyframe) => keyframe.id === id));
 }
 
+function loadTimelineSnapMode() {
+  try {
+    const value = localStorage.getItem("frisframe:timeline-snap");
+    return ["frame", "0.1", "0.5", "1", "off"].includes(value) ? value : "frame";
+  } catch {
+    return "frame";
+  }
+}
+
+function saveTimelineSnapMode() {
+  try {
+    localStorage.setItem("frisframe:timeline-snap", timelineSnapMode);
+  } catch {
+    // The editor still works when browser storage is unavailable.
+  }
+}
+
+function timelineTimesMatch(first, second) {
+  return sameTimelineTime(first, second, timelineCollisionEpsilon(timelineSnapMode, state.motion?.fps || 24));
+}
+
+function snapTimelineTime(value, minimum = 0, maximum = state.motion?.duration ?? MAX_TIMELINE_DURATION) {
+  return snapTimelineTimeCore(value, timelineSnapMode, state.motion?.fps || 24, minimum, maximum);
+}
+
+function formatTimelineTime(value) {
+  const digits = timelineSnapMode === "frame" ? 4 : timelineSnapMode === "off" ? 2 : String(timelineSnapMode).includes(".") ? 1 : 0;
+  return Number(value || 0).toFixed(digits);
+}
+
+function resetTimelineRuntime(preferredKeyId = state.motion?.selectedKeyId) {
+  const preferred = selectedKeyframeExists(preferredKeyId) ? preferredKeyId : null;
+  timelineSelectedKeyIds = new Set(preferred ? [preferred] : []);
+  timelinePrimaryKeyId = preferred;
+  timelineSelectionAnchorId = preferred;
+}
+
+function restoreTimelineRuntime(runtime) {
+  const normalized = normalizeTimelineSelectionIds(
+    state.motion.keyframes,
+    runtime?.selectedKeyIds || [],
+    runtime?.primaryKeyId || "",
+  );
+  if (!normalized.ids.length) {
+    resetTimelineRuntime();
+    return;
+  }
+  timelineSelectedKeyIds = new Set(normalized.ids);
+  timelinePrimaryKeyId = normalized.primaryId || null;
+  timelineSelectionAnchorId = selectedKeyframeExists(runtime?.rangeAnchorId)
+    ? runtime.rangeAnchorId
+    : timelinePrimaryKeyId;
+}
+
+function normalizeTimelineRuntime() {
+  const normalized = normalizeTimelineSelectionIds(
+    state.motion.keyframes,
+    timelineSelectedKeyIds,
+    timelinePrimaryKeyId || "",
+  );
+  timelineSelectedKeyIds = new Set(normalized.ids);
+  timelinePrimaryKeyId = normalized.primaryId || null;
+  if (!selectedKeyframeExists(timelineSelectionAnchorId)) timelineSelectionAnchorId = timelinePrimaryKeyId;
+  return normalized;
+}
+
+function setTimelineSelection(ids, primaryKeyId = "", options = {}) {
+  const expandedIds = options.expandCuts === false
+    ? Array.from(ids || [])
+    : expandSynchronizedCutSelection(state.motion.keyframes, ids || []);
+  const normalized = normalizeTimelineSelectionIds(state.motion.keyframes, expandedIds, primaryKeyId);
+  timelineSelectedKeyIds = new Set(normalized.ids);
+  timelinePrimaryKeyId = normalized.primaryId || null;
+  if (options.updateAnchor !== false) timelineSelectionAnchorId = timelinePrimaryKeyId;
+  return normalized;
+}
+
+function primaryTimelineKeyId() {
+  normalizeTimelineRuntime();
+  return timelinePrimaryKeyId;
+}
+
+function selectedTimelineKeyframes(options = {}) {
+  normalizeTimelineRuntime();
+  const ids = options.expandCuts === false
+    ? [...timelineSelectedKeyIds]
+    : expandSynchronizedCutSelection(state.motion.keyframes, timelineSelectedKeyIds);
+  const selectedIds = new Set(ids);
+  return sortKeyframes(state.motion.keyframes).filter((keyframe) => selectedIds.has(keyframe.id));
+}
+
+function selectedKeyIdForRender(renderState = state) {
+  if (renderState === state || renderState === evaluatedViewState) return primaryTimelineKeyId();
+  return renderState.motion?.selectedKeyId || null;
+}
+
 function selectedKeyframe() {
-  return state.motion.keyframes.find((keyframe) => keyframe.id === state.motion.selectedKeyId) || null;
+  const id = primaryTimelineKeyId();
+  return state.motion.keyframes.find((keyframe) => keyframe.id === id) || null;
 }
 
 function nearestKeyframe(keyframes, time = state.motion.playhead) {
@@ -1927,15 +2591,15 @@ function selectKeyForSource(sourceId, time = state.motion.playhead) {
   const keyframe = sourceId === "all"
     ? nearestKeyframe(sortKeyframes(state.motion.keyframes), time)
     : nearestKeyframe(keysForSource(sourceId), time);
-  state.motion.selectedKeyId = keyframe?.id || null;
+  setTimelineSelection(keyframe ? [keyframe.id] : [], keyframe?.id || "");
   return keyframe;
 }
 
-function applyKeyframeToStage(keyframe) {
+function previewKeyframeOnStage(keyframe) {
   if (!keyframe) return;
-  applySourcePose(keyframe.source, keyframe.pose);
-  state.motion.playhead = keyframe.time;
-  state.motion.selectedKeyId = keyframe.id;
+  evaluatedViewState = interpolateStateAtTime(keyframe.time);
+  evaluatedViewState.motion.playhead = keyframe.time;
+  setTimelineSelection([keyframe.id], keyframe.id);
 }
 
 function applySourcePose(sourceId, pose) {
@@ -1996,7 +2660,11 @@ function resizeCanvas(options = {}) {
   if (options.layout !== false) layoutStageCanvas({ preserveCenter: options.preserveCenter !== false });
   const rect = canvas.getBoundingClientRect();
   if (rect.width < 1 || rect.height < 1) {
-    resizeThreeView();
+    if (viewMode === "3d") resizeThreeView();
+    else if (threeView?.ready) {
+      clampSavedCameraFramePosition();
+      renderCameraFramePreview(evaluatedViewState || state);
+    }
     return;
   }
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -2004,7 +2672,11 @@ function resizeCanvas(options = {}) {
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   draw();
-  resizeThreeView();
+  if (viewMode === "3d") resizeThreeView();
+  else if (threeView?.ready) {
+    clampSavedCameraFramePosition();
+    renderCameraFramePreview(evaluatedViewState || state);
+  }
 }
 
 function setStageZoom(nextZoom, anchor = null) {
@@ -2080,7 +2752,14 @@ function draw(renderState = evaluatedViewState || state, options = {}) {
 
   stageRect = computeStageRect(width, height, renderState.aspect);
   drawStage(renderState, stageRect, options);
-  renderThreeView(renderState);
+  if (viewMode === "3d") {
+    renderThreeView(renderState);
+  } else if (initThreeView()) {
+    // The camera-frame renderer is shared by both tabs; the 2D tab only hides
+    // the editable 3D viewport, not the live camera preview.
+    renderCameraFramePreview(renderState);
+  }
+  if (typeof drawAnnotations === "function") drawAnnotations();
 }
 
 function drawStage(renderState, rect, options = {}) {
@@ -2092,14 +2771,22 @@ function drawStage(renderState, rect, options = {}) {
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
 
   if (renderState.showGrid && !(clean && renderState.cleanExport)) drawGrid(rect, renderState);
-  if (renderState.showCamera) drawCameraCone(renderState.camera, rect, clean);
+  const cameraEntries = cameraFieldRenderEntries(renderState);
+  if (renderState.showCamera) {
+    cameraEntries.forEach((entry) => {
+      drawCameraCone(entry.profileState.camera, rect, clean, renderState, entry.profile.color, entry.active);
+    });
+  }
   if (!(clean && renderState.cleanExport)) drawMotionPaths(renderState, rect);
 
   const sorted = [...renderState.items].sort((a, b) => resolvedItemPose(a, renderState).y - resolvedItemPose(b, renderState).y);
   sorted.forEach((item) => drawItem(item, rect, renderState, clean));
-  drawCamera(renderState.camera, rect, clean);
+  cameraEntries.forEach((entry) => {
+    drawCamera(entry.profileState.camera, rect, clean, entry.profile.color, entry.active, entry.profile.name);
+  });
 
   if (!(clean && renderState.cleanExport)) drawFooter(renderState, rect);
+  if (!(clean && renderState.cleanExport)) drawStageAnnotations(renderState, rect);
   ctx.restore();
 
   ctx.save();
@@ -2133,6 +2820,216 @@ function worldToStage(point, renderState = state) {
   };
 }
 
+function loadCameraFrameWidth() {
+  try {
+    const value = Number(window.localStorage.getItem(CAMERA_FRAME_WIDTH_KEY));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadCameraFramePosition() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(CAMERA_FRAME_POSITION_KEY) || "null");
+    return Number.isFinite(value?.x) && Number.isFinite(value?.y)
+      ? { x: value.x, y: value.y }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function cameraFrameWidthBounds() {
+  const frame = $("#cameraFrame");
+  const parentWidth = frame?.parentElement?.clientWidth || window.innerWidth || CAMERA_FRAME_MAX_WIDTH;
+  const max = Math.max(160, Math.min(CAMERA_FRAME_MAX_WIDTH, parentWidth - 28));
+  return {
+    min: Math.min(CAMERA_FRAME_MIN_WIDTH, max),
+    max,
+  };
+}
+
+function updateCameraFrameResizeHandle() {
+  const frame = $("#cameraFrame");
+  const handle = $("#cameraFrameResizeHandle");
+  if (!frame || !handle) return;
+  const width = Math.round(frame.getBoundingClientRect().width);
+  const bounds = cameraFrameWidthBounds();
+  handle.setAttribute("aria-valuemin", String(Math.round(bounds.min)));
+  handle.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+  handle.setAttribute("aria-valuenow", String(width));
+}
+
+function scheduleCameraFrameResizeRender() {
+  if (cameraFrameResizeRenderQueued) return;
+  cameraFrameResizeRenderQueued = true;
+  requestAnimationFrame(() => {
+    cameraFrameResizeRenderQueued = false;
+    if (threeView?.ready) renderCameraFramePreview(evaluatedViewState || threeView.lastState || state);
+  });
+}
+
+function setCameraFrameWidth(width, { persist = true, render = true } = {}) {
+  const frame = $("#cameraFrame");
+  if (!frame) return;
+  if (!Number.isFinite(Number(width))) {
+    cameraFrameWidth = null;
+    frame.style.removeProperty("--camera-frame-width");
+  } else {
+    const bounds = cameraFrameWidthBounds();
+    cameraFrameWidth = Math.round(clamp(Number(width), bounds.min, bounds.max));
+    frame.style.setProperty("--camera-frame-width", `${cameraFrameWidth}px`);
+    if (persist) {
+      try {
+        window.localStorage.setItem(CAMERA_FRAME_WIDTH_KEY, String(cameraFrameWidth));
+      } catch {
+        // A private or restricted storage context should not block resizing.
+      }
+    }
+  }
+  updateCameraFrameResizeHandle();
+  if (render) scheduleCameraFrameResizeRender();
+}
+
+function applyCameraFramePositionStyle() {
+  const frame = $("#cameraFrame");
+  if (!frame || !cameraFramePosition) return;
+  frame.style.left = String(cameraFramePosition.x) + "px";
+  frame.style.top = String(cameraFramePosition.y) + "px";
+  frame.style.right = "auto";
+  frame.style.bottom = "auto";
+}
+
+function setCameraFramePosition(x, y, { persist = true } = {}) {
+  const frame = $("#cameraFrame");
+  const parent = frame?.parentElement;
+  if (!frame || !parent) return;
+  const frameRect = frame.getBoundingClientRect();
+  const parentWidth = parent.clientWidth;
+  const parentHeight = parent.clientHeight;
+  if (frameRect.width < 1 || frameRect.height < 1 || parentWidth < 1 || parentHeight < 1) return;
+  const inset = 10;
+  const maxX = Math.max(inset, parentWidth - frameRect.width - inset);
+  const maxY = Math.max(inset, parentHeight - frameRect.height - inset);
+  cameraFramePosition = {
+    x: Math.round(clamp(Number(x), inset, maxX)),
+    y: Math.round(clamp(Number(y), inset, maxY)),
+  };
+  applyCameraFramePositionStyle();
+  if (persist) {
+    try {
+      window.localStorage.setItem(CAMERA_FRAME_POSITION_KEY, JSON.stringify(cameraFramePosition));
+    } catch {
+      // A private or restricted storage context should not block moving the frame.
+    }
+  }
+}
+
+function clampSavedCameraFramePosition() {
+  if (!cameraFramePosition) return;
+  setCameraFramePosition(cameraFramePosition.x, cameraFramePosition.y);
+}
+
+function setupCameraFrameResize() {
+  const handle = $("#cameraFrameResizeHandle");
+  const moveHandle = $("#cameraFrameMoveHandle");
+  if (!handle || handle.dataset.ready === "true") return;
+  handle.dataset.ready = "true";
+  handle.setAttribute("role", "slider");
+  handle.setAttribute("aria-orientation", "horizontal");
+  if (cameraFrameWidth != null) {
+    // Apply the saved preference before layout. It will be clamped on the
+    // first user drag, after the shared canvas wrapper has a real width.
+    const frame = $("#cameraFrame");
+    frame?.style.setProperty("--camera-frame-width", `${cameraFrameWidth}px`);
+  }
+  updateCameraFrameResizeHandle();
+  applyCameraFramePositionStyle();
+
+  if (moveHandle) {
+    moveHandle.addEventListener("pointerdown", (event) => {
+      if (event.button != null && event.button !== 0) return;
+      const frame = $("#cameraFrame");
+      if (!frame) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = frame.getBoundingClientRect();
+      moveHandle.setPointerCapture?.(event.pointerId);
+      cameraFrameMoveDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startLeft: rect.left - frame.parentElement.getBoundingClientRect().left,
+        startTop: rect.top - frame.parentElement.getBoundingClientRect().top,
+      };
+      moveHandle.classList.add("is-dragging");
+    });
+
+    moveHandle.addEventListener("pointermove", (event) => {
+      if (!cameraFrameMoveDrag || event.pointerId !== cameraFrameMoveDrag.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setCameraFramePosition(
+        cameraFrameMoveDrag.startLeft + (event.clientX - cameraFrameMoveDrag.startX),
+        cameraFrameMoveDrag.startTop + (event.clientY - cameraFrameMoveDrag.startY),
+      );
+    });
+
+    const finishMove = (event) => {
+      if (!cameraFrameMoveDrag || event.pointerId !== cameraFrameMoveDrag.pointerId) return;
+      moveHandle.releasePointerCapture?.(event.pointerId);
+      cameraFrameMoveDrag = null;
+      moveHandle.classList.remove("is-dragging");
+    };
+    moveHandle.addEventListener("pointerup", finishMove);
+    moveHandle.addEventListener("pointercancel", finishMove);
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    const frame = $("#cameraFrame");
+    if (!frame) return;
+    event.preventDefault();
+    event.stopPropagation();
+    cameraFrameResizeDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: frame.getBoundingClientRect().width,
+    };
+    handle.setPointerCapture?.(event.pointerId);
+    handle.classList.add("is-dragging");
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (!cameraFrameResizeDrag || event.pointerId !== cameraFrameResizeDrag.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // The handle is anchored to the lower-left corner, so dragging left grows
+    // the frame while dragging right makes it smaller.
+    setCameraFrameWidth(
+      cameraFrameResizeDrag.startWidth - (event.clientX - cameraFrameResizeDrag.startX),
+    );
+  });
+
+  const finishResize = (event) => {
+    if (!cameraFrameResizeDrag || event.pointerId !== cameraFrameResizeDrag.pointerId) return;
+    handle.releasePointerCapture?.(event.pointerId);
+    cameraFrameResizeDrag = null;
+    handle.classList.remove("is-dragging");
+    updateCameraFrameResizeHandle();
+  };
+  handle.addEventListener("pointerup", finishResize);
+  handle.addEventListener("pointercancel", finishResize);
+  handle.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 80 : 24;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const current = $("#cameraFrame")?.getBoundingClientRect().width || CAMERA_FRAME_MIN_WIDTH;
+    setCameraFrameWidth(current + (event.key === "ArrowLeft" ? step : -step));
+  });
+}
+
 function initThreeView() {
   if (threeView) return Boolean(threeView.ready);
   const wrap = $("#threeWrap");
@@ -2150,9 +3047,15 @@ function initThreeView() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#111820");
-  scene.fog = new THREE.Fog("#111820", 24, 64);
+  scene.fog = new THREE.Fog("#111820", 120, 300);
 
-  const camera3d = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+  const previewScene = new THREE.Scene();
+  previewScene.background = new THREE.Color("#111820");
+  previewScene.fog = null;
+  const previewWorld = new THREE.Group();
+  previewScene.add(previewWorld);
+
+  const camera3d = new THREE.PerspectiveCamera(48, 1, 0.1, 500);
   const renderer = new THREE.WebGLRenderer({
     canvas: canvas3d,
     antialias: true,
@@ -2164,7 +3067,7 @@ function initThreeView() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  const frameCamera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 100);
+  const frameCamera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 500);
   const frameRenderer = new THREE.WebGLRenderer({
     canvas: frameCanvas,
     antialias: true,
@@ -2173,6 +3076,7 @@ function initThreeView() {
   });
   frameRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   frameRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  frameRenderer.setClearColor("#111820", 1);
   frameRenderer.shadowMap.enabled = true;
   frameRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -2192,6 +3096,20 @@ function initThreeView() {
   fillLight.position.set(-4, 4, -6);
   scene.add(fillLight);
 
+  previewScene.add(new THREE.HemisphereLight("#dff7ff", "#283038", 1.42));
+  const previewKeyLight = new THREE.DirectionalLight("#fff8ed", 1.7);
+  previewKeyLight.position.set(5, 8, 4);
+  previewKeyLight.castShadow = true;
+  previewKeyLight.shadow.mapSize.set(1024, 1024);
+  previewKeyLight.shadow.camera.left = -18;
+  previewKeyLight.shadow.camera.right = 18;
+  previewKeyLight.shadow.camera.top = 18;
+  previewKeyLight.shadow.camera.bottom = -18;
+  previewScene.add(previewKeyLight);
+  const previewFillLight = new THREE.DirectionalLight("#7ec8ff", 0.72);
+  previewFillLight.position.set(-4, 4, -6);
+  previewScene.add(previewFillLight);
+
   const raycaster = new THREE.Raycaster();
   raycaster.params.Line.threshold = 0.06;
   raycaster.params.Points.threshold = 0.08;
@@ -2203,9 +3121,11 @@ function initThreeView() {
     hud,
     hudMeta,
     scene,
+    previewScene,
     camera: camera3d,
     renderer,
     world,
+    previewWorld,
     frameWrap,
     frameCanvas,
     frameCamera,
@@ -2221,6 +3141,7 @@ function initThreeView() {
   canvas3d.addEventListener("pointerup", endThreeDrag);
   canvas3d.addEventListener("pointercancel", cancelThreeDrag);
   canvas3d.addEventListener("wheel", zoomThreeView, { passive: false });
+  frameCanvas.addEventListener("click", selectCameraPreviewSlot);
   canvas3d.addEventListener("contextmenu", (event) => {
     event.preventDefault();
   });
@@ -2256,6 +3177,14 @@ function clearThreeWorld() {
   threeView.cameraRigHelper = null;
 }
 
+function clearThreePreviewWorld() {
+  if (!threeView?.previewWorld) return;
+  while (threeView.previewWorld.children.length) {
+    const child = threeView.previewWorld.children.pop();
+    disposeThreeObject(child);
+  }
+}
+
 function resizeThreeView() {
   if (!threeView?.ready) return;
   const rect = threeView.wrap.getBoundingClientRect();
@@ -2266,6 +3195,7 @@ function resizeThreeView() {
   threeView.renderer.setSize(width, height, false);
   threeView.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   if (threeView.frameRenderer && threeView.frameWrap) {
+    clampSavedCameraFramePosition();
     const frameRect = threeView.frameWrap.getBoundingClientRect();
     const frameWidth = Math.max(1, frameRect.width);
     const frameHeight = Math.max(1, frameRect.height);
@@ -2274,7 +3204,8 @@ function resizeThreeView() {
     threeView.frameRenderer.setSize(frameWidth, frameHeight, false);
     threeView.frameRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   }
-  renderThreeView(threeView.lastState || state, true);
+  if (viewMode === "3d") renderThreeView(threeView.lastState || state, true);
+  else renderCameraFramePreview(threeView.lastState || evaluatedViewState || state);
 }
 
 function renderThreeView(renderState = state, force = false, frameOptions = {}) {
@@ -2302,9 +3233,25 @@ function renderThreeView(renderState = state, force = false, frameOptions = {}) 
   world.add(makeStageBorder(size));
   drawThreeMotionPaths(renderState, world);
   renderState.items.filter((item) => item.visible !== false).forEach((item) => world.add(makeThreeItem(item, renderState)));
-  const cameraRig = makeThreeCamera(renderState.camera, renderState);
-  threeView.cameraRigHelper = cameraRig;
-  world.add(cameraRig);
+  const cameraEntries = cameraFieldRenderEntries(renderState);
+  const activeCameraId = multiCameraCore.resolveActiveId(
+    renderState.activeCameraId,
+    cameraEntries.map((entry) => entry.profile),
+  );
+  const cameraRigs = cameraEntries.map(({ profile, profileState, fieldOffset }) => {
+    const cameraRig = makeThreeCamera(
+      profileState.camera,
+      profileState,
+      profile,
+      profile.id === activeCameraId,
+      fieldOffset,
+    );
+    world.add(cameraRig);
+    return cameraRig;
+  });
+  threeView.cameraRigHelper = cameraRigs.find((rig) => rig.userData.cameraProfileId === activeCameraId)
+    || cameraRigs[0]
+    || null;
 
   updateThreeCamera(renderState);
   if (threeView.hudMeta) {
@@ -2314,6 +3261,30 @@ function renderThreeView(renderState = state, force = false, frameOptions = {}) 
   }
   threeView.renderer.render(threeView.scene, threeView.camera);
   renderCameraFramePreview(renderState, frameOptions);
+  if (typeof drawAnnotations === "function") drawAnnotations();
+}
+
+function cameraFieldRenderEntries(renderState = state) {
+  const profiles = cameraPreviewProfiles(renderState);
+  const activeCameraId = multiCameraCore.resolveActiveId(renderState.activeCameraId, profiles);
+  return profiles.map((profile) => {
+    const profileState = cameraPreviewDocument(renderState, profile.id);
+    return {
+      profile,
+      profileState,
+      fieldOffset: { x: 0, y: 0 },
+      active: profile.id === activeCameraId,
+    };
+  });
+}
+
+function cameraWithFieldOffset(camera, fieldOffset = { x: 0, y: 0 }) {
+  if (!fieldOffset || (!fieldOffset.x && !fieldOffset.y)) return camera;
+  return {
+    ...camera,
+    x: clamp(finiteNumber(camera?.x, 0.5) + finiteNumber(fieldOffset?.x, 0), STAGE_COORD_MIN, STAGE_COORD_MAX),
+    y: clamp(finiteNumber(camera?.y, 0.5) + finiteNumber(fieldOffset?.y, 0), STAGE_COORD_MIN, STAGE_COORD_MAX),
+  };
 }
 
 function makeStageGrid(size) {
@@ -2370,7 +3341,8 @@ function makeThreeItem(item, renderState) {
   group.name = "item:" + item.id;
   const itemEditor = { kind: "item", id: item.id };
   const renderItem = resolvedItemPose(item, renderState);
-  const pos = mapToWorld(renderItem, renderState, Number(renderItem.mountedHeight || 0));
+  const verticalY = (item.type === "actor" ? Number(renderItem.verticalOffset || 0) : 0) + Number(renderItem.mountedHeight || 0);
+  const pos = mapToWorld(renderItem, renderState, verticalY);
   group.position.set(pos.x, pos.y, pos.z);
   const color = new THREE.Color(item.color);
   const scale = item.size || 1;
@@ -2414,6 +3386,7 @@ function makeThreeItem(item, renderState) {
   base.position.y = 0.024;
   base.userData.previewHidden = true;
   base.userData.editor = itemEditor;
+  base.userData.isMoveHandle = true;
   const baseRing = new THREE.Mesh(
     new THREE.TorusGeometry(baseRadius, 0.025, 8, 44),
     new THREE.MeshBasicMaterial({ color: roleColor, transparent: true, opacity: 0.86 }),
@@ -2422,11 +3395,16 @@ function makeThreeItem(item, renderState) {
   baseRing.position.y = 0.05;
   baseRing.userData.previewHidden = true;
   baseRing.userData.editor = itemEditor;
+  baseRing.userData.isMoveHandle = true;
   if (!renderItem.autoMounted && definition.kind !== "architecture") group.add(base, baseRing);
 
   const angle = degToRad(renderItem.facing);
-  if (item.type === "actor") body.rotation.y = Math.PI / 2 - angle;
-  else body.rotation.y = -angle;
+  const pitchRad = degToRad(Number(renderItem.pitch || 0));
+  if (item.type === "actor") {
+    body.rotation.set(pitchRad, Math.PI / 2 - angle, 0, "YXZ");
+  } else {
+    body.rotation.y = -angle;
+  }
   const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
   const showDirection = item.type === "actor" || !["nature", "architecture"].includes(definition.kind);
   if (showDirection) {
@@ -2439,11 +3417,18 @@ function makeThreeItem(item, renderState) {
   const typeLabel = item.type === "prop" && item.assetType !== "generic" ? definition.label + " · " : "";
   const label = makeThreeWorldLabel(roleLabel + " · " + typeLabel + item.name, roleColor);
   label.position.y = item.type === "actor"
-    ? (renderItem.autoMounted ? 1.55 : 2.16) * scale
+    ? (renderItem.autoMounted ? 1.55 : lerp(2.16, 0.65, Math.abs(pitchRad) / (Math.PI / 2))) * scale
     : Math.min(4.8, definition.height * Number(item.scaleY || 1) * scale + 0.5);
   if (renderState.showNames && selected?.kind === "item" && selected.id === item.id) group.add(label);
   if (selected?.kind === "item" && selected.id === item.id) {
-    group.add(makeThreeSelectionRing(item.type === "actor" ? 0.56 * scale : 0.62 * scale, roleColor));
+    const sRing = makeThreeSelectionRing(item.type === "actor" ? 0.56 * scale : 0.62 * scale, roleColor);
+    sRing.traverse((child) => {
+      if (child.isMesh) {
+        child.userData.editor = itemEditor;
+        child.userData.isMoveHandle = true;
+      }
+    });
+    group.add(sRing);
   }
   return group;
 }
@@ -2535,10 +3520,19 @@ function makeThreePropModel(item, color) {
     return forest;
   }
 
-  if (assetType === "room") {
-    box([6.2, 0.1, 4.6], new THREE.MeshStandardMaterial({ color: "#727d84", roughness: 0.95 }), [0, 0.05, 0]);
-    box([6.2, 2.8, 0.12], light, [0, 1.4, -2.25]);
-    box([0.12, 2.8, 4.5], light, [-3.05, 1.4, 0]);
+  if (assetType === "room" || assetType === "wall_l") {
+    box([6.2, 2.8, 0.02], light, [0, 1.4, -2.29]);
+    box([0.02, 2.8, 4.6], light, [-3.09, 1.4, 0]);
+    return group;
+  }
+  if (assetType === "wall_i") {
+    box([6.2, 2.8, 0.02], light, [0, 1.4, -2.29]);
+    return group;
+  }
+  if (assetType === "wall_u") {
+    box([6.2, 2.8, 0.02], light, [0, 1.4, -2.29]);
+    box([0.02, 2.8, 4.6], light, [-3.09, 1.4, 0]);
+    box([0.02, 2.8, 4.6], light, [3.09, 1.4, 0]);
     return group;
   }
 
@@ -2602,6 +3596,239 @@ function makeThreePropModel(item, color) {
     const door = cylinder(0.29, 0.07, dark, [0, 0.45, 0.42], [Math.PI / 2, 0, 0], 28);
     door.material = screen;
     box([0.58, 0.13, 0.04], dark, [0, 0.78, 0.42]);
+    return group;
+  }
+  if (assetType === "desk") {
+    // Top
+    box([1.4, 0.06, 0.8], wood, [0, 0.75, 0]);
+    // Legs
+    [[-0.64, -0.34], [-0.64, 0.34], [0.64, -0.34], [0.64, 0.34]].forEach(([x, z]) => {
+      box([0.06, 0.72, 0.06], dark, [x, 0.36, z]);
+    });
+    // Drawer cabinet
+    box([0.34, 0.52, 0.72], light, [0.42, 0.46, 0]);
+    return group;
+  }
+  if (assetType === "blackboard") {
+    // Frame
+    box([2.0, 1.2, 0.06], wood, [0, 1.2, 0]);
+    // Board surface
+    box([1.92, 1.12, 0.02], new THREE.MeshStandardMaterial({ color: "#173b22", roughness: 0.85 }), [0, 1.2, 0.03]);
+    // Stands
+    box([0.06, 1.8, 0.06], dark, [-0.92, 0.9, 0]);
+    box([0.06, 1.8, 0.06], dark, [0.92, 0.9, 0]);
+    box([0.48, 0.06, 0.62], dark, [-0.92, 0.03, 0]);
+    box([0.48, 0.06, 0.62], dark, [0.92, 0.03, 0]);
+    return group;
+  }
+  if (assetType === "partition") {
+    // Frame border
+    box([1.0, 1.6, 0.06], dark, [0, 0.8, 0]);
+    // Colorful fabric body inside
+    box([0.94, 1.54, 0.07], main, [0, 0.8, 0]);
+    // Base feet
+    box([0.08, 0.05, 0.48], dark, [-0.42, 0.025, 0]);
+    box([0.08, 0.05, 0.48], dark, [0.42, 0.025, 0]);
+    return group;
+  }
+  if (assetType === "wall") {
+    // A 3m-high scenic wall for building depth and visual separation.
+    box([3.0, 3.0, 0.02], light, [0, 1.5, 0]);
+    box([3.0, 0.14, 0.03], dark, [0, 0.07, 0]);
+    box([0.05, 2.88, 0.02], main, [-1.45, 1.5, 0.02]);
+    box([0.05, 2.88, 0.02], main, [1.45, 1.5, 0.02]);
+    return group;
+  }
+  if (assetType === "corridor-wall" || assetType === "train-wall") {
+    const itemScale = Number(item?.size || 1);
+    const wallH = 1.78 / itemScale;
+    box([3.0, wallH, 0.02], light, [0, wallH / 2, 0]);
+    box([3.0, 0.14 / itemScale, 0.03], dark, [0, 0.07 / itemScale, 0]);
+    return group;
+  }
+  if (assetType === "elevator") {
+    // Back wall
+    box([1.6, 2.8, 0.08], dark, [0, 1.4, -0.76]);
+    // Side walls
+    box([0.08, 2.8, 1.6], dark, [-0.76, 1.4, 0]);
+    box([0.08, 2.8, 1.6], dark, [0.76, 1.4, 0]);
+    // Front headers
+    box([1.6, 0.6, 0.08], dark, [0, 2.5, 0.76]);
+    box([0.3, 2.2, 0.08], dark, [-0.65, 1.1, 0.76]);
+    box([0.3, 2.2, 0.08], dark, [0.65, 1.1, 0.76]);
+    // Doors (slightly open)
+    box([0.52, 2.18, 0.04], light, [-0.28, 1.09, 0.72]);
+    box([0.52, 2.18, 0.04], light, [0.28, 1.09, 0.72]);
+    return group;
+  }
+  if (assetType === "window") {
+    box([1.2, 0.08, 0.12], dark, [0, 0.04, 0]);
+    box([1.2, 0.08, 0.12], dark, [0, 0.96, 0]);
+    box([0.08, 0.84, 0.12], dark, [-0.56, 0.5, 0]);
+    box([0.08, 0.84, 0.12], dark, [0.56, 0.5, 0]);
+    box([0.05, 0.84, 0.08], dark, [0, 0.5, 0]);
+    box([1.04, 0.04, 0.08], dark, [0, 0.5, 0]);
+    box([1.04, 0.84, 0.02], glass, [0, 0.5, 0]);
+    return group;
+  }
+  if (assetType === "door") {
+    // Frame
+    box([1.0, 2.2, 0.08], dark, [0, 1.1, 0]);
+    // Open door leaf (rotated 45 degrees relative to frame)
+    box([0.04, 2.14, 0.9], wood, [0.32, 1.07, 0.32], [0, Math.PI / 4, 0]);
+    // Faucet knob details
+    const knob = new THREE.MeshStandardMaterial({ color: "#e5c158", metalness: 0.85, roughness: 0.15 });
+    add(new THREE.SphereGeometry(0.03, 12, 12), knob, [0.8 * Math.sin(Math.PI / 4) + 0.32, 1.0, 0.8 * Math.cos(Math.PI / 4) + 0.32]);
+    return group;
+  }
+  if (assetType === "sink") {
+    // Under sink cabinet stand
+    box([0.58, 0.72, 0.48], wood, [0, 0.36, 0]);
+    // Sink basin top
+    box([0.62, 0.16, 0.52], new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.15 }), [0, 0.8, 0]);
+    // Faucet
+    box([0.04, 0.14, 0.14], dark, [0, 0.95, -0.16]);
+    return group;
+  }
+  if (assetType === "toilet") {
+    const white = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.12 });
+    // Bowl base
+    cylinder(0.18, 0.42, white, [0, 0.21, 0.12], null, 16);
+    // Lid seat
+    box([0.42, 0.04, 0.48], dark, [0, 0.44, 0.14]);
+    // Water tank
+    box([0.48, 0.38, 0.2], white, [0, 0.61, -0.2]);
+    return group;
+  }
+  if (assetType === "bathtub") {
+    const white = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.1 });
+    // Tub outer shell
+    box([1.5, 0.6, 0.75], white, [0, 0.3, 0]);
+    // Water surface inside
+    box([1.4, 0.02, 0.65], glass, [0, 0.48, 0]);
+    return group;
+  }
+  if (assetType === "train-seat") {
+    // Stand/legs
+    cylinder(0.04, 0.34, dark, [0, 0.17, 0]);
+    // Base cushion
+    box([0.85, 0.16, 0.52], main, [0, 0.42, 0.08]);
+    // Backrest
+    box([0.85, 0.68, 0.14], main, [0, 0.76, -0.22]);
+    // Headrest strip
+    box([0.8, 0.18, 0.16], dark, [0, 1.1, -0.22]);
+    return group;
+  }
+  if (assetType === "stairs") {
+    // Step levels
+    const totalSteps = 4;
+    for (let i = 0; i < totalSteps; i++) {
+      const stepH = 0.3;
+      const stepW = 1.8;
+      const stepD = 1.8 * ((totalSteps - i) / totalSteps);
+      const mat = i % 2 === 0 ? main : light;
+      box([stepW, stepH, stepD], mat, [0, stepH * i + stepH / 2, -1.8 * 0.5 * (i / totalSteps)]);
+    }
+    return group;
+  }
+  if (assetType === "slope") {
+    // Wedge ramp
+    box([3.0, 0.08, 1.5], dark, [0, 0.5, 0], [0, 0, Math.atan2(1.0, 3.0)]);
+    // Base floor support
+    box([3.0, 0.02, 1.5], light, [0, 0.01, 0]);
+    return group;
+  }
+
+  const nameLower = String(item.name || "").toLowerCase();
+
+  if (nameLower.includes("바닥")) {
+    box([0.72, 0.34, 0.72], main, [0, 0.17, 0]);
+    const seamMat = new THREE.MeshStandardMaterial({ color: "#1b2126", roughness: 0.9 });
+    box([0.73, 0.005, 0.005], seamMat, [0, 0.341, -0.24]);
+    box([0.73, 0.005, 0.005], seamMat, [0, 0.341, -0.08]);
+    box([0.73, 0.005, 0.005], seamMat, [0, 0.341, 0.08]);
+    box([0.73, 0.005, 0.005], seamMat, [0, 0.341, 0.24]);
+    box([0.005, 0.005, 0.73], seamMat, [-0.24, 0.341, 0]);
+    box([0.005, 0.005, 0.73], seamMat, [-0.08, 0.341, 0]);
+    box([0.005, 0.005, 0.73], seamMat, [0.08, 0.341, 0]);
+    box([0.005, 0.005, 0.73], seamMat, [0.24, 0.341, 0]);
+    return group;
+  }
+
+  if (nameLower.includes("옥탑문") || nameLower.includes("문")) {
+    box([0.64, 0.34, 0.64], main, [0, 0.17, 0]);
+    const frameMat = new THREE.MeshStandardMaterial({ color: "#3a4650", roughness: 0.5, metalness: 0.5 });
+    box([0.04, 0.34, 0.72], frameMat, [-0.34, 0.17, 0]);
+    box([0.04, 0.34, 0.72], frameMat, [0.34, 0.17, 0]);
+    box([0.72, 0.04, 0.72], frameMat, [0, 0.34, 0]);
+    const knobMat = new THREE.MeshStandardMaterial({ color: "#b5a642", roughness: 0.1, metalness: 0.9 });
+    add(new THREE.SphereGeometry(0.035, 12, 12), knobMat, [-0.24, 0.17, 0.08]);
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), knobMat, [-0.24, 0.17, 0.04], [Math.PI/2, 0, 0]);
+    return group;
+  }
+
+  if (nameLower.includes("난간")) {
+    box([0.72, 0.32, 0.72], main, [0, 0.16, 0]);
+    box([0.78, 0.03, 0.78], light, [0, 0.335, 0]);
+    const jointMat = new THREE.MeshStandardMaterial({ color: "#252b30", roughness: 0.9 });
+    box([0.015, 0.36, 0.74], jointMat, [-0.24, 0.17, 0]);
+    box([0.015, 0.36, 0.74], jointMat, [0.24, 0.17, 0]);
+    return group;
+  }
+
+  if (nameLower.includes("물탱크")) {
+    box([0.62, 0.34, 0.62], main, [0, 0.17, 0]);
+    const ribMat = new THREE.MeshStandardMaterial({ color: color.clone().lerp(new THREE.Color("#000000"), 0.15), roughness: 0.7 });
+    box([0.64, 0.03, 0.64], ribMat, [0, 0.08, 0]);
+    box([0.64, 0.03, 0.64], ribMat, [0, 0.17, 0]);
+    box([0.64, 0.03, 0.64], ribMat, [0, 0.26, 0]);
+    cylinder(0.18, 0.025, dark, [0, 0.352, 0]);
+    cylinder(0.03, 0.08, dark, [0.22, 0.02, 0.32], [Math.PI/2, 0, 0]);
+    return group;
+  }
+
+  if (nameLower.includes("실외기")) {
+    box([0.72, 0.34, 0.72], main, [0, 0.17, 0]);
+    cylinder(0.15, 0.01, dark, [-0.14, 0.17, 0.362], [Math.PI/2, 0, 0], 24);
+    cylinder(0.04, 0.015, light, [-0.14, 0.17, 0.363], [Math.PI/2, 0, 0], 8);
+    const bladeMat = new THREE.MeshStandardMaterial({ color: "#222", roughness: 0.8 });
+    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 2) {
+      const blade = add(new THREE.BoxGeometry(0.12, 0.025, 0.005), bladeMat, [-0.14, 0.17, 0.361]);
+      blade.rotation.set(0, 0, angle + 0.3);
+    }
+    for (let y = 0.08; y <= 0.28; y += 0.05) {
+      box([0.22, 0.008, 0.005], dark, [0.2, y, 0.362]);
+    }
+    return group;
+  }
+
+  if (nameLower.includes("빨랫줄") || nameLower.includes("줄")) {
+    cylinder(0.015, 0.34, dark, [0, 0.17, -0.34]);
+    box([0.03, 0.03, 0.32], dark, [0, 0.34, -0.34]);
+    cylinder(0.015, 0.34, dark, [0, 0.17, 0.34]);
+    box([0.03, 0.03, 0.32], dark, [0, 0.34, 0.34]);
+    addCylinderBetween(group, [0, 0.34, -0.48], [0, 0.34, 0.48], 0.002, dark);
+    addCylinderBetween(group, [0, 0.34, -0.2], [0, 0.34, 0.2], 0.002, dark);
+    const laundryMat1 = new THREE.MeshStandardMaterial({ color: "#f2f2e8", roughness: 0.95, side: THREE.DoubleSide });
+    const laundryMat2 = new THREE.MeshStandardMaterial({ color: "#f7d2cb", roughness: 0.95, side: THREE.DoubleSide });
+    const sheet1 = add(new THREE.BoxGeometry(0.005, 0.18, 0.16), laundryMat1, [0, 0.23, -0.15]);
+    sheet1.rotation.z = 0.08;
+    const sheet2 = add(new THREE.BoxGeometry(0.005, 0.16, 0.18), laundryMat2, [0, 0.24, 0.15]);
+    sheet2.rotation.z = -0.06;
+    return group;
+  }
+
+  if (nameLower.includes("화분")) {
+    const potMat = new THREE.MeshStandardMaterial({ color: "#aa5b3b", roughness: 0.85 });
+    cylinder(0.18, 0.16, potMat, [0, 0.08, 0], null, 12);
+    cylinder(0.17, 0.02, dark, [0, 0.155, 0]);
+    const plantColor = new THREE.Color("#4ca64c");
+    const stemMat = new THREE.MeshStandardMaterial({ color: plantColor.clone().lerp(new THREE.Color("#556b2f"), 0.2), roughness: 0.9 });
+    cylinder(0.008, 0.18, stemMat, [0, 0.24, 0], [0.1, 0, 0.05]);
+    const leafMat = new THREE.MeshStandardMaterial({ color: plantColor, roughness: 0.9 });
+    add(new THREE.SphereGeometry(0.08, 8, 8), leafMat, [0.01, 0.32, 0.01]);
+    add(new THREE.SphereGeometry(0.06, 8, 8), leafMat, [-0.04, 0.28, -0.02]);
+    add(new THREE.SphereGeometry(0.065, 8, 8), leafMat, [0.05, 0.29, 0.04]);
     return group;
   }
 
@@ -2881,27 +4108,39 @@ function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options
   return model;
 }
 
-function makeThreeCamera(camera, renderState) {
+function makeThreeCamera(camera, renderState, profile = null, active = false, fieldOffset = { x: 0, y: 0 }) {
   const THREE = window.THREE;
   const group = new THREE.Group();
   group.name = "cameraRigHelper";
   group.userData.previewHidden = true;
-  const cameraHeight = resolvedCameraRenderHeight(camera);
-  const camPos = mapToWorld(camera, renderState, cameraHeight);
-  const aimPos = cameraLookTarget(camera, renderState, 10);
-  const groundCam = mapToWorld(camera, renderState, 0.04);
-  const angle = degToRad(camera.panDeg);
-  const fov = degToRad(focalToFov(camera.focal));
+  group.userData.cameraProfileId = profile?.id || renderState.activeCameraId || "camera-1";
+  group.userData.fieldOffset = clone(fieldOffset);
+  const profileColor = profile?.color || "#69c9ff";
+  const displayCamera = cameraWithFieldOffset(camera, fieldOffset);
+  const cameraHeight = resolvedCameraRenderHeight(displayCamera);
+  const camPos = mapToWorld(displayCamera, renderState, cameraHeight);
+  const aimPos = cameraLookTarget(displayCamera, renderState, 10);
+  const groundCam = mapToWorld(displayCamera, renderState, 0.04);
+  const angle = degToRad(displayCamera.panDeg);
+  const fov = degToRad(focalToFov(displayCamera.focal, cameraSensorWidth(renderState)));
   const coneLength = Math.max(stageWorldSize(renderState).width, stageWorldSize(renderState).depth) * 0.9;
 
   const body = new THREE.Group();
   body.name = "camera";
-  body.userData.editor = { kind: "camera" };
+  body.userData.editor = {
+    kind: "camera",
+    profileId: group.userData.cameraProfileId,
+    fieldOffset: { x: 0, y: 0 },
+  };
   body.position.copy(camPos);
   body.lookAt(aimPos);
+  // The camera prop is modeled with its lens on the opposite local-facing
+  // side from Three.js's lookAt forward axis. Flip the display rig so the
+  // physical lens points along the same direction as the view cone.
+  body.rotateY(Math.PI);
   const housing = new THREE.Mesh(
     new THREE.BoxGeometry(0.58, 0.4, 0.42),
-    new THREE.MeshStandardMaterial({ color: "#2b78b6", roughness: 0.42, metalness: 0.18 }),
+    new THREE.MeshStandardMaterial({ color: profileColor, roughness: 0.42, metalness: 0.18 }),
   );
   housing.castShadow = true;
   body.add(housing);
@@ -2934,14 +4173,14 @@ function makeThreeCamera(camera, renderState) {
   [[-0.34, -0.28], [0.34, -0.28], [0, 0.4]].forEach(([x, z]) => {
     group.add(lineFromPoints([supportCenter, new THREE.Vector3(camPos.x + x, floorY, camPos.z + z)], supportMaterial));
   });
-  const cameraBase = makeThreeRoleRing(0.46, "#69c9ff");
+  const cameraBase = makeThreeRoleRing(0.46, profileColor);
   cameraBase.position.set(camPos.x, 0.055, camPos.z);
   group.add(cameraBase);
-  const cameraLabel = makeThreeWorldLabel("카메라", "#69c9ff");
+  const cameraLabel = makeThreeWorldLabel(profile?.name || "카메라", profileColor);
   cameraLabel.position.set(camPos.x, camPos.y + 0.72, camPos.z);
   group.add(cameraLabel);
-  if (selected?.kind === "camera") {
-    const selection = makeThreeSelectionRing(0.62, "#69c9ff", 0.04);
+  if (active || (selected?.kind === "camera" && selected.profileId === group.userData.cameraProfileId)) {
+    const selection = makeThreeSelectionRing(0.62, profileColor, 0.04);
     selection.position.set(camPos.x, 0.07, camPos.z);
     group.add(selection);
   }
@@ -3053,11 +4292,15 @@ function makeCameraConeMesh(origin, angle, fov, length) {
 
 function renderCameraFramePreview(renderState = state, options = {}) {
   if (!threeView?.ready || !threeView.frameRenderer || !threeView.frameCamera) return;
-  const camera = renderState.camera;
-  const cameraPos = mapToWorld(camera, renderState, resolvedCameraRenderHeight(camera));
-  const lookTarget = cameraLookTarget(camera, renderState, 10);
-
+  threeView.lastState = renderState;
   const aspectLabel = renderState.aspect || "16:9";
+  const multi = options.multiCamera === true
+    || (options.multiCamera == null && cameraPreviewMode === "multi" && cameraProfileCount(renderState) > 1);
+  const profiles = multi
+    ? cameraPreviewProfiles(renderState)
+    : [cameraPreviewProfile(renderState)].filter(Boolean);
+  const visibleProfiles = profiles.filter(Boolean).slice(0, multi ? 4 : 1);
+  threeView.frameCanvas.dataset.multiCamera = String(multi);
   if (options.width && options.height) {
     threeView.frameRenderer.setPixelRatio(1);
     threeView.frameRenderer.setSize(options.width, options.height, false);
@@ -3068,28 +4311,125 @@ function renderCameraFramePreview(renderState = state, options = {}) {
     const frameWidth = Math.max(1, frameRect.width);
     const frameHeight = Math.max(1, frameRect.height);
     threeView.frameRenderer.setSize(frameWidth, frameHeight, false);
-    threeView.frameRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Viewport coordinates below are CSS pixels. Keep the preview buffer in the
+    // same coordinate space so high-DPI screens do not shift the frame off-canvas.
+    threeView.frameRenderer.setPixelRatio(1);
     threeView.frameCamera.aspect = frameWidth / frameHeight;
   }
-  const frameAspect = threeView.frameCamera.aspect || aspectMap[aspectLabel] || 16 / 9;
-  const horizontalFov = focalToFov(camera.focal);
-  threeView.frameCamera.aspect = frameAspect;
-  threeView.frameCamera.fov = horizontalFovToVerticalFov(horizontalFov, frameAspect);
-  threeView.frameCamera.position.copy(cameraPos);
-  threeView.frameCamera.lookAt(lookTarget);
-  threeView.frameCamera.updateProjectionMatrix();
+  const canvasWidth = Math.max(1, threeView.frameCanvas.width);
+  const canvasHeight = Math.max(1, threeView.frameCanvas.height);
 
-  const hidden = [];
-  threeView.world.traverse((object) => {
-    if (object.userData?.previewHidden && object.visible) {
-      object.visible = false;
-      hidden.push(object);
+  // Keep the camera frame independent from editor guides, handles, and the viewport camera.
+  clearThreePreviewWorld();
+  const previewSize = stageWorldSize(renderState);
+  const previewFloor = new window.THREE.Mesh(
+    new window.THREE.PlaneGeometry(previewSize.width, previewSize.depth),
+    new window.THREE.MeshStandardMaterial({
+      color: "#1a2229",
+      roughness: 0.88,
+      metalness: 0.02,
+      side: window.THREE.DoubleSide,
+    }),
+  );
+  previewFloor.rotation.x = -Math.PI / 2;
+  previewFloor.receiveShadow = true;
+  threeView.previewWorld.add(previewFloor);
+  renderState.items
+    .filter((item) => item.visible !== false)
+    .forEach((item) => {
+      const previewItem = makeThreeItem(item, renderState);
+      previewItem.traverse((object) => {
+        if (object.userData?.previewHidden) object.visible = false;
+        if (object.isMesh) object.frustumCulled = false;
+      });
+      threeView.previewWorld.add(previewItem);
+    });
+  threeView.previewWorld.updateMatrixWorld(true);
+  threeView.previewScene.updateMatrixWorld(true);
+  const layout = multi ? cameraPreviewGridLayout(visibleProfiles.length) : { columns: 1, rows: 1 };
+  threeView.frameRenderer.setScissorTest(multi);
+  if (multi) threeView.frameRenderer.clear(true, true, true);
+  visibleProfiles.forEach((profile, index) => {
+    const profileState = cameraPreviewDocument(renderState, profile.id);
+    const camera = profileState.camera;
+    const column = index % layout.columns;
+    const row = Math.floor(index / layout.columns);
+    const cellWidth = canvasWidth / layout.columns;
+    const cellHeight = canvasHeight / layout.rows;
+    const viewportX = column * cellWidth;
+    const viewportY = canvasHeight - (row + 1) * cellHeight;
+    const frameAspect = cellWidth / cellHeight;
+    const horizontalFov = focalToFov(camera.focal, cameraSensorWidth(profileState));
+    threeView.frameCamera.aspect = frameAspect;
+    threeView.frameCamera.fov = horizontalFovToVerticalFov(horizontalFov, frameAspect);
+    threeView.frameCamera.position.copy(mapToWorld(camera, profileState, resolvedCameraRenderHeight(camera)));
+    threeView.frameCamera.lookAt(cameraLookTarget(camera, profileState, 10));
+    threeView.frameCamera.updateProjectionMatrix();
+    threeView.frameCamera.updateMatrixWorld(true);
+    if (multi) {
+      threeView.frameRenderer.setViewport(viewportX, viewportY, cellWidth, cellHeight);
+      threeView.frameRenderer.setScissor(viewportX, viewportY, cellWidth, cellHeight);
+    } else {
+      threeView.frameRenderer.setViewport(0, 0, canvasWidth, canvasHeight);
     }
+    threeView.frameRenderer.render(threeView.previewScene, threeView.frameCamera);
   });
-  threeView.frameRenderer.render(threeView.scene, threeView.frameCamera);
-  hidden.forEach((object) => {
-    object.visible = true;
+  threeView.frameRenderer.setScissorTest(false);
+  threeView.frameRenderer.setViewport(0, 0, canvasWidth, canvasHeight);
+  renderCameraFrameLabels(visibleProfiles, multi, layout);
+  updateCameraFrameModeButton();
+}
+
+function cameraPreviewGridLayout(count) {
+  if (count <= 1) return { columns: 1, rows: 1 };
+  if (count === 2) return { columns: 2, rows: 1 };
+  return { columns: 2, rows: 2 };
+}
+
+function renderCameraFrameLabels(profiles, multi, layout) {
+  const root = $("#cameraFrameLabels");
+  if (!root) return;
+  root.innerHTML = "";
+  root.hidden = !multi;
+  if (!multi) return;
+  profiles.forEach((profile, index) => {
+    const label = document.createElement("span");
+    label.className = "camera-frame-label";
+    label.style.setProperty("--camera-color", profile.color);
+    label.style.left = `${(index % layout.columns) * (100 / layout.columns) + 1}%`;
+    label.style.top = `${Math.floor(index / layout.columns) * (100 / layout.rows) + 1}%`;
+    label.textContent = profile.name;
+    root.append(label);
   });
+}
+
+function selectCameraPreviewSlot(event) {
+  if (cameraPreviewMode !== "multi" || cameraProfileCount() < 2) return;
+  const canvas = event.currentTarget;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const profiles = multiCameraCore.normalizeProfiles(
+    state.cameras,
+    state.camera,
+    state.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera"),
+    state.cameraSetup,
+  ).slice(0, 4);
+  const layout = cameraPreviewGridLayout(profiles.length);
+  const column = clamp(Math.floor(((event.clientX - rect.left) / rect.width) * layout.columns), 0, layout.columns - 1);
+  const row = clamp(Math.floor(((event.clientY - rect.top) / rect.height) * layout.rows), 0, layout.rows - 1);
+  const profile = profiles[row * layout.columns + column];
+  if (!profile) return;
+  switchActiveCamera(profile.id);
+}
+
+function updateCameraFrameModeButton() {
+  const button = $("#cameraFrameModeBtn");
+  if (!button) return;
+  const multi = cameraPreviewMode === "multi" && cameraProfileCount() > 1;
+  button.setAttribute("aria-pressed", String(multi));
+  button.title = multi ? "단일 카메라 보기" : "멀티캠 보기";
+  const text = button.querySelector("span");
+  if (text) text.textContent = multi ? "단일" : "멀티캠";
 }
 
 function resolvedCameraRenderHeight(camera) {
@@ -3129,14 +4469,14 @@ function drawThreeMotionPaths(renderState, world) {
         : 0.1;
       const markerPosition = mapToWorld(keyframe.pose, renderState, markerHeight);
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(keyframe.id === renderState.motion?.selectedKeyId ? 0.14 : 0.1, 16, 10),
-        new THREE.MeshBasicMaterial({ color: keyframe.id === renderState.motion?.selectedKeyId ? "#ffffff" : source.color }),
+        new THREE.SphereGeometry(keyframe.id === selectedKeyIdForRender(renderState) ? 0.14 : 0.1, 16, 10),
+        new THREE.MeshBasicMaterial({ color: keyframe.id === selectedKeyIdForRender(renderState) ? "#ffffff" : source.color }),
       );
       marker.position.copy(markerPosition);
       marker.userData.previewHidden = true;
       world.add(marker);
       const height = markerHeight + (source.id === "camera" ? 0.36 : 0.42);
-      const label = makeThreeKeyOrderBadge(index + 1, source.color, keyframe.id === renderState.motion?.selectedKeyId);
+      const label = makeThreeKeyOrderBadge(index + 1, source.color, keyframe.id === selectedKeyIdForRender(renderState));
       label.position.copy(mapToWorld(keyframe.pose, renderState, height));
       label.userData.previewHidden = true;
       world.add(label);
@@ -3311,31 +4651,46 @@ function storyboardNoteLines(context, text, maxWidth) {
 }
 
 function drawStoryboardNote(context, text, x, y, color, scale, align = "left") {
-  const fontSize = Math.round(20 * scale);
-  const lineHeight = Math.round(25 * scale);
+  const fontSize = Math.round(18 * scale);
+  const lineHeight = Math.round(23 * scale);
   context.save();
   context.font = `800 ${fontSize}px "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif`;
   context.textAlign = align;
   context.textBaseline = "top";
-  context.lineJoin = "round";
+
   const maxWidth = Math.max(150 * scale, 285 * scale);
   const lines = storyboardNoteLines(context, text, maxWidth);
+
+  // Calculate text dimensions
+  const widths = lines.map((line) => context.measureText(line).width);
+  const width = Math.max(...widths, 0);
+  const padX = 10 * scale;
+  const padY = 6 * scale;
+  const cardW = width + padX * 2;
+  const cardH = lines.length * lineHeight + padY * 2 - 2 * scale;
+
+  // Background card positioning
+  const left = align === "right" ? x - cardW + padX : x - padX;
+  const top = y - padY;
+
+  // Draw card background with solid dark fill for absolute legibility
+  context.fillStyle = "rgba(10, 14, 18, 0.92)";
+  roundRect(context, left, top, cardW, cardH, 5 * scale);
+  context.fill();
+
+  // Draw card border matching theme color
+  context.strokeStyle = typeof hexToRgba === "function" ? hexToRgba(color, 0.72) : color;
+  context.lineWidth = Math.max(1.5, 2 * scale);
+  roundRect(context, left, top, cardW, cardH, 5 * scale);
+  context.stroke();
+
+  // Draw text lines
   lines.forEach((line, index) => {
     const lineY = y + index * lineHeight;
-    context.strokeStyle = "rgba(2, 7, 9, 0.92)";
-    context.lineWidth = Math.max(4, 6 * scale);
-    context.strokeText(line, x, lineY);
     context.fillStyle = index === 0 ? "#f4fbfa" : color;
     context.fillText(line, x, lineY);
   });
-  const width = Math.max(...lines.map((line) => context.measureText(line).width), 0);
-  const left = align === "right" ? x - width : x;
-  context.strokeStyle = color;
-  context.lineWidth = Math.max(1.5, 2 * scale);
-  context.beginPath();
-  context.moveTo(left, y + lines.length * lineHeight + 2 * scale);
-  context.lineTo(left + Math.min(width, 72 * scale), y + lines.length * lineHeight + 2 * scale);
-  context.stroke();
+
   context.restore();
   return { width, height: lines.length * lineHeight };
 }
@@ -3383,10 +4738,10 @@ function updateThreeCamera(renderState = state) {
   if (!threeView?.ready) return;
   const orbit = threeView.orbit;
   const radius = orbit.radius;
-  const phi = clamp(orbit.phi, -0.85, 1.48);
+  const phi = clamp(orbit.phi, -0.85, 1.55);
   const target = orbit.target || new window.THREE.Vector3(0, 1.15, 0);
   const x = target.x + Math.cos(orbit.theta) * Math.cos(phi) * radius;
-  const y = Math.max(0.12, target.y + Math.sin(phi) * radius);
+  const y = Math.max(0.05, target.y + Math.sin(phi) * radius);
   const z = target.z + Math.sin(orbit.theta) * Math.cos(phi) * radius;
   threeView.camera.position.set(x, y, z);
   threeView.camera.lookAt(target.x, target.y, target.z);
@@ -3406,8 +4761,15 @@ function beginThreeDrag(event) {
     return;
   }
 
-  const editor = forceNav ? null : pickThreeEditor(event);
+  let editor = forceNav ? null : pickThreeEditor(event);
   if (editor) {
+    if (editor.kind === "camera" && editor.profileId && editor.profileId !== state.activeCameraId) {
+      switchActiveCamera(editor.profileId);
+      // Selecting another rig must not also begin a drag from the same pointer
+      // gesture. A small pointer movement during the click otherwise rewrites
+      // the newly selected camera's saved position.
+      return;
+    }
     if (editor.kind === "poseJoint") {
       const actor = state.items.find((item) => item.id === editor.actorId && item.type === "actor");
       if (!actor || sourceEditLocked(actor.id)) {
@@ -3440,7 +4802,7 @@ function beginThreeDrag(event) {
       renderThreeView(state, true);
       return;
     }
-    if (threeEditMode === "pose" && editor.kind === "item") {
+    if (threeEditMode === "pose" && editor.kind === "item" && editor.forceMode !== "move") {
       const actor = state.items.find((item) => item.id === editor.id && item.type === "actor");
       if (actor) {
         selectActorPoseJoint(actor.id, selectedPoseActorId === actor.id ? selectedPoseJoint : "chest");
@@ -3455,7 +4817,7 @@ function beginThreeDrag(event) {
       setActiveSource(sourceId);
       selectKeyForSource(sourceId);
     }
-    const editItemId = editor.kind === "item" ? transformLeaderIdForItem(editor.id, state) : editor.id;
+    const editItemId = editor.kind === "item" ? transformLeaderIdForItem(editor.id, state) : null;
     const locked = editor.kind === "camera"
       ? cameraFieldLocked(threeEditMode === "rotate" ? "orientation" : "position")
       : sourceEditLocked(editItemId);
@@ -3466,13 +4828,20 @@ function beginThreeDrag(event) {
       return;
     }
     const editStartState = clone(state);
-    materializeEvaluatedViewForEditing(editItemId);
+    materializeEvaluatedViewForEditing(editor.kind === "camera" ? "camera" : editItemId);
     const pose = editor.kind === "item"
       ? state.items.find((item) => item.id === editItemId)
       : state.camera;
     const planeHeight = editor.kind === "camera" ? state.camera.height : 0;
     const point = projectThreePointerToPlane(event, planeHeight);
     const pointerStage = point ? worldToStage(point) : { x: pose.x, y: pose.y };
+    const cameraOffset = editor.kind === "camera"
+      ? editor.fieldOffset || { x: 0, y: 0 }
+      : { x: 0, y: 0 };
+    const logicalPointerStage = {
+      x: pointerStage.x - finiteNumber(cameraOffset.x, 0),
+      y: pointerStage.y - finiteNumber(cameraOffset.y, 0),
+    };
     threeDrag = {
       kind: "edit",
       pointerId: event.pointerId,
@@ -3480,7 +4849,8 @@ function beginThreeDrag(event) {
       editItemId,
       startState: editStartState,
       startPoint: pointerStage,
-      grabOffset: { x: pose.x - pointerStage.x, y: pose.y - pointerStage.y },
+      grabOffset: { x: pose.x - logicalPointerStage.x, y: pose.y - logicalPointerStage.y },
+      cameraOffset: clone(cameraOffset),
       changed: false,
     };
     threeView.canvas.setPointerCapture(event.pointerId);
@@ -3517,10 +4887,10 @@ function updateThreeDrag(event) {
     updateThreePoseDrag(event);
     return;
   }
-  
+
   const dx = event.clientX - threeDrag.x;
   const dy = event.clientY - threeDrag.y;
-  
+
   if (threeDrag.kind === "orbit") {
     threeView.orbit.theta = threeDrag.theta - dx * 0.0024;
     threeView.orbit.phi = clamp(threeDrag.phi + dy * 0.0016, -0.85, 1.48);
@@ -3528,11 +4898,11 @@ function updateThreeDrag(event) {
     const factor = (threeDrag.radius / 800) * 1.5;
     const right = new window.THREE.Vector3(1, 0, 0).applyQuaternion(threeView.camera.quaternion);
     const up = new window.THREE.Vector3(0, 1, 0).applyQuaternion(threeView.camera.quaternion);
-    
+
     const newTarget = threeDrag.targetStart.clone();
     newTarget.addScaledVector(right, -dx * factor);
     newTarget.addScaledVector(up, dy * factor);
-    
+
     if (!threeView.orbit.target) {
       threeView.orbit.target = new window.THREE.Vector3(0, 1.15, 0);
     }
@@ -3541,7 +4911,7 @@ function updateThreeDrag(event) {
     const factor = dy * 0.02;
     threeView.orbit.radius = clamp(threeDrag.radius + factor, THREE_ORBIT_RADIUS_MIN, THREE_ORBIT_RADIUS_MAX);
   }
-  
+
   renderThreeView(threeView.lastState || state, true);
 }
 
@@ -3550,8 +4920,19 @@ function endThreeDrag(event) {
   const didEdit = ["edit", "pose"].includes(threeDrag.kind) && threeDrag.changed;
   threeView?.canvas.releasePointerCapture?.(event.pointerId);
   if (threeView?.canvas) delete threeView.canvas.dataset.navMode;
+
+  const dragKind = threeDrag.kind;
+  const dragEditor = threeDrag.editor;
+  const editItemId = threeDrag.editItemId;
+  const actorId = threeDrag.actorId;
   threeDrag = null;
-  if (didEdit) commit();
+
+  if (didEdit) {
+    const preservedSourceIds = dragKind === "edit" && dragEditor
+      ? [dragEditor.kind === "camera" ? "camera" : editItemId || dragEditor.id].filter(Boolean)
+      : dragKind === "pose" && actorId ? [actorId] : [];
+    commit({ preserveSourceIds: preservedSourceIds });
+  }
 }
 
 function cancelThreeDrag(event) {
@@ -3607,24 +4988,42 @@ function pickThreeEditor(event) {
 
     let jointId = null;
     let actorId = null;
-    while (object && object !== threeView.world) {
-      if (object.userData?.poseJoint) {
-        return { kind: "poseJoint", ...clone(object.userData.poseJoint) };
+    let hasMoveHandle = false;
+    let tempObj = object;
+    while (tempObj && tempObj !== threeView.world) {
+      if (tempObj.userData?.isMoveHandle) {
+        hasMoveHandle = true;
       }
-      if (object.userData?.jointId) {
-        jointId = object.userData.jointId;
+      if (tempObj.userData?.jointId) {
+        jointId = tempObj.userData.jointId;
       }
-      if (object.userData?.editor?.kind === "item") {
-        const itemObj = state.items.find(i => i.id === object.userData.editor.id);
+      if (tempObj.userData?.editor?.kind === "item") {
+        const itemObj = state.items.find(i => i.id === tempObj.userData.editor.id);
         if (itemObj && itemObj.type === "actor") {
           actorId = itemObj.id;
         }
       }
-      if (threeEditMode === "pose" && jointId && actorId) {
-        return { kind: "poseJoint", actorId, jointId };
+      tempObj = tempObj.parent;
+    }
+
+    if (hasMoveHandle) {
+      let editorObj = object;
+      while (editorObj && editorObj !== threeView.world) {
+        if (editorObj.userData?.editor) {
+          return { ...clone(editorObj.userData.editor), forceMode: "move" };
+        }
+        editorObj = editorObj.parent;
       }
-      if (object.userData?.editor) return clone(object.userData.editor);
-      object = object.parent;
+    }
+
+    if (threeEditMode === "pose" && jointId && actorId) {
+      return { kind: "poseJoint", actorId, jointId };
+    }
+
+    let editorObj = object;
+    while (editorObj && editorObj !== threeView.world) {
+      if (editorObj.userData?.editor) return clone(editorObj.userData.editor);
+      editorObj = editorObj.parent;
     }
   }
   return null;
@@ -3638,7 +5037,7 @@ function updateThreePoseDrag(event) {
   const rotation = actor.bodyPose[threeDrag.jointId];
   const dx = event.clientX - threeDrag.x;
   const dy = event.clientY - threeDrag.y;
-  
+
   if (threeDrag.gizmoAxis) {
     // ── Dedicated axis dragging from the 3D Gizmo Rings ──
     const sensitivity = event.altKey ? 0.18 : 0.42;
@@ -3691,20 +5090,27 @@ function updateThreeEditorDrag(event) {
   const point = projectThreePointerToPlane(event, planeHeight);
   if (!point) return;
   const pointerStage = worldToStage(point);
+  const cameraOffset = editor.kind === "camera"
+    ? threeDrag.cameraOffset || { x: 0, y: 0 }
+    : { x: 0, y: 0 };
+  const logicalPointerStage = {
+    x: pointerStage.x - finiteNumber(cameraOffset.x, 0),
+    y: pointerStage.y - finiteNumber(cameraOffset.y, 0),
+  };
   const target = {
-    x: clamp(pointerStage.x + threeDrag.grabOffset.x, 0.02, 0.98),
-    y: clamp(pointerStage.y + threeDrag.grabOffset.y, 0.02, 0.98),
+    x: clamp(logicalPointerStage.x + threeDrag.grabOffset.x, 0.02, 0.98),
+    y: clamp(logicalPointerStage.y + threeDrag.grabOffset.y, 0.02, 0.98),
   };
 
-  if (threeEditMode === "rotate" && editor.kind === "item") {
+  if (threeEditMode === "rotate" && editor.kind === "item" && editor.forceMode !== "move") {
     const item = state.items.find((entry) => entry.id === threeDrag.editItemId);
     if (!item) return;
     item.facing = Math.round(radToDeg(Math.atan2(pointerStage.y - item.y, pointerStage.x - item.x)));
-  } else if (threeEditMode === "rotate" && editor.kind === "camera") {
+  } else if (threeEditMode === "rotate" && editor.kind === "camera" && editor.forceMode !== "move") {
     const size = stageWorldSize(state);
     state.camera.panDeg = normalizePanDeg(radToDeg(Math.atan2(
-      (pointerStage.y - state.camera.y) * size.depth,
-      (pointerStage.x - state.camera.x) * size.width,
+      (logicalPointerStage.y - state.camera.y) * size.depth,
+      (logicalPointerStage.x - state.camera.x) * size.width,
     )));
     syncCameraDerivedAim(state.camera, state);
   } else if (editor.kind === "item") {
@@ -3747,8 +5153,18 @@ function setThreeEditMode(mode, { announce = false } = {}) {
   if (!["move", "rotate", "pose"].includes(mode)) return;
   threeEditMode = mode;
   if (mode === "pose") {
-    const actor = selectedItem();
-    if (actor?.type === "actor") selectedPoseActorId = actor.id;
+    const current = selectedItem();
+    const actor = current?.type === "actor"
+      ? current
+      : state.items.find((item) => item.type === "actor" && item.visible !== false);
+    if (actor) {
+      selected = { kind: "item", id: actor.id };
+      selectedPoseActorId = actor.id;
+      if (isIndependentMotionSource(actor, state)) {
+        setActiveSource(actor.id);
+        selectKeyForSource(actor.id);
+      }
+    }
   }
   renderThreeEditControls();
   if (viewMode === "3d") renderThreeView(evaluatedViewState || state, true);
@@ -3769,9 +5185,9 @@ function drawMotionPaths(renderState, rect) {
     const guideColor = blockingGuideColor(source);
     if (keys.length > 1) {
       const sampled = sampleMotionPathPoses(renderState, source.id, keys).map((pose) => toCanvas(pose, rect));
-      ctx.strokeStyle = hexToRgba(guideColor, source.id === "camera" ? 0.72 : 0.64);
-      ctx.lineWidth = source.id === "camera" ? 2.4 : 2.2;
-      ctx.setLineDash(source.id === "camera" ? [3, 5] : [5, 6]);
+      ctx.strokeStyle = hexToRgba(guideColor, source.id === "camera" ? 0.82 : 0.75);
+      ctx.lineWidth = source.id === "camera" ? 4.5 : 4.0;
+      ctx.setLineDash(source.id === "camera" ? [6, 8] : [8, 9]);
       ctx.beginPath();
       sampled.forEach((point, index) => {
         if (index === 0) ctx.moveTo(point.x, point.y);
@@ -3782,6 +5198,7 @@ function drawMotionPaths(renderState, rect) {
       drawPlanPathArrows(sampled, guideColor, rect);
       drawPlanAnchor(toCanvas(keys[0].pose, rect), "start", guideColor, rect);
       drawPlanAnchor(toCanvas(keys[keys.length - 1].pose, rect), "destination", guideColor, rect);
+      drawMotionPathLabel(source, keys, sampled, guideColor, renderState, rect);
     }
 
     const motionEntry = guideMotionEntry(renderState, source, Number(renderState.motion?.playhead || 0));
@@ -3800,7 +5217,7 @@ function drawMotionPaths(renderState, rect) {
         toCanvas(keyframe.pose, rect),
         index + 1,
         guideColor,
-        keyframe.id === renderState.motion?.selectedKeyId,
+        keyframe.id === selectedKeyIdForRender(renderState),
         rect,
       );
     });
@@ -3846,7 +5263,7 @@ function drawPlanPathArrows(points, color, rect) {
   const progressPoints = path.total > Math.min(rect.w, rect.h) * 0.42
     ? [0.24, 0.5, 0.76]
     : [0.52];
-  const size = clamp(Math.min(rect.w, rect.h) * 0.018, 8, 14);
+  const size = clamp(Math.min(rect.w, rect.h) * 0.028, 14, 24);
   progressPoints.forEach((progress) => {
     const marker = pointAlongPlanPath(points, progress);
     if (!marker) return;
@@ -3855,25 +5272,97 @@ function drawPlanPathArrows(points, color, rect) {
     ctx.rotate(marker.angle);
     const trace = () => {
       ctx.beginPath();
-      ctx.moveTo(-size * 0.8, 0);
-      ctx.lineTo(size * 0.75, 0);
-      ctx.moveTo(size * 0.75, 0);
-      ctx.lineTo(size * 0.12, -size * 0.56);
-      ctx.moveTo(size * 0.75, 0);
-      ctx.lineTo(size * 0.12, size * 0.56);
+      ctx.moveTo(-size * 0.9, 0);
+      ctx.lineTo(size * 0.85, 0);
+      ctx.moveTo(size * 0.85, 0);
+      ctx.lineTo(size * 0.1, -size * 0.6);
+      ctx.moveTo(size * 0.85, 0);
+      ctx.lineTo(size * 0.1, size * 0.6);
     };
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "rgba(5, 9, 12, 0.94)";
-    ctx.lineWidth = Math.max(4, size * 0.38);
+    ctx.lineWidth = Math.max(7, size * 0.5);
     trace();
     ctx.stroke();
     ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2, size * 0.2);
+    ctx.lineWidth = Math.max(3.5, size * 0.3);
     trace();
     ctx.stroke();
     ctx.restore();
   });
+}
+
+function motionPathEnglishLabel(source, keys, renderState) {
+  if (source.id === "camera") {
+    const from = keys[0].pose || {};
+    const to = keys[keys.length - 1].pose || {};
+    const size = stageWorldSize(renderState);
+    const dx = (Number(to.x) - Number(from.x)) * size.width;
+    const dz = (Number(to.y) - Number(from.y)) * size.depth;
+    const dh = Number(to.height || 0) - Number(from.height || 0);
+    const parts = [];
+    if (Math.hypot(dx, dz) > 0.01) {
+      const heading = degToRad(Number(from.panDeg ?? renderState.camera.panDeg ?? 0));
+      const forward = dx * Math.cos(heading) + dz * Math.sin(heading);
+      const right = dx * -Math.sin(heading) + dz * Math.cos(heading);
+      if (Math.abs(forward) >= Math.abs(right)) parts.push(forward > 0 ? "dolly in" : "dolly out");
+      else parts.push(right > 0 ? "truck R" : "truck L");
+    }
+    if (Math.abs(dh) > 0.01) parts.push(dh > 0 ? "crane up" : "crane down");
+    if (Math.abs(Number(to.panDeg || 0) - Number(from.panDeg || 0)) > 0.1) parts.push("pan");
+    if (Math.abs(Number(to.focal || 0) - Number(from.focal || 0)) > 0.1) {
+      parts.push(Number(to.focal) > Number(from.focal) ? "zoom in" : "zoom out");
+    }
+    return `CAM → ${parts.join(" + ") || "move"}`;
+  }
+  const name = String(source.name || "actor").trim();
+  const from = keys[0].pose || {};
+  const to = keys[keys.length - 1].pose || {};
+  const size = stageWorldSize(renderState);
+  const dx = (Number(to.x) - Number(from.x)) * size.width;
+  const dz = (Number(to.y) - Number(from.y)) * size.depth;
+  if (Math.hypot(dx, dz) < 0.01) return `${name} → turn`;
+  const heading = degToRad(renderState.camera.panDeg || 0);
+  const forward = dx * Math.cos(heading) + dz * Math.sin(heading);
+  const right = dx * -Math.sin(heading) + dz * Math.cos(heading);
+  let dir;
+  if (Math.abs(forward) >= Math.abs(right)) dir = forward < 0 ? "toward cam" : "away from cam";
+  else dir = right > 0 ? "screen R" : "screen L";
+  return `${name} → ${dir}`;
+}
+
+function drawMotionPathLabel(source, keys, sampled, color, renderState, rect) {
+  const mid = pointAlongPlanPath(sampled, 0.45);
+  if (!mid) return;
+  const label = motionPathEnglishLabel(source, keys, renderState);
+  const normalX = -Math.sin(mid.angle);
+  const normalY = Math.cos(mid.angle);
+  const offset = source.id === "camera" ? -32 : 32;
+  const x = clamp(mid.x + normalX * offset, rect.x + 30, rect.x + rect.w - 30);
+  const y = clamp(mid.y + normalY * offset, rect.y + 20, rect.y + rect.h - 20);
+  const scale = clamp(Math.min(rect.w / 1000, rect.h / 600), 0.62, 0.92);
+  const fontSize = Math.round(18 * scale);
+  ctx.save();
+  ctx.font = `800 ${fontSize}px "SF Pro Text", "Helvetica Neue", "Inter", system-ui, sans-serif`;
+  ctx.textBaseline = "middle";
+  const measured = ctx.measureText(label);
+  const textW = measured.width;
+  const padX = 8 * scale;
+  const padY = 5 * scale;
+  const align = x > rect.x + rect.w * 0.65 ? "right" : "left";
+  ctx.textAlign = align;
+  const boxX = align === "right" ? x - textW - padX : x - padX;
+  ctx.fillStyle = "rgba(10, 14, 18, 0.92)";
+  roundRect(ctx, boxX, y - fontSize / 2 - padY, textW + padX * 2, fontSize + padY * 2, 5 * scale);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(color, 0.72);
+  ctx.lineWidth = Math.max(1.5, 2 * scale);
+  roundRect(ctx, boxX, y - fontSize / 2 - padY, textW + padX * 2, fontSize + padY * 2, 5 * scale);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(label, x, y + 1);
+  ctx.restore();
 }
 
 function drawPlanMotionInstruction(source, entry, currentPose, renderState, rect, color) {
@@ -3885,8 +5374,13 @@ function drawPlanMotionInstruction(source, entry, currentPose, renderState, rect
   const distance = Math.max(1, Math.hypot(dx, dy));
   const normalX = -dy / distance;
   const normalY = dx / distance;
-  const x = clamp((current.x + destination.x) / 2 + normalX * 24, rect.x + 26, rect.x + rect.w - 26);
-  const y = clamp((current.y + destination.y) / 2 + normalY * 24, rect.y + 82, rect.y + rect.h - 64);
+
+  // Position it at 72% along the active segment path (rather than 50% midpoint) to prevent overlapping other path labels
+  // Use positive offset (32) for actor/props and negative offset (-32) for camera to keep them on opposite sides of the path
+  const offsetSide = source.id === "camera" ? -32 : 32;
+  const x = clamp(current.x + dx * 0.72 + normalX * offsetSide, rect.x + 26, rect.x + rect.w - 26);
+  const y = clamp(current.y + dy * 0.72 + normalY * offsetSide, rect.y + 82, rect.y + rect.h - 64);
+
   const text = source.id === "camera"
     ? cameraGuideInstruction({
       cameraEntry: entry,
@@ -3971,7 +5465,7 @@ function pathOrderBadgeCenter(point, active, rect = stageRect) {
 }
 
 function selectedFreeCurveSegment(renderState = state, keyframes = renderState.motion?.keyframes || []) {
-  const current = keyframes.find((keyframe) => keyframe.id === renderState.motion?.selectedKeyId);
+  const current = keyframes.find((keyframe) => keyframe.id === selectedKeyIdForRender(renderState));
   if (!current || pathModeForSegment(current.segment, current.source) !== "free-curve") return null;
   const keys = sortKeyframes(keyframes.filter((keyframe) => keyframe.source === current.source));
   const index = keys.findIndex((keyframe) => keyframe.id === current.id);
@@ -4069,10 +5563,10 @@ function drawGrid(rect, renderState = state) {
   ctx.restore();
 }
 
-function drawCameraCone(camera, rect, clean = false) {
+function drawCameraCone(camera, rect, clean = false, renderState = state, color = "#6ba9f4", active = false) {
   const cam = toCanvas({ x: camera.x, y: camera.y }, rect);
   const angle = degToRad(camera.panDeg);
-  const fov = degToRad(focalToFov(camera.focal));
+  const fov = degToRad(focalToFov(camera.focal, cameraSensorWidth(renderState)));
   const len = Math.max(rect.w, rect.h) * 1.6;
   const p1 = {
     x: cam.x + Math.cos(angle - fov / 2) * len,
@@ -4084,9 +5578,9 @@ function drawCameraCone(camera, rect, clean = false) {
   };
 
   ctx.save();
-  ctx.fillStyle = "rgba(64, 129, 199, 0.2)";
-  ctx.strokeStyle = "rgba(107, 169, 244, 0.76)";
-  ctx.lineWidth = 1.3;
+  ctx.fillStyle = hexToRgba(color, active ? 0.24 : 0.1);
+  ctx.strokeStyle = hexToRgba(color, active ? 0.96 : 0.58);
+  ctx.lineWidth = active ? 1.8 : 1.15;
   ctx.setLineDash([5, 6]);
   ctx.beginPath();
   ctx.moveTo(cam.x, cam.y);
@@ -4097,7 +5591,7 @@ function drawCameraCone(camera, rect, clean = false) {
   ctx.stroke();
 
   ctx.setLineDash([1, 7]);
-  ctx.strokeStyle = "rgba(107, 169, 244, 0.48)";
+  ctx.strokeStyle = hexToRgba(color, active ? 0.55 : 0.34);
   ctx.beginPath();
   ctx.moveTo(cam.x, cam.y);
   ctx.lineTo(cam.x + Math.cos(angle) * len * 0.46, cam.y + Math.sin(angle) * len * 0.46);
@@ -4106,29 +5600,43 @@ function drawCameraCone(camera, rect, clean = false) {
   ctx.restore();
 }
 
-function drawCamera(camera, rect, clean = false) {
+function drawCamera(camera, rect, clean = false, color = "#71b8ff", active = false, label = "카메라") {
   const cam = toCanvas({ x: camera.x, y: camera.y }, rect);
   const angle = degToRad(camera.panDeg);
-  const active = selected?.kind === "camera" || selected?.kind === "aim";
 
   ctx.save();
   ctx.translate(cam.x, cam.y);
   ctx.rotate(angle);
-  ctx.strokeStyle = active ? "#ff6b55" : "#71b8ff";
+  ctx.strokeStyle = color;
   ctx.fillStyle = "#121a24";
-  ctx.lineWidth = active ? 2.5 : 2;
+  ctx.lineWidth = active ? 3 : 2;
   roundRect(ctx, -18, -10, 25, 20, 4);
   ctx.fill();
   ctx.stroke();
+  if (active) {
+    ctx.strokeStyle = "#f7fbff";
+    ctx.lineWidth = 1.2;
+    roundRect(ctx, -20, -12, 29, 24, 5);
+    ctx.stroke();
+  }
   roundRect(ctx, 7, -7, 17, 14, 3);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
 
-  drawCameraRotationIndicator(camera, cam, angle, active, clean, rect);
+  drawCameraRotationIndicator(camera, cam, angle, active, clean, rect, color, label);
 }
 
-function drawCameraRotationIndicator(camera, cam, angle, active, clean = false, rect = stageRect) {
+function drawCameraRotationIndicator(
+  camera,
+  cam,
+  angle,
+  active,
+  clean = false,
+  rect = stageRect,
+  color = "#71b8ff",
+  label = "카메라",
+) {
   const radius = active ? 30 : 27;
   const arcStart = angle - 0.82;
   const arcEnd = angle + 0.82;
@@ -4138,9 +5646,9 @@ function drawCameraRotationIndicator(camera, cam, angle, active, clean = false, 
   };
 
   ctx.save();
-  ctx.strokeStyle = active ? "rgba(255, 107, 85, 0.98)" : "rgba(130, 191, 255, 0.7)";
+  ctx.strokeStyle = hexToRgba(color, active ? 0.98 : 0.82);
   ctx.fillStyle = ctx.strokeStyle;
-  ctx.lineWidth = active ? 2.4 : 1.8;
+  ctx.lineWidth = active ? 2.6 : 1.8;
   ctx.beginPath();
   ctx.arc(cam.x, cam.y, radius, arcStart, arcEnd);
   ctx.stroke();
@@ -4155,10 +5663,13 @@ function drawCameraRotationIndicator(camera, cam, angle, active, clean = false, 
   ctx.fill();
   ctx.restore();
 
-  if (!clean && active) {
+  if (!clean) {
     const labelX = clamp(cam.x, rect.x + 44, rect.x + rect.w - 44);
     const labelY = clamp(cam.y - radius - 16, rect.y + 18, rect.y + rect.h - 18);
-    drawMicroLabel(`P ${cameraHeadingDeg(camera)}° · T ${Math.round(camera.tiltDeg)}°`, labelX, labelY, "#71b8ff");
+    const text = active
+      ? `${label} · P ${cameraHeadingDeg(camera)}° · T ${Math.round(camera.tiltDeg)}°`
+      : label;
+    drawMicroLabel(text, labelX, labelY, color);
   }
 }
 
@@ -4168,11 +5679,12 @@ function drawMicroLabel(text, x, y, color = "#dfe5de") {
   const metrics = ctx.measureText(text);
   const w = metrics.width + 12;
   const h = 18;
-  ctx.fillStyle = "rgba(5, 7, 8, 0.72)";
+  ctx.fillStyle = "rgba(10, 14, 18, 0.92)";
   roundRect(ctx, x - w / 2, y - h / 2, w, h, 5);
   ctx.fill();
-  ctx.strokeStyle = "rgba(255, 107, 85, 0.35)";
+  ctx.strokeStyle = typeof hexToRgba === "function" ? hexToRgba(color, 0.45) : "rgba(255, 255, 255, 0.2)";
   ctx.lineWidth = 1;
+  roundRect(ctx, x - w / 2, y - h / 2, w, h, 5);
   ctx.stroke();
   ctx.fillStyle = color;
   ctx.textAlign = "center";
@@ -4202,10 +5714,16 @@ function drawItem(item, rect, renderState, clean) {
   ctx.translate(point.x, point.y);
   ctx.rotate(degToRad(renderItem.facing));
   if (item.type === "prop" && item.assetType !== "generic") {
-    const maxAxis = Math.max(Number(item.scaleX || 1), Number(item.scaleZ || 1), 0.01);
+    const sizeM = stageWorldSize(renderState);
+    const px_per_meter_x = rect.w / sizeM.width;
+    const px_per_meter_y = rect.h / sizeM.depth;
+    const size = item.size || 1;
+    const dims = getPropPhysicalDimensions(item.assetType);
+    const w = dims[0] * size * Number(item.scaleX || 1) * px_per_meter_x;
+    const h = dims[1] * size * Number(item.scaleZ || 1) * px_per_meter_y;
+
     ctx.save();
-    ctx.scale(Number(item.scaleX || 1) / maxAxis, Number(item.scaleZ || 1) / maxAxis);
-    drawPropFootprint(item, radius);
+    drawPropFootprint(item, w, h);
     ctx.restore();
   } else {
     drawShapePath(item.shape, radius);
@@ -4235,7 +5753,10 @@ function drawItem(item, rect, renderState, clean) {
   ctx.restore();
 
   if (renderState.showNames && (isActive || renderState.planReferenceExport) && !(clean && renderState.cleanExport)) {
-    drawLabel(`@${item.name}`, point.x, point.y + radius + 21);
+    const labelText = item.type === "actor" && Number(renderItem.verticalOffset || 0) !== 0
+      ? `@${item.name} (${Number(renderItem.verticalOffset) >= 0 ? "+" : ""}${Number(renderItem.verticalOffset).toFixed(2)}m)`
+      : `@${item.name}`;
+    drawLabel(labelText, point.x, point.y + radius + 21);
   }
 
   if (isActive && !renderItem.autoMounted && isGroupLeader(item, renderState)) drawFacingHandle(renderItem, rect, radius);
@@ -4247,50 +5768,89 @@ function itemRadius(item, rect = stageRect) {
   return Math.min(rect.w, rect.h) * 0.035 * item.size * Math.sqrt(footprint) * axisScale;
 }
 
-function drawPropFootprint(item, radius) {
+function getPropPhysicalDimensions(assetType) {
+  switch (assetType) {
+    case "room":
+    case "wall_i":
+    case "wall_l":
+    case "wall_u": return [6.2, 4.6];
+    case "sofa": return [2.2, 0.86];
+    case "dining-table": return [1.8, 1.05];
+    case "chair": return [0.62, 0.62];
+    case "bed": return [2.15, 1.55];
+    case "cabinet": return [1.25, 0.52];
+    case "refrigerator": return [0.92, 0.78];
+    case "television": return [1.45, 0.12];
+    case "stove": return [0.88, 0.75];
+    case "washing-machine": return [0.88, 0.78];
+    case "car": return [3.8, 1.7];
+    case "bus": return [7.2, 2.25];
+    case "motorcycle": return [1.64, 0.4];
+    case "bicycle": return [1.64, 0.3];
+    case "tree": return [1.5, 1.5];
+    case "forest": return [3.2, 3.2];
+    case "desk": return [1.4, 0.8];
+    case "blackboard": return [2.0, 0.3];
+    case "partition": return [1.0, 0.08];
+    case "wall": return [3.0, 0.02];
+    case "corridor-wall":
+    case "train-wall": return [3.0, 0.02];
+    case "elevator": return [1.6, 1.6];
+    case "door": return [1.0, 0.08];
+    case "sink": return [0.62, 0.52];
+    case "toilet": return [0.5, 0.65];
+    case "bathtub": return [1.5, 0.75];
+    case "train-seat": return [0.85, 0.65];
+    case "stairs": return [1.8, 1.8];
+    case "slope": return [3.0, 1.5];
+    default: return [1.0, 1.0];
+  }
+}
+
+function drawPropFootprint(item, w, h) {
   const assetType = item.assetType;
   const fill = item.color;
   const stroke = "rgba(242,248,250,0.88)";
-  ctx.lineWidth = Math.max(1.5, radius * 0.07);
+  const radius = Math.min(w, h) / 2;
+  ctx.lineWidth = Math.max(1.5, radius * 0.1);
   ctx.strokeStyle = stroke;
   ctx.fillStyle = fill;
 
   if (assetType === "car" || assetType === "bus") {
-    const length = radius * (assetType === "bus" ? 3.5 : 2.6);
-    const width = radius * (assetType === "bus" ? 1.15 : 1.05);
-    roundRect(ctx, -length / 2, -width / 2, length, width, radius * 0.22);
+    roundRect(ctx, -w / 2, -h / 2, w, h, radius * 0.22);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "rgba(190,229,245,0.72)";
     const windowCount = assetType === "bus" ? 5 : 2;
     for (let index = 0; index < windowCount; index += 1) {
-      const x = -length * 0.28 + index * (length * 0.56 / Math.max(1, windowCount - 1));
-      ctx.fillRect(x - radius * 0.18, -width * 0.31, radius * 0.36, width * 0.62);
+      const x = -w * 0.28 + index * (w * 0.56 / Math.max(1, windowCount - 1));
+      ctx.fillRect(x - radius * 0.18, -h * 0.31, radius * 0.36, h * 0.62);
     }
     ctx.fillStyle = "#12181d";
     [[-0.31, -0.55], [0.31, -0.55], [-0.31, 0.55], [0.31, 0.55]].forEach(([x, y]) => {
-      ctx.fillRect(x * length - radius * 0.13, y * width - radius * 0.1, radius * 0.26, radius * 0.2);
+      ctx.fillRect(x * w - radius * 0.13, y * h - radius * 0.1, radius * 0.26, radius * 0.2);
     });
     return;
   }
   if (assetType === "motorcycle" || assetType === "bicycle") {
-    const span = radius * 1.55;
-    ctx.lineWidth = Math.max(2, radius * 0.1);
+    const span = w;
+    const r = h * 0.4;
+    ctx.lineWidth = Math.max(2, h * 0.1);
     ctx.beginPath();
-    ctx.arc(-span / 2, 0, radius * 0.42, 0, Math.PI * 2);
-    ctx.moveTo(span / 2 + radius * 0.42, 0);
-    ctx.arc(span / 2, 0, radius * 0.42, 0, Math.PI * 2);
+    ctx.arc(-span / 2, 0, r, 0, Math.PI * 2);
+    ctx.moveTo(span / 2 + r, 0);
+    ctx.arc(span / 2, 0, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(-span / 2, 0);
-    ctx.lineTo(0, -radius * 0.42);
+    ctx.lineTo(0, -r);
     ctx.lineTo(span / 2, 0);
-    ctx.lineTo(0, radius * 0.34);
+    ctx.lineTo(0, r * 0.8);
     ctx.closePath();
     ctx.stroke();
     if (assetType === "motorcycle") {
       ctx.beginPath();
-      ctx.ellipse(0, 0, radius * 0.45, radius * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, w * 0.25, h * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     return;
@@ -4309,50 +5869,196 @@ function drawPropFootprint(item, radius) {
     ctx.fillRect(-radius * 0.12, -radius * 0.12, radius * 0.24, radius * 0.24);
     return;
   }
-  if (assetType === "room") {
+  if (assetType === "room" || assetType === "wall_l") {
     ctx.strokeStyle = "rgba(188,205,214,0.88)";
-    ctx.lineWidth = Math.max(4, radius * 0.12);
+    ctx.lineWidth = Math.max(3, w * 0.02);
     ctx.beginPath();
-    ctx.moveTo(radius * 1.55, radius * 1.05);
-    ctx.lineTo(-radius * 1.55, radius * 1.05);
-    ctx.lineTo(-radius * 1.55, -radius * 1.05);
-    ctx.lineTo(radius * 1.55, -radius * 1.05);
+    ctx.moveTo(w / 2, -h / 2);
+    ctx.lineTo(-w / 2, -h / 2);
+    ctx.lineTo(-w / 2, h / 2);
     ctx.stroke();
-    ctx.fillStyle = "rgba(130,144,154,0.12)";
-    ctx.fillRect(-radius * 1.5, -radius, radius * 3, radius * 2);
+    return;
+  }
+  if (assetType === "wall_i") {
+    ctx.strokeStyle = "rgba(188,205,214,0.88)";
+    ctx.lineWidth = Math.max(3, w * 0.02);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, -h / 2);
+    ctx.lineTo(w / 2, -h / 2);
+    ctx.stroke();
+    return;
+  }
+  if (assetType === "wall_u") {
+    ctx.strokeStyle = "rgba(188,205,214,0.88)";
+    ctx.lineWidth = Math.max(3, w * 0.02);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, h / 2);
+    ctx.lineTo(-w / 2, -h / 2);
+    ctx.lineTo(w / 2, -h / 2);
+    ctx.lineTo(w / 2, h / 2);
+    ctx.stroke();
     return;
   }
 
-  const w = radius * (assetType === "sofa" || assetType === "bed" ? 2.3 : 1.35);
-  const h = radius * (assetType === "dining-table" || assetType === "bed" ? 1.4 : 1.05);
-  roundRect(ctx, -w / 2, -h / 2, w, h, radius * 0.14);
+  roundRect(ctx, -w / 2, -h / 2, w, h, Math.min(w, h) * 0.14);
   ctx.fill();
   ctx.stroke();
   ctx.strokeStyle = "rgba(20,28,34,0.62)";
-  ctx.lineWidth = Math.max(1.5, radius * 0.06);
+  ctx.lineWidth = Math.max(1.5, Math.min(w, h) * 0.06);
   if (assetType === "sofa") {
-    ctx.strokeRect(-w * 0.38, -h * 0.28, w * 0.76, h * 0.56);
+    const backrestThickness = h * (0.24 / 0.86);
+    ctx.strokeRect(-w * 0.38, -h * 0.5 + backrestThickness, w * 0.76, h * 0.5);
+    const armrestWidth = w * (0.26 / 2.2);
     ctx.beginPath();
-    ctx.moveTo(0, -h * 0.28);
-    ctx.lineTo(0, h * 0.28);
+    ctx.moveTo(-w/2 + armrestWidth, -h/2 + backrestThickness);
+    ctx.lineTo(-w/2 + armrestWidth, h/2);
+    ctx.moveTo(w/2 - armrestWidth, -h/2 + backrestThickness);
+    ctx.lineTo(w/2 - armrestWidth, h/2);
+    ctx.moveTo(0, -h/2 + backrestThickness);
+    ctx.lineTo(0, h/2);
     ctx.stroke();
   } else if (assetType === "television") {
     ctx.fillStyle = "#101c24";
-    ctx.fillRect(-w * 0.38, -h * 0.3, w * 0.76, h * 0.6);
+    ctx.fillRect(-w * 0.45, -h * 0.5, w * 0.9, h);
   } else if (assetType === "washing-machine") {
     ctx.beginPath();
-    ctx.arc(0, 0, radius * 0.34, 0, Math.PI * 2);
+    ctx.arc(0, 0, Math.min(w, h) * 0.34, 0, Math.PI * 2);
     ctx.stroke();
   } else if (assetType === "stove") {
     [[-0.25, -0.22], [0.25, -0.22], [-0.25, 0.22], [0.25, 0.22]].forEach(([x, y]) => {
       ctx.beginPath();
-      ctx.arc(x * radius, y * radius, radius * 0.12, 0, Math.PI * 2);
+      ctx.arc(x * w, y * h, Math.min(w, h) * 0.12, 0, Math.PI * 2);
       ctx.stroke();
     });
   } else if (assetType === "refrigerator" || assetType === "cabinet") {
     ctx.beginPath();
     ctx.moveTo(0, -h / 2);
     ctx.lineTo(0, h / 2);
+    ctx.stroke();
+  } else if (assetType === "desk") {
+    // Drawer panel on the side
+    ctx.strokeRect(-w * 0.45, -h * 0.4, w * 0.25, h * 0.8);
+    // Keyboard tray line
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.2, h * 0.35);
+    ctx.lineTo(w * 0.2, h * 0.35);
+    ctx.stroke();
+  } else if (assetType === "blackboard") {
+    ctx.fillStyle = "#1b3527";
+    ctx.fillRect(-w * 0.48, -h * 0.4, w * 0.96, h * 0.8);
+    ctx.strokeRect(-w * 0.48, -h * 0.4, w * 0.96, h * 0.8);
+  } else if (assetType === "partition") {
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, 0);
+    ctx.lineTo(w * 0.5, 0);
+    ctx.stroke();
+    // End ticks
+    ctx.moveTo(-w * 0.5, -h * 0.5);
+    ctx.lineTo(-w * 0.5, h * 0.5);
+    ctx.moveTo(w * 0.5, -h * 0.5);
+    ctx.lineTo(w * 0.5, h * 0.5);
+    ctx.stroke();
+  } else if (assetType === "wall" || assetType === "corridor-wall" || assetType === "train-wall") {
+    ctx.fillStyle = "rgba(110,130,145,0.48)";
+    ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
+    ctx.strokeRect(-w * 0.5, -h * 0.5, w, h);
+  } else if (assetType === "elevator") {
+    // Front opening U-shape
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, h * 0.5);
+    ctx.lineTo(-w * 0.5, -h * 0.5);
+    ctx.lineTo(w * 0.5, -h * 0.5);
+    ctx.lineTo(w * 0.5, h * 0.5);
+    ctx.stroke();
+    // Sliding door lines
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.4, h * 0.48);
+    ctx.lineTo(-w * 0.05, h * 0.48);
+    ctx.moveTo(w * 0.4, h * 0.48);
+    ctx.lineTo(w * 0.05, h * 0.48);
+    ctx.stroke();
+  } else if (assetType === "door") {
+    // Frame ticks
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.5);
+    ctx.lineTo(-w * 0.5, h * 0.5);
+    ctx.moveTo(w * 0.5, -h * 0.5);
+    ctx.lineTo(w * 0.5, h * 0.5);
+    ctx.stroke();
+    // Swing arc (open 90 degrees)
+    ctx.beginPath();
+    ctx.arc(-w * 0.5, h * 0.5, w, -Math.PI / 2, 0, false);
+    ctx.stroke();
+    // Door panel open
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, h * 0.5);
+    ctx.lineTo(-w * 0.5, h * 0.5 - w);
+    ctx.stroke();
+  } else if (assetType === "window") {
+    ctx.fillStyle = "rgba(143,212,237,0.36)";
+    ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
+    ctx.strokeRect(-w * 0.5, -h * 0.5, w, h);
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -h * 0.16);
+    ctx.lineTo(w * 0.5, -h * 0.16);
+    ctx.moveTo(-w * 0.5, h * 0.16);
+    ctx.lineTo(w * 0.5, h * 0.16);
+    ctx.stroke();
+  } else if (assetType === "sink") {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.38, h * 0.38, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Faucet dot
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.38, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (assetType === "toilet") {
+    // Bowl oval
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.12, w * 0.35, h * 0.35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Water tank behind
+    ctx.strokeRect(-w * 0.48, -h * 0.5, w * 0.96, h * 0.28);
+  } else if (assetType === "bathtub") {
+    ctx.strokeRect(-w * 0.42, -h * 0.4, w * 0.84, h * 0.8);
+    // Drain circle
+    ctx.beginPath();
+    ctx.arc(w * 0.3, 0, 4, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (assetType === "train-seat") {
+    // Seat cushion
+    ctx.strokeRect(-w * 0.46, -h * 0.35, w * 0.92, h * 0.7);
+    // Headrest / backrest line
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.46, -h * 0.35);
+    ctx.lineTo(w * 0.46, -h * 0.35);
+    ctx.stroke();
+  } else if (assetType === "stairs") {
+    // Horizontal step lines
+    const stepCount = 5;
+    for (let i = 1; i < stepCount; i++) {
+      const y = -h * 0.5 + (i * h) / stepCount;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5, y);
+      ctx.lineTo(w * 0.5, y);
+      ctx.stroke();
+    }
+    // Arrow pointing up
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.38);
+    ctx.lineTo(0, -h * 0.38);
+    ctx.lineTo(-w * 0.1, -h * 0.28);
+    ctx.moveTo(0, -h * 0.38);
+    ctx.lineTo(w * 0.1, -h * 0.28);
+    ctx.stroke();
+  } else if (assetType === "slope") {
+    // Slanted hatch lines or simple arrow
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.4, 0);
+    ctx.lineTo(w * 0.4, 0);
+    ctx.lineTo(w * 0.2, -h * 0.25);
+    ctx.moveTo(w * 0.4, 0);
+    ctx.lineTo(w * 0.2, h * 0.25);
     ctx.stroke();
   }
 }
@@ -4471,6 +6177,43 @@ function pointerPoint(event) {
   };
 }
 
+function isPointInItem(point, item, renderState, rect = stageRect) {
+  const resolved = resolvedItemPose(item, renderState);
+  const p = toCanvas(resolved, rect);
+
+  if (item.type === "actor") {
+    const r = itemRadius(resolved, rect) * 1.28;
+    return distance(point, p) <= r;
+  }
+
+  const assetType = item.assetType;
+  if (assetType === "tree" || assetType === "forest") {
+    const r = itemRadius(resolved, rect) * 1.28;
+    return distance(point, p) <= r;
+  }
+
+  const sizeM = stageWorldSize(renderState);
+  const px_per_meter_x = rect.w / sizeM.width;
+  const px_per_meter_y = rect.h / sizeM.depth;
+  const size = item.size || 1;
+  const dims = getPropPhysicalDimensions(item.assetType);
+  const w = dims[0] * size * Number(resolved.scaleX || 1) * px_per_meter_x;
+  const h = dims[1] * size * Number(resolved.scaleZ || 1) * px_per_meter_y;
+
+  const angle = degToRad(resolved.facing);
+  const dx = point.x - p.x;
+  const dy = point.y - p.y;
+
+  const cos = Math.cos(-angle);
+  const sin = Math.sin(-angle);
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+
+  const isCurrentlySelected = selected?.kind === "item" && selected.id === item.id;
+  const pad = isCurrentlySelected ? 20 : 6;
+  return Math.abs(rx) <= w / 2 + pad && Math.abs(ry) <= h / 2 + pad;
+}
+
 function hitTest(point, renderState = evaluatedViewState || state) {
   const item = selected?.id ? renderState.items.find((entry) => entry.id === selected.id) : null;
   if (item && isGroupLeader(item, renderState)) {
@@ -4478,18 +6221,47 @@ function hitTest(point, renderState = evaluatedViewState || state) {
     if (distance(point, handle) < 18) return { kind: "facing", id: item.id };
   }
 
-  const cam = toCanvas({ x: renderState.camera.x, y: renderState.camera.y });
-  if (distance(point, cam) < 24) return { kind: "camera" };
+  const cameraHits = cameraFieldRenderEntries(renderState)
+    .map((entry) => {
+      return {
+        entry,
+        center: toCanvas({ x: entry.profileState.camera.x, y: entry.profileState.camera.y }),
+        distance: distance(point, toCanvas({ x: entry.profileState.camera.x, y: entry.profileState.camera.y })),
+      };
+    })
+    .filter((entry) => entry.distance < 24)
+    // Pick the rig actually under the pointer. Active-camera priority used to
+    // steal clicks from a nearby visible rig whenever camera icons overlapped.
+    .sort((a, b) => a.distance - b.distance || Number(b.entry.active) - Number(a.entry.active));
+  if (cameraHits.length) {
+    const hit = cameraHits[0];
+    return {
+      kind: "camera",
+      profileId: hit.entry.profile.id,
+      fieldOffset: clone(hit.entry.fieldOffset),
+    };
+  }
 
+  const candidates = [];
   for (let i = renderState.items.length - 1; i >= 0; i -= 1) {
     const hitItem = renderState.items[i];
     if (hitItem.visible === false) continue;
-    const resolved = resolvedItemPose(hitItem, renderState);
-    const p = toCanvas(resolved);
-    const r = itemRadius(resolved) * 1.28;
-    if (distance(point, p) <= r) return { kind: "item", id: hitItem.id };
+    if (isPointInItem(point, hitItem, renderState)) {
+      const resolved = resolvedItemPose(hitItem, renderState);
+      const p = toCanvas(resolved);
+      const d = distance(point, p);
+      candidates.push({ kind: "item", id: hitItem.id, type: hitItem.type, dist: d });
+    }
   }
-  return null;
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return { kind: candidates[0].kind, id: candidates[0].id };
+  candidates.sort((a, b) => {
+    const aPri = a.type === "actor" ? 0 : 1;
+    const bPri = b.type === "actor" ? 0 : 1;
+    if (aPri !== bPri) return aPri - bPri;
+    return a.dist - b.dist;
+  });
+  return { kind: candidates[0].kind, id: candidates[0].id };
 }
 
 function distance(a, b) {
@@ -4499,12 +6271,12 @@ function distance(a, b) {
 function hitTestPathBadge(point, renderState = evaluatedViewState || state) {
   const keyframes = sortKeyframes(renderState.motion?.keyframes || []);
   const hits = keyframes.map((keyframe) => {
-    const active = keyframe.id === renderState.motion?.selectedKeyId;
+    const active = keyframe.id === selectedKeyIdForRender(renderState);
     const center = pathOrderBadgeCenter(toCanvas(keyframe.pose), active);
     return { keyframe, center, distance: distance(point, center) };
   }).filter((entry) => entry.distance <= 15);
-  return hits.sort((a, b) => Number(b.keyframe.id === renderState.motion?.selectedKeyId)
-    - Number(a.keyframe.id === renderState.motion?.selectedKeyId) || a.distance - b.distance)[0] || null;
+  return hits.sort((a, b) => Number(b.keyframe.id === selectedKeyIdForRender(renderState))
+    - Number(a.keyframe.id === selectedKeyIdForRender(renderState)) || a.distance - b.distance)[0] || null;
 }
 
 function hitTestFreeCurveHandle(point, renderState = evaluatedViewState || state) {
@@ -4539,7 +6311,7 @@ function activateKeyBadgeDrag(press) {
   if (!keyframe) return;
   setActiveSource(keyframe.source);
   selectSourceOnStage(keyframe.source);
-  state.motion.selectedKeyId = keyframe.id;
+  setTimelineSelection([keyframe.id], keyframe.id);
   state.motion.playhead = keyframe.time;
   applySourcePose(keyframe.source, keyframe.pose);
   const posePoint = toCanvas(keyframe.pose);
@@ -4722,20 +6494,25 @@ canvas.addEventListener("pointerdown", (event) => {
     beginKeyBadgePress(event, pathBadge, point);
     return;
   }
-  const hit = hitTest(point);
+  let hit = hitTest(point);
   if (hit) {
+    if (hit.kind === "camera" && hit.profileId && hit.profileId !== state.activeCameraId) {
+      switchActiveCamera(hit.profileId);
+      // Keep the same pointer gesture alive: grabbing an inactive rig should
+      // select and move that rig without requiring a second drag.
+    }
     selected = hit;
     const sourceId = selectedSourceId();
     if (sourceId) {
       setActiveSource(sourceId);
       selectKeyForSource(sourceId);
     }
-    const editItemId = hit.kind === "item" ? transformLeaderIdForItem(hit.id, state) : hit.id;
+    const editItemId = hit.kind === "item" ? transformLeaderIdForItem(hit.id, state) : null;
     const locked = hit.kind === "camera"
       ? cameraFieldLocked("position")
       : sourceEditLocked(editItemId);
     const editStartState = clone(state);
-    if (!locked) materializeEvaluatedViewForEditing(editItemId);
+    if (!locked) materializeEvaluatedViewForEditing(hit.kind === "camera" ? "camera" : editItemId);
     drag = locked ? null : {
       selection: clone(hit),
       editItemId,
@@ -4777,8 +6554,9 @@ canvas.addEventListener("pointermove", (event) => {
       item.facing = faceItemTowardPoint(item, point);
     }
   } else if (drag.selection.kind === "camera") {
-    state.camera.x = normalized.x;
-    state.camera.y = normalized.y;
+    const fieldOffset = drag.selection.fieldOffset || { x: 0, y: 0 };
+    state.camera.x = clamp(normalized.x - finiteNumber(fieldOffset.x, 0), STAGE_COORD_MIN, STAGE_COORD_MAX);
+    state.camera.y = clamp(normalized.y - finiteNumber(fieldOffset.y, 0), STAGE_COORD_MIN, STAGE_COORD_MAX);
     syncCameraDerivedAim(state.camera, state);
   }
   applyCameraTracking(state);
@@ -4801,8 +6579,23 @@ canvas.addEventListener("pointerup", (event) => {
   }
   if (!drag) return;
   canvas.releasePointerCapture(event.pointerId);
+
+  const dragSelection = drag.selection;
+  const editItemId = drag.editItemId;
   drag = null;
-  commit();
+  const preservedSourceIds = [];
+
+  // Dragging edits only the scene pose. Timeline keys and their paths change
+  // exclusively through the explicit add/update timeline actions.
+  if (dragSelection.kind === "camera") {
+    preservedSourceIds.push("camera");
+  } else if (dragSelection.kind === "item" && editItemId) {
+    preservedSourceIds.push(editItemId);
+  } else if (dragSelection.kind === "facing" && dragSelection.id) {
+    preservedSourceIds.push(dragSelection.id);
+  }
+
+  commit({ preserveSourceIds: preservedSourceIds });
 });
 
 canvas.addEventListener("pointercancel", (event) => {
@@ -4842,6 +6635,21 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+  if (workspaceMode === "blocking" && timelineFocused && command && event.key.toLowerCase() === "a") {
+    selectAllVisibleTimelineKeys();
+    event.preventDefault();
+    return;
+  }
+  if (workspaceMode === "blocking" && timelineFocused && command && event.key.toLowerCase() === "c") {
+    copySelectedTimelineKeys();
+    event.preventDefault();
+    return;
+  }
+  if (workspaceMode === "blocking" && timelineFocused && command && event.key.toLowerCase() === "v") {
+    pasteTimelineKeys();
+    event.preventDefault();
+    return;
+  }
   if (command && event.key === "1") {
     setWorkspaceMode("storyboard");
     event.preventDefault();
@@ -4870,6 +6678,84 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (workspaceMode === "blocking" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    if (event.key === "Home") {
+      stopPreview();
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "End") {
+      if (preview) pausePreview();
+      scrubToTime(state.motion.duration);
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      if (preview) pausePreview();
+      const step = event.shiftKey ? (10 / (state.motion.fps || 24)) : (1 / (state.motion.fps || 24));
+      scrubToTime(Math.max(0, displayPlayhead() - step));
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      if (preview) pausePreview();
+      const step = event.shiftKey ? (10 / (state.motion.fps || 24)) : (1 / (state.motion.fps || 24));
+      scrubToTime(Math.min(state.motion.duration, displayPlayhead() + step));
+      event.preventDefault();
+      return;
+    }
+     if (event.key === "Escape" && !tutorialOpen && !document.querySelector("dialog[open]")) {
+      if (typeof currentAnnoTool !== "undefined" && currentAnnoTool !== "none") {
+        if (typeof selectAnnoTool === "function") selectAnnoTool("none");
+        event.preventDefault();
+        return;
+      }
+      stopPreview();
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "s") {
+      if (typeof selectAnnoTool === "function") selectAnnoTool(currentAnnoTool === "select" ? "none" : "select");
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "d") {
+      if (typeof selectAnnoTool === "function") selectAnnoTool(currentAnnoTool === "pen" ? "none" : "pen");
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "a") {
+      if (typeof selectAnnoTool === "function") selectAnnoTool(currentAnnoTool === "arrow" ? "none" : "arrow");
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "t") {
+      if (typeof selectAnnoTool === "function") selectAnnoTool(currentAnnoTool === "text" ? "none" : "text");
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "e") {
+      if (typeof selectAnnoTool === "function") selectAnnoTool(currentAnnoTool === "eraser" ? "none" : "eraser");
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Backspace" || event.key === "Delete") {
+      if (typeof selectedAnnoId !== "undefined" && selectedAnnoId) {
+        if (activeSourceId() !== "all" && sourceEditLocked(activeSourceId())) {
+          notifyApp("편집이 잠긴 대상 상태에서는 주석을 수정할 수 없습니다.");
+        } else {
+          state.annotations = state.annotations.filter(anno => anno.id !== selectedAnnoId);
+          selectedAnnoId = null;
+          commit();
+          notifyApp("선택한 주석을 삭제했습니다.");
+          if (typeof drawAnnotations === "function") drawAnnotations();
+          if (typeof draw === "function") draw();
+        }
+        event.preventDefault();
+        return;
+      }
+    }
+  }
   if (workspaceMode === "blocking" && event.code === "Space") {
     if (viewMode === "2d") {
       if (!event.repeat) {
@@ -4891,7 +6777,7 @@ document.addEventListener("keydown", (event) => {
   if (workspaceMode === "blocking" && ["[", "]"].includes(event.key)) {
     const keys = sortKeyframes(state.motion.keyframes);
     if (keys.length) {
-      const currentIndex = Math.max(0, keys.findIndex((keyframe) => keyframe.id === state.motion.selectedKeyId));
+      const currentIndex = Math.max(0, keys.findIndex((keyframe) => keyframe.id === primaryTimelineKeyId()));
       const direction = event.key === "[" ? -1 : 1;
       const next = keys[(currentIndex + direction + keys.length) % keys.length];
       selectKeyframe(next.id);
@@ -4901,7 +6787,10 @@ document.addEventListener("keydown", (event) => {
   }
   const item = selectedItem();
   if (event.key === "Delete" || event.key === "Backspace") {
-    if (item) {
+    if (workspaceMode === "blocking" && timelineFocused && selectedTimelineKeyframes().length) {
+      deleteSelectedKey();
+      event.preventDefault();
+    } else if (item) {
       deleteSelected();
       event.preventDefault();
     }
@@ -4941,6 +6830,18 @@ window.addEventListener("blur", () => {
 });
 
 function syncUi(updateInputs = true) {
+  if (threeView?.ready) {
+    const degH = Math.round(threeView.orbit.theta * (180 / Math.PI));
+    const knobH = $("#jogDialKnobH");
+    if (knobH) knobH.style.transform = `rotate(${degH}deg)`;
+
+    const degV = Math.round(threeView.orbit.phi * (180 / Math.PI));
+    const knobV = $("#jogDialKnobV");
+    if (knobV) knobV.style.transform = `rotate(${degV}deg)`;
+  }
+  // Camera controls should reflect the active rig's saved state, not the
+  // transient evaluated frame, so switching rigs does not look like a reset.
+  const displayCamera = state.camera;
   $$("#viewButtons button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === viewMode);
   });
@@ -4954,14 +6855,15 @@ function syncUi(updateInputs = true) {
   $("#namesToggle").checked = state.showNames;
   $("#cameraToggle").checked = state.showCamera;
   $("#cleanExportToggle").checked = state.cleanExport;
-  $("#focalSlider").value = state.camera.focal;
-  $("#focalValue").value = state.camera.focal;
-  $("#cameraHeightSlider").value = state.camera.height;
-  $("#cameraHeightValue").value = Number(state.camera.height).toFixed(2);
-  $("#cameraPanSlider").value = state.camera.panDeg;
-  $("#cameraPanValue").value = Math.round(state.camera.panDeg);
-  $("#cameraTiltSlider").value = state.camera.tiltDeg;
-  $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
+  $("#focalSlider").value = displayCamera.focal;
+  $("#focalValue").value = displayCamera.focal;
+  $("#cameraHeightSlider").value = displayCamera.height;
+  $("#cameraHeightValue").value = Number(displayCamera.height).toFixed(2);
+  $("#cameraPanSlider").value = displayCamera.panDeg;
+  $("#cameraPanValue").value = Math.round(displayCamera.panDeg);
+  $("#cameraTiltSlider").value = displayCamera.tiltDeg;
+  $("#cameraTiltValue").value = Math.round(displayCamera.tiltDeg);
+  renderCameraRigControls();
   renderCameraLockControls();
   $("#focalSlider").disabled = cameraFieldLocked("lens");
   $("#focalValue").disabled = cameraFieldLocked("lens");
@@ -4974,7 +6876,7 @@ function syncUi(updateInputs = true) {
   $("#cameraTiltValue").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
   $("#trackingTargetSelect").disabled = cameraFieldLocked("orientation");
   $$("#focalPresets button").forEach((button) => {
-    button.classList.toggle("is-active", Number(button.dataset.focal) === Number(state.camera.focal));
+    button.classList.toggle("is-active", Number(button.dataset.focal) === Number(displayCamera.focal));
     button.disabled = cameraFieldLocked("lens");
   });
   $("#durationInput").value = state.motion.duration;
@@ -5011,6 +6913,84 @@ function renderCameraLockControls() {
     button.setAttribute("aria-pressed", String(locked));
     const icon = button.querySelector("i, svg");
     if (icon) icon.setAttribute("data-lucide", locked ? "lock" : cameraLockIcon(button.dataset.cameraLock));
+  });
+  refreshLucideIcons();
+}
+
+function renderCameraRigControls() {
+  const root = $("#cameraRigList");
+  if (!root) return;
+  const profiles = state.cameras || [];
+  root.innerHTML = "";
+  profiles.forEach((profile) => {
+    const row = document.createElement("div");
+    row.className = `camera-rig-row${profile.id === state.activeCameraId ? " is-active" : ""}`;
+    row.dataset.cameraId = profile.id;
+
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "camera-rig-select";
+    select.title = `${profile.name} 선택`;
+    select.setAttribute("aria-pressed", String(profile.id === state.activeCameraId));
+    const swatch = document.createElement("span");
+    swatch.className = "camera-rig-swatch";
+    swatch.style.background = profile.color;
+    const keyCount = (profile.keyframes || []).length;
+    select.append(swatch, document.createTextNode(profile.name), document.createElement("small"));
+    select.lastChild.textContent = `키 ${keyCount}`;
+    select.addEventListener("click", () => switchActiveCamera(profile.id));
+
+    const rename = document.createElement("input");
+    rename.type = "text";
+    rename.className = "camera-rig-name";
+    rename.value = profile.name;
+    rename.maxLength = 40;
+    rename.setAttribute("aria-label", `${profile.name} 이름`);
+    rename.addEventListener("click", (event) => event.stopPropagation());
+    rename.addEventListener("change", () => {
+      const nextName = rename.value.trim().slice(0, 40) || profile.name;
+      rename.value = nextName;
+      if (nextName === profile.name) return;
+      profile.name = nextName;
+      commit();
+    });
+
+    const duplicate = document.createElement("button");
+    duplicate.type = "button";
+    duplicate.className = "icon-btn camera-rig-action";
+    duplicate.innerHTML = '<i data-lucide="copy" aria-hidden="true"></i>';
+    duplicate.title = "카메라 복제";
+    duplicate.setAttribute("aria-label", `${profile.name} 복제`);
+    duplicate.disabled = profiles.length >= 4;
+    duplicate.addEventListener("click", (event) => {
+      event.stopPropagation();
+      duplicateCameraProfile(profile.id);
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-btn camera-rig-action";
+    remove.innerHTML = '<i data-lucide="trash-2" aria-hidden="true"></i>';
+    remove.title = "카메라 삭제";
+    remove.setAttribute("aria-label", `${profile.name} 삭제`);
+    remove.disabled = profiles.length <= 1;
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteCameraProfile(profile.id);
+    });
+
+    row.append(select, rename, duplicate, remove);
+    root.append(row);
+  });
+  const count = $("#cameraRigCount");
+  if (count) count.textContent = `${profiles.length}/4대`;
+  const add = $("#addCameraBtn");
+  if (add) add.disabled = profiles.length >= 4;
+  const multiVideoReady = profiles.length > 1;
+  [$("#multiCamVideoBtn"), $("#multiCamVideoPanelBtn")].forEach((button) => {
+    if (!button) return;
+    button.disabled = !multiVideoReady || mediaExportBusy;
+    button.title = multiVideoReady ? "카메라별 화면을 분할한 H.264 프리뷰 영상" : "카메라를 2대 이상 추가하면 사용할 수 있습니다";
   });
   refreshLucideIcons();
 }
@@ -5101,8 +7081,11 @@ function clearManagedProjectBinding() {
 const liveProjectInputIds = new Set([
   "focalSlider", "focalValue", "cameraHeightSlider", "cameraHeightValue",
   "cameraPanSlider", "cameraPanValue", "cameraTiltSlider", "cameraTiltValue",
-  "selectedName", "sizeSlider", "sizeValue", "propScaleX", "propScaleXValue",
+  "selectedName", "sizeSlider", "sizeValue", "actorElevationSlider", "actorElevationValue",
+  "actorPitchSlider", "actorPitchValue",
+  "propScaleX", "propScaleXValue",
   "propScaleY", "propScaleYValue", "propScaleZ", "propScaleZValue",
+  "propElevationSlider", "propElevationValue",
   "facingSlider", "facingValue", "sceneTitle", "sceneIntent",
   "actorPoseAxisX", "actorPoseAxisXValue", "actorPoseAxisY", "actorPoseAxisYValue",
   "actorPoseAxisZ", "actorPoseAxisZValue",
@@ -5114,7 +7097,9 @@ function markLiveProjectInputDirty() {
 }
 
 function finalizeLiveProjectInputEdit() {
-  evaluatedViewState = null;
+  const sourceId = activeSourceId() === "all" ? selectedSourceId() : activeSourceId();
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  preserveLiveSourcePreview(evaluatedViewState, sourceId ? [sourceId] : []);
   applyCameraTracking(state);
   history.push(snapshot());
   if (history.length > 80) history.shift();
@@ -5122,7 +7107,7 @@ function finalizeLiveProjectInputEdit() {
   syncActiveCutDocument(false);
   if (!managedProjectId || hasUnsavedProjectChanges()) setProjectSaveStatus("changed");
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   syncProjectChrome();
 }
 
@@ -5808,7 +7793,13 @@ function createStoryboardCutCard(scene, cut) {
   status.className = "storyboard-card-status";
   status.style.setProperty("--status-color", storyboardStatusColors[cut.status]);
   status.textContent = storyboardStatusLabels[cut.status];
-  thumb.append(fallback, image, code, status);
+  const unresolvedCount = cutIssueFindings(cut).filter((finding) => !finding.overridden).length;
+  const issueBadge = document.createElement("span");
+  issueBadge.className = "storyboard-card-issues";
+  issueBadge.textContent = `${unresolvedCount}`;
+  issueBadge.title = `${unresolvedCount}개 확인 항목`;
+  issueBadge.hidden = unresolvedCount === 0;
+  thumb.append(fallback, image, code, status, issueBadge);
 
   const body = document.createElement("div");
   body.className = "storyboard-card-body";
@@ -5946,6 +7937,7 @@ function createStoryboardCutCard(scene, cut) {
     cut.dialogue = nextDialogue;
     cut.blocking.sceneTitle = cut.title;
     if (cut.id === activeCutId) state = cut.blocking;
+    markCutCreativeChanged(cut);
     touchProjectCut(cut);
     syncProjectChrome();
     renderStoryboardWorkspace();
@@ -6000,27 +7992,73 @@ function renderStoryboardInspector() {
   const cut = currentCut();
   if (!scene || !cut) return;
   $("#selectedCutCode").textContent = storyboardCutCode(scene, cut);
-  const issues = cutIssueList(cut);
+  const findings = cutIssueFindings(cut);
+  const issues = findings.filter((finding) => !finding.overridden);
+  const overridden = findings.filter((finding) => finding.overridden);
   const issueButton = $("#selectedCutIssueCount");
   const issueList = $("#selectedCutIssueList");
-  issueButton.textContent = issues.length ? `${issues.length} 확인` : "준비됨";
-  issueButton.title = issues.join(" · ");
-  issueButton.disabled = !issues.length;
+  issueButton.textContent = issues.length ? `${issues.length} 확인` : overridden.length ? `${overridden.length} 예외` : "준비됨";
+  issueButton.title = issues.map((finding) => finding.message).join(" · ");
+  issueButton.disabled = !findings.length;
   issueButton.setAttribute("aria-expanded", "false");
   issueList.innerHTML = "";
-  issues.forEach((issue) => {
+  findings.slice(0, 16).forEach((finding) => {
     const item = document.createElement("div");
-    item.textContent = issue;
+    item.className = `selected-cut-issue-row severity-${finding.severity || "warning"}${finding.overridden ? " is-overridden" : ""}`;
+    const message = document.createElement("span");
+    message.textContent = finding.message;
+    item.append(message);
+    if (finding.kind !== "required") {
+      if (finding.overridden) {
+        const note = document.createElement("small");
+        note.textContent = finding.override?.note || "의도된 연출";
+        const restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "text-btn";
+        restore.dataset.continuityAction = "restore";
+        restore.dataset.issueId = finding.id;
+        restore.textContent = "예외 해제";
+        item.append(note, restore);
+      } else {
+        const note = document.createElement("input");
+        note.type = "text";
+        note.maxLength = 240;
+        note.placeholder = "의도된 변경 이유";
+        note.dataset.continuityNote = finding.id;
+        const ignore = document.createElement("button");
+        ignore.type = "button";
+        ignore.className = "text-btn";
+        ignore.dataset.continuityAction = "override";
+        ignore.dataset.issueId = finding.id;
+        ignore.dataset.issueSignature = finding.signature;
+        ignore.textContent = "예외 처리";
+        item.append(note, ignore);
+      }
+    }
     issueList.append(item);
   });
   issueList.hidden = true;
   $("#cutStatusInput").value = cut.status;
   $("#cutTitleInput").value = cut.title;
   $("#cutShotTypeInput").value = cut.shotType;
+  $("#cutFocalInput").value = cut.blocking?.camera?.focal || 50;
+  $("#cutDurationInput").value = cut.blocking?.motion?.duration || 3;
   $("#cutActionInput").value = cut.action;
   $("#cutDialogueInput").value = cut.dialogue;
   $("#cutIntentInput").value = cut.intent || cut.camera;
   $("#cutNotesInput").value = cut.notes;
+  ["A", "B"].forEach((slot) => {
+    const snapshot = cut.snapshots?.[slot] || null;
+    const nameInput = document.getElementById(`cutVersionName${slot}`);
+    const meta = document.getElementById(`cutVersionMeta${slot}`);
+    const capture = $(`[data-cut-version-action="capture"][data-slot="${slot}"]`);
+    const restore = $(`[data-cut-version-action="restore"][data-slot="${slot}"]`);
+    nameInput.value = snapshot?.name || `${slot}안`;
+    meta.textContent = snapshot ? formatProjectDate(snapshot.createdAt) : "저장 안 됨";
+    capture.textContent = snapshot ? "교체" : "저장";
+    restore.disabled = !snapshot;
+  });
+  $("#compareCutVersionsBtn").disabled = !(cut.snapshots?.A && cut.snapshots?.B);
 }
 
 async function queueStoryboardThumbnails(cuts) {
@@ -6060,18 +8098,172 @@ function touchProjectCut(cut) {
   storyboardThumbnailCache.delete(cut.id);
 }
 
-function updateStoryboardCutFromInspector(render = false) {
+function captureCutVersion(slot) {
   const cut = currentCut();
-  if (!cut) return;
-  cut.status = $("#cutStatusInput").value;
-  cut.title = $("#cutTitleInput").value;
-  cut.shotType = $("#cutShotTypeInput").value;
-  cut.action = $("#cutActionInput").value;
-  cut.dialogue = $("#cutDialogueInput").value;
-  cut.intent = $("#cutIntentInput").value;
-  cut.notes = $("#cutNotesInput").value;
+  if (!cut || !["A", "B"].includes(slot)) return;
+  syncActiveCutDocument(false);
+  const existing = cut.snapshots?.[slot] || null;
+  if (existing && !confirm(`${slot} 버전을 현재 컷으로 교체할까요?`)) return;
+  const name = document.getElementById(`cutVersionName${slot}`).value.trim().slice(0, 60) || `${slot}안`;
+  pushProjectHistory();
+  cut.snapshots = sanitizeCutSnapshots(cut.snapshots);
+  const previous = cut.snapshots[slot];
+  cut.snapshots[slot] = {
+    name,
+    createdAt: isoNow(),
+    document: storyboardCore.cutSnapshotDocument(cut),
+  };
+  if (JSON.stringify({ project }).length > 12 * 1024 * 1024) {
+    cut.snapshots[slot] = previous;
+    projectHistory.pop();
+    syncHistoryButtons();
+    notifyApp("프로젝트 크기가 커서 컷 버전을 저장하지 못했습니다.");
+    return;
+  }
+  touchProjectCut(cut);
+  renderStoryboardWorkspace();
+  notifyApp(`${slot} 버전을 저장했습니다.`);
+}
+
+function restoreCutVersion(slot) {
+  const cut = currentCut();
+  const saved = cut?.snapshots?.[slot];
+  if (!cut || !saved || !confirm(`${saved.name}으로 현재 컷을 복원할까요?`)) return;
+  pushProjectHistory();
+  const identity = {
+    id: cut.id,
+    number: cut.number,
+    createdAt: cut.createdAt,
+    snapshots: cut.snapshots,
+    continuity: cut.continuity,
+  };
+  const cutDocument = storyboardCore.cutSnapshotDocument(saved.document);
+  Object.assign(cut, cutDocument, identity, {
+    status: "review",
+    updatedAt: isoNow(),
+    blocking: sanitizeBlockingDocument(cutDocument.blocking),
+  });
   cut.blocking.sceneTitle = cut.title;
   cut.blocking.sceneIntent = cut.intent || cut.camera || "";
+  markCutCreativeChanged(cut);
+  cutRuntime.delete(cut.id);
+  state = cut.blocking;
+  selected = { kind: "camera" };
+  history = [snapshot()];
+  future = [];
+  resetTimelineRuntime();
+  touchProjectCut(cut);
+  syncUi();
+  draw();
+  renderStoryboardWorkspace();
+  notifyApp(`${saved.name}을 복원했습니다. 검토 필요 상태로 전환했습니다.`);
+}
+
+function cutVersionPreviewDataUrl(cutDocument) {
+  const canvas = documentNodeCanvas(640, 360);
+  renderToCanvas(canvas, cutDocument.blocking, { clean: true });
+  return canvas.toDataURL("image/png");
+}
+
+function documentNodeCanvas(width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function showCutVersionComparison() {
+  const cut = currentCut();
+  const first = cut?.snapshots?.A;
+  const second = cut?.snapshots?.B;
+  if (!cut || !first || !second) return;
+  const frames = $("#cutVersionCompareFrames");
+  frames.innerHTML = "";
+  [["A", first], ["B", second]].forEach(([slot, version]) => {
+    const figure = document.createElement("figure");
+    const image = document.createElement("img");
+    image.src = cutVersionPreviewDataUrl(version.document);
+    image.alt = `${slot} ${version.name} 2D 블로킹 프리뷰`;
+    const caption = document.createElement("figcaption");
+    caption.innerHTML = `<b>${slot} · ${escapeHtml(version.name)}</b><span>${escapeHtml(formatProjectDate(version.createdAt))}</span>`;
+    figure.append(image, caption);
+    frames.append(figure);
+  });
+  const differences = storyboardCore.compareCutDocuments(first.document, second.document);
+  const diffList = $("#cutVersionDiffList");
+  diffList.innerHTML = "";
+  differences.forEach((difference) => {
+    const row = document.createElement("div");
+    row.className = difference.changed ? "is-changed" : "";
+    [difference.label, difference.first, difference.second].forEach((value) => {
+      const cell = document.createElement("span");
+      cell.textContent = value;
+      row.append(cell);
+    });
+    diffList.append(row);
+  });
+  $("#cutVersionCompareTitle").textContent = `${storyboardCutCode(currentScene(), cut)} · A/B 비교`;
+  $("#cutVersionCompareDialog").showModal();
+}
+
+function updateStoryboardCutFromInspector(fieldId, render = false) {
+  const cut = currentCut();
+  if (!cut) return;
+  if (fieldId === "cutStatusInput") {
+    const requested = $("#cutStatusInput").value;
+    if (requested === "approved") {
+      const unresolved = cutIssueFindings(cut).filter((finding) => !finding.overridden);
+      if (unresolved.length) {
+        cut.status = "review";
+        $("#cutStatusInput").value = "review";
+        notifyApp(`확정 전 ${unresolved.length}개 항목을 확인하세요.`);
+      } else {
+        cut.status = "approved";
+      }
+    } else {
+      cut.status = requested;
+    }
+  }
+  if (fieldId === "cutTitleInput") {
+    cut.title = $("#cutTitleInput").value;
+    cut.blocking.sceneTitle = cut.title;
+  }
+  if (fieldId === "cutShotTypeInput") cut.shotType = $("#cutShotTypeInput").value;
+  if (fieldId === "cutFocalInput" && cut.blocking?.camera) {
+    const focal = Number($("#cutFocalInput").value);
+    if (Number.isFinite(focal)) {
+      cut.blocking.camera.focal = clamp(focal, CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX);
+    }
+  }
+  if (fieldId === "cutDurationInput" && cut.blocking?.motion) {
+    const previousDuration = clamp(finiteNumber(cut.blocking.motion.duration, 3), 1, MAX_TIMELINE_DURATION);
+    const rawDuration = Number($("#cutDurationInput").value);
+    if (Number.isFinite(rawDuration) && rawDuration >= 1) {
+      const nextDuration = clamp(rawDuration, 1, MAX_TIMELINE_DURATION);
+      if (Math.abs(previousDuration - nextDuration) > 0.000001) {
+        cut.blocking.motion.keyframes = rescaleKeyframeTimes(
+          cut.blocking.motion.keyframes || [],
+          previousDuration,
+          nextDuration,
+          MAX_TIMELINE_DURATION,
+        );
+        cut.blocking.motion.playhead = clamp(
+          finiteNumber(cut.blocking.motion.playhead, 0) * nextDuration / previousDuration,
+          0,
+          nextDuration,
+        );
+        cut.blocking.motion.duration = nextDuration;
+      }
+    }
+  }
+  if (fieldId === "cutActionInput") cut.action = $("#cutActionInput").value;
+  if (fieldId === "cutDialogueInput") cut.dialogue = $("#cutDialogueInput").value;
+  if (fieldId === "cutIntentInput") {
+    cut.intent = $("#cutIntentInput").value;
+    cut.blocking.sceneIntent = cut.intent || cut.camera || "";
+  }
+  if (fieldId === "cutNotesInput") cut.notes = $("#cutNotesInput").value;
+  if (fieldId !== "cutStatusInput") markCutCreativeChanged(cut);
   if (cut.id === activeCutId) state = cut.blocking;
   touchProjectCut(cut);
   syncProjectChrome();
@@ -6360,15 +8552,21 @@ function setViewMode(mode) {
   stageViewport.hidden = viewMode !== "2d";
   stageZoomControls.hidden = viewMode !== "2d";
   $("#threeWrap").hidden = viewMode !== "3d";
+  const threeHud = $("#threeHud");
+  if (threeHud) threeHud.hidden = viewMode !== "3d";
   if (viewMode === "3d") {
     initThreeView();
     resizeThreeView();
     renderThreeView(state, true);
   } else {
-    requestAnimationFrame(() => resizeCanvas());
+    requestAnimationFrame(() => {
+      resizeCanvas();
+      if (threeView?.ready) renderCameraFramePreview(evaluatedViewState || state);
+    });
   }
   syncUi(false);
   draw();
+  if (typeof resizeAnnotationOverlay === "function") resizeAnnotationOverlay();
 }
 
 function renderToggleGrid(selector, catalog, selectedValues, onToggle) {
@@ -6403,6 +8601,7 @@ function toggleArrayValue(values, key) {
 function renderObjectLists() {
   renderObjectList("#actorList", "actor");
   renderObjectList("#propList", "prop");
+  window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
 }
 
 function populatePropCatalogControls() {
@@ -6437,13 +8636,16 @@ function renderObjectList(selector, type) {
         "is-active",
         selected?.id === item.id && (selected.kind === "item" || selected.kind === "facing"),
       );
+      const isVisible = item.visible !== false;
       row.innerHTML = `
-        <span class="dot" style="background:${item.color}"></span>
-        <span class="object-row-name">
+        <span class="dot" style="background:${item.color}; opacity: ${isVisible ? 1.0 : 0.35}"></span>
+        <span class="object-row-name" style="opacity: ${isVisible ? 1.0 : 0.35}">
           <span>${index + 1}. @ ${escapeHtml(item.name)}</span>
           ${item.type === "prop" ? `<small>${escapeHtml(propDefinition(item.assetType).label)}${item.motionEnabled === false ? " · 고정" : ""}${item.editLocked ? " · 잠김" : ""}${groupForItem(item.id) ? " · 묶음" : ""}</small>` : item.placementMode === "auto" && item.mountId ? `<small>자동 탑승${item.editLocked ? " · 잠김" : ""}</small>` : groupForItem(item.id) ? `<small>수동 묶음${item.editLocked ? " · 잠김" : ""}</small>` : item.editLocked ? `<small>편집 잠김</small>` : ""}
         </span>
-        <button type="button" aria-label="${escapeHtml(item.name)} 제거">×</button>
+        <button type="button" class="visibility-toggle-btn" aria-label="${escapeHtml(item.name)} ${isVisible ? "감추기" : "보이기"}" title="${isVisible ? "감추기" : "보이기"}" style="display: inline-flex; align-items: center; justify-content: center; opacity: ${isVisible ? 1.0 : 0.55}">
+          <i data-lucide="${isVisible ? "eye" : "eye-off"}" aria-hidden="true" style="width: 14px; height: 14px;"></i>
+        </button>
       `;
       row.addEventListener("click", () => {
         selected = { kind: "item", id: item.id };
@@ -6455,13 +8657,13 @@ function renderObjectList(selector, type) {
         syncUi();
         draw();
       });
-      row.querySelector("button").addEventListener("click", (event) => {
+      row.querySelector(".visibility-toggle-btn").addEventListener("click", (event) => {
         event.stopPropagation();
         if (sourceEditLocked(item.id)) {
           notifyEditLocked(item.name);
           return;
         }
-        removeItemById(item.id);
+        item.visible = item.visible === false ? true : false;
         commit();
       });
       root.append(row);
@@ -6499,7 +8701,10 @@ function renderProperties(updateInputs) {
   $("#facingSlider").value = transformItem.facing;
   ["#selectedName", "#sizeSlider", "#sizeValue", "#selectedPropAsset", "#propMotionToggle",
     "#propScaleX", "#propScaleXValue", "#propScaleY", "#propScaleYValue", "#propScaleZ", "#propScaleZValue",
-    "#actorPlacementMode", "#actorMountSelect", "#actorSeatSelect", "#facingSlider", "#facingValue",
+    "#propElevationSlider", "#propElevationValue",
+    "#actorPlacementMode", "#actorMountSelect", "#actorSeatSelect", "#actorLocomotionMode", "#actorElevationSlider", "#actorElevationValue",
+    "#actorPitchSlider", "#actorPitchValue",
+    "#facingSlider", "#facingValue",
     "#groupOverlapBtn", "#ungroupBtn", "#duplicateBtn", "#deleteBtn"].forEach((selector) => {
     const control = $(selector);
     if (control) control.disabled = locked;
@@ -6507,10 +8712,29 @@ function renderProperties(updateInputs) {
 
   const propFields = $("#propSpecificFields");
   const actorPlacementFields = $("#actorPlacementFields");
+  const actorMotionFields = $("#actorMotionFields");
   const actorPoseFields = $("#actorPoseFields");
   propFields.hidden = item.type !== "prop";
   actorPlacementFields.hidden = item.type !== "actor";
+  actorMotionFields.hidden = item.type !== "actor";
   actorPoseFields.hidden = item.type !== "actor";
+  $("#actorElevationField").hidden = item.type !== "actor";
+  $("#actorPitchField").hidden = item.type !== "actor";
+  if (item.type === "actor") {
+    $("#actorLocomotionMode").value = item.locomotionMode || "auto";
+    $("#actorLocomotionMode").disabled = locked || (item.placementMode === "auto" && Boolean(item.mountId));
+    $("#actorLocomotionHint").textContent = item.placementMode === "auto" && item.mountId
+      ? "차량에 탑승한 배우는 좌석 포즈를 유지합니다."
+      : item.locomotionMode === "pose"
+        ? "동선 재생 중에도 저장한 포즈를 그대로 유지합니다."
+        : "동선 거리와 속도에 맞춰 팔·다리 보행을 프리뷰에 합성합니다.";
+    const elev = Number(item.verticalOffset || 0);
+    $("#actorElevationSlider").value = elev;
+    $("#actorElevationValue").value = elev.toFixed(2);
+    const pitch = Math.round(Number(item.pitch || 0));
+    $("#actorPitchSlider").value = pitch;
+    $("#actorPitchValue").value = pitch;
+  }
   $("#shapeField").hidden = item.type === "prop" && item.assetType !== "generic";
   if (item.type === "prop") {
     $("#selectedPropAsset").value = item.assetType;
@@ -6519,6 +8743,9 @@ function renderProperties(updateInputs) {
       $("#propScale" + axis).value = value;
       $("#propScale" + axis + "Value").value = Number(value).toFixed(2);
     });
+    const elev = Number(item.mountedHeight || 0);
+    $("#propElevationSlider").value = elev;
+    $("#propElevationValue").value = elev.toFixed(2);
   } else {
     $("#actorPlacementMode").value = item.placementMode || "manual";
     renderAutoMountControls(item, updateInputs);
@@ -6738,7 +8965,7 @@ function renderActorPoseControls(actor, locked, updateInputs = true) {
   $("#actorPosePasteBtn").disabled = locked || !poseClipboard;
   const canKeyPose = !locked && isIndependentMotionSource(actor, state);
   const currentTime = readTimelineTimeInput(state.motion.playhead);
-  const existing = keysForSource(actor.id).find((keyframe) => Math.abs(keyframe.time - currentTime) < 0.05);
+  const existing = keysForSource(actor.id).find((keyframe) => timelineTimesMatch(keyframe.time, currentTime));
   $("#actorPoseKeyBtn").disabled = !canKeyPose;
   $("#actorPoseKeyBtn").querySelector("span").textContent = existing ? "포즈 키 갱신" : "포즈 키 추가";
   $("#actorPoseHint").textContent = actor.placementMode === "auto" && actor.mountId
@@ -6756,7 +8983,7 @@ function loadCustomPoses() {
 }
 
 function saveCustomPose(name) {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor") return;
   const trimmed = String(name || "").trim();
   if (!trimmed) { notifyApp("포즈 이름을 입력하세요."); return; }
@@ -6777,7 +9004,7 @@ function deleteCustomPose(poseId) {
 }
 
 function applyCustomPose(poseId) {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
   const entry = loadCustomPoses().find((pose) => pose.id === poseId);
   if (!entry) return;
@@ -6785,12 +9012,13 @@ function applyCustomPose(poseId) {
   const current = state.items.find((item) => item.id === actor.id);
   current.bodyPose = sanitizeBodyPose(entry.pose);
   selectedPoseActorId = current.id;
-  commit();
+  updateExistingSourceKeyframe(current.id);
+  commit({ preserveSourceIds: [current.id] });
   notifyApp(`"${entry.name}" 포즈를 적용했습니다.`);
 }
 
 function copyActorPose() {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor") return;
   poseClipboard = sanitizeBodyPose(actor.bodyPose);
   notifyApp("배우 포즈를 복사했습니다.");
@@ -6798,18 +9026,19 @@ function copyActorPose() {
 }
 
 function pasteActorPose() {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id) || !poseClipboard) return;
   materializeEvaluatedViewForEditing(actor.id);
   const current = state.items.find((item) => item.id === actor.id);
   current.bodyPose = sanitizeBodyPose(poseClipboard);
   selectedPoseActorId = current.id;
-  commit();
+  updateExistingSourceKeyframe(current.id);
+  commit({ preserveSourceIds: [current.id] });
   notifyApp("복사한 포즈를 붙여넣었습니다.");
 }
 
 function randomizeActorPose() {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
   materializeEvaluatedViewForEditing(actor.id);
   const current = state.items.find((item) => item.id === actor.id);
@@ -6823,7 +9052,8 @@ function randomizeActorPose() {
   });
   current.bodyPose = sanitizeBodyPose(pose);
   selectedPoseActorId = current.id;
-  commit();
+  updateExistingSourceKeyframe(current.id);
+  commit({ preserveSourceIds: [current.id] });
   notifyApp("랜덤 포즈를 적용했습니다.");
 }
 
@@ -6856,18 +9086,29 @@ function updateActorPoseAxis(axis, rawValue) {
 }
 
 function applyActorPosePreset(presetId) {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
   materializeEvaluatedViewForEditing(actor.id);
   const current = state.items.find((item) => item.id === actor.id);
   current.bodyPose = presetBodyPose(presetId);
+  if (presetId === "lieDown") {
+    current.pitch = -90;
+    current.verticalOffset = 0.1;
+  } else if (presetId === "faceDown") {
+    current.pitch = 90;
+    current.verticalOffset = 0.15;
+  } else {
+    current.pitch = 0;
+    current.verticalOffset = 0;
+  }
   selectedPoseActorId = current.id;
-  commit();
+  updateExistingSourceKeyframe(current.id);
+  commit({ preserveSourceIds: [current.id] });
   notifyApp(`${POSE_PRESET_LABELS[presetId] || "기본"} 포즈를 적용했습니다.`);
 }
 
 function captureActorPoseKeyframe() {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
   if (!isIndependentMotionSource(actor, state)) {
     notifyApp("차량이나 묶음에서 분리한 뒤 배우 포즈 키를 추가하세요.");
@@ -6876,12 +9117,17 @@ function captureActorPoseKeyframe() {
   materializeEvaluatedViewForEditing(actor.id);
   const current = state.items.find((item) => item.id === actor.id);
   const requestedTime = readTimelineTimeInput(state.motion.playhead);
-  const existing = keysForSource(actor.id).find((keyframe) => Math.abs(keyframe.time - requestedTime) < 0.05);
+  const existing = keysForSource(actor.id).find((keyframe) => timelineTimesMatch(keyframe.time, requestedTime));
   setActiveSource(actor.id);
   if (existing) {
-    existing.pose = sanitizeSourcePose(actor.id, { ...existing.pose, bodyPose: current.bodyPose });
-    state.motion.selectedKeyId = existing.id;
-    state.motion.playhead = existing.time;
+    existing.pose = sanitizeSourcePose(actor.id, {
+      ...existing.pose,
+      bodyPose: current.bodyPose,
+      pitch: current.pitch,
+      verticalOffset: current.verticalOffset,
+    });
+    setTimelineSelection([existing.id], existing.id);
+    advancePlayheadAfterKeyframe(existing.time);
     commit();
     notifyApp(`${existing.time.toFixed(1)}초 배우 키의 포즈를 갱신했습니다.`);
     return;
@@ -6891,14 +9137,17 @@ function captureActorPoseKeyframe() {
   const keyframe = captureSourceKeyframe(actor.id, time, undefined, $("#keyPathSelect")?.value || "straight");
   if (!keyframe) return;
   state.motion.keyframes.push(keyframe);
-  state.motion.selectedKeyId = keyframe.id;
+  setTimelineSelection([keyframe.id], keyframe.id);
   state.motion.playhead = keyframe.time;
   state.motion.keyframes = sortKeyframes(state.motion.keyframes);
+  clearLiveSourceEdit(actor.id, keyframe.time);
+  advancePlayheadAfterKeyframe(keyframe.time);
   commit();
   notifyApp(`${keyframe.time.toFixed(1)}초에 배우 포즈 키를 추가했습니다.`);
 }
 
 function renderKeyStatus(updateInputs = true) {
+  normalizeTimelineRuntime();
   const visibleSourceIds = new Set(visibleSourceDefinitions().map((source) => source.id));
   const keyframes = sortKeyframes(state.motion.keyframes).filter((keyframe) => visibleSourceIds.has(keyframe.source));
   const selectedKey = selectedKeyframe();
@@ -6909,10 +9158,12 @@ function renderKeyStatus(updateInputs = true) {
   const pathSelect = $("#keyPathSelect");
   const instructionInput = $("#keyInstructionInput");
   if (updateInputs || document.activeElement !== timeInput) {
-    timeInput.value = Number(displayPlayhead() ?? current?.time ?? 0).toFixed(1);
+    timeInput.value = formatTimelineTime(displayPlayhead() ?? current?.time ?? 0);
   }
   updatePlayheadDisplay(displayPlayhead());
-  $("#deleteKeyBtn").disabled = !current || currentLocked;
+  const selectedKeys = selectedTimelineKeyframes();
+  const selectionLocked = selectedKeys.some((keyframe) => sourceEditLocked(keyframe.source));
+  $("#deleteKeyBtn").disabled = !selectedKeys.length || selectionLocked;
   $("#updateKeyBtn").disabled = !current || currentLocked;
   $("#addKeyBtn").disabled = activeSourceId() !== "all" && sourceEditLocked(activeSourceId());
   const currentSourceKeys = current ? keysForSource(current.source) : [];
@@ -6951,10 +9202,12 @@ function renderKeyStatus(updateInputs = true) {
     const marker = document.createElement("button");
     marker.type = "button";
     marker.className = "timeline-marker";
-    marker.classList.toggle("is-active", keyframe.id === state.motion.selectedKeyId);
+    marker.classList.toggle("is-active", keyframe.id === primaryTimelineKeyId());
+    marker.classList.toggle("is-selected", timelineSelectedKeyIds.has(keyframe.id));
     marker.classList.toggle("is-cut-marker", keyframe.transition === "cut");
     marker.classList.toggle("is-dragging", timelineDrag?.id === keyframe.id);
     marker.classList.toggle("is-locked", sourceEditLocked(keyframe.source));
+    marker.classList.toggle("is-camera", keyframe.source === "camera");
     marker.style.setProperty("--marker-color", sourceColor(keyframe.source));
     marker.style.left = `${clamp((keyframe.time / state.motion.duration) * 100, 0, 100)}%`;
     marker.dataset.time = `${keyframe.time.toFixed(2)}초`;
@@ -6967,8 +9220,8 @@ function renderKeyStatus(updateInputs = true) {
     marker.addEventListener("mousedown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
     marker.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (timelineDrag?.moved) return;
-      selectKeyframe(keyframe.id);
+      if (suppressTimelineMarkerClick) return;
+      selectTimelineMarker(keyframe.id, event);
     });
     markers.append(marker);
   });
@@ -6978,14 +9231,93 @@ function renderKeyStatus(updateInputs = true) {
   $("#sourceTimelineList").hidden = !splitView;
   $("#timelineHint").textContent = splitView
     ? `대상별 ${visibleSourceDefinitions().length}개 트랙 · 키 ${keyframes.length}개 · ${state.motion.duration}초`
-    : `통합 트랙 · 키 ${keyframes.length}개 · 즉시 전환 ${cutTimes.length}개 · ${state.motion.duration}초 · ${state.motion.fps} FPS`;
+    : `통합 트랙 · 키 ${keyframes.length}개 · 즉시 전환 ${cutTimes.length}개 · ${state.motion.duration}초`;
   renderSourceTimelines(keyframes, cutTimes);
+  renderTimelineSelectionTools(selectedKeys, updateInputs);
 
   const currentText = current
     ? `${sourceLabel(current.source)} · ${current.label} @ ${current.time.toFixed(1)}s · ${isFirstSourceKey ? "첫 키" : `${keyTransitionLabels[normalizeTransition(current.transition)]} · ${pathModeLabels[pathModeForSegment(current.segment, current.source)]}`}${current.note ? ` · 지문: ${current.note}` : ""}${current.source === "camera" ? ` · ${keyframeSummary(current)}` : ""}`
     : "선택된 키 없음";
   const motionText = `키 ${keyframes.length}개`;
   $("#keyStatus").textContent = `${motionText} · ${currentText}`;
+}
+
+function renderTimelineSelectionTools(selectedKeys = selectedTimelineKeyframes(), updateInputs = true) {
+  const visibleIds = new Set(visibleSourceDefinitions().map((source) => source.id));
+  const visibleKeys = state.motion.keyframes.filter((keyframe) => visibleIds.has(keyframe.source));
+  const range = timelineSelectionRange(state.motion.keyframes, selectedKeys.map((keyframe) => keyframe.id));
+  const tools = $("#timelineSelectionTools");
+  const durationInput = $("#selectionDurationInput");
+  const locked = selectedKeys.some((keyframe) => sourceEditLocked(keyframe.source));
+  $("#timelineSnapSelect").value = timelineSnapMode;
+  $("#keyTimeInput").step = timelineSnapMode === "frame"
+    ? timelineSnapStep(timelineSnapMode, state.motion.fps).toFixed(4)
+    : String(timelineSnapStep(timelineSnapMode, state.motion.fps));
+  $("#selectAllKeysBtn").disabled = !visibleKeys.length;
+  $("#copyKeysBtn").disabled = !selectedKeys.length;
+  $("#pasteKeysBtn").disabled = !timelineClipboard?.entries?.length;
+  tools.hidden = selectedKeys.length < 2;
+  if (tools.hidden) return;
+  const sourceCount = new Set(selectedKeys.map((keyframe) => keyframe.source)).size;
+  $("#timelineSelectionSummary").textContent = range
+    ? `선택 ${selectedKeys.length}개 · ${sourceCount}개 대상 · ${range.start.toFixed(2)}–${range.end.toFixed(2)}초`
+    : `선택 ${selectedKeys.length}개`;
+  const step = timelineSnapStep(timelineSnapMode, state.motion.fps);
+  durationInput.min = Math.max(0.01, step).toFixed(4);
+  durationInput.step = timelineSnapMode === "frame" ? step.toFixed(4) : String(step);
+  if (updateInputs || document.activeElement !== durationInput) {
+    durationInput.value = Number(range?.duration || step).toFixed(timelineSnapMode === "frame" ? 4 : 2);
+  }
+  durationInput.disabled = locked || !range || range.duration <= 0;
+  $("#retimeSelectionBtn").disabled = durationInput.disabled;
+}
+
+function selectTimelineMarker(keyframeId, event = {}, sourceScope = "") {
+  const keyframe = state.motion.keyframes.find((entry) => entry.id === keyframeId);
+  if (!keyframe) return;
+  normalizeTimelineRuntime();
+  const additive = Boolean(event.metaKey || event.ctrlKey);
+  const rangeSelect = Boolean(event.shiftKey && timelineSelectionAnchorId);
+  let nextIds = new Set(timelineSelectedKeyIds);
+  let primaryId = keyframe.id;
+
+  if (rangeSelect) {
+    const visibleIds = new Set(visibleSourceDefinitions().map((source) => source.id));
+    const ordered = sortKeyframes(state.motion.keyframes).filter((entry) => (
+      visibleIds.has(entry.source) && (!sourceScope || entry.source === sourceScope)
+    ));
+    const anchorIndex = ordered.findIndex((entry) => entry.id === timelineSelectionAnchorId);
+    const targetIndex = ordered.findIndex((entry) => entry.id === keyframe.id);
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      if (!additive) nextIds = new Set();
+      const start = Math.min(anchorIndex, targetIndex);
+      const end = Math.max(anchorIndex, targetIndex);
+      ordered.slice(start, end + 1).forEach((entry) => nextIds.add(entry.id));
+    } else {
+      nextIds = new Set([keyframe.id]);
+    }
+  } else if (additive) {
+    if (nextIds.has(keyframe.id)) nextIds.delete(keyframe.id);
+    else nextIds.add(keyframe.id);
+    primaryId = nextIds.has(keyframe.id) ? keyframe.id : [...nextIds].at(-1) || "";
+    timelineSelectionAnchorId = keyframe.id;
+  } else {
+    nextIds = new Set([keyframe.id]);
+    timelineSelectionAnchorId = keyframe.id;
+  }
+
+  setTimelineSelection(nextIds, primaryId, { updateAnchor: !rangeSelect });
+  const primary = state.motion.keyframes.find((entry) => entry.id === timelinePrimaryKeyId);
+  if (primary) {
+    setActiveSource(primary.source);
+    selectSourceOnStage(primary.source);
+    previewKeyframeOnStage(primary);
+    setTimelineSelection(nextIds, primary.id, { updateAnchor: false });
+  } else {
+    evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  }
+  syncUi();
+  draw(evaluatedViewState || state);
 }
 
 function renderPathModeSelect(select, current, isFirstSourceKey, updateInputs) {
@@ -7068,10 +9400,12 @@ function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
     const track = document.createElement("div");
     track.className = "source-lane-track";
     track.style.setProperty("--lane-color", source.color);
-    track.addEventListener("click", (event) => {
-      const rect = track.getBoundingClientRect();
-      scrubToTime(clamp((event.clientX - rect.left) / rect.width, 0, 1) * state.motion.duration);
-    });
+
+    const laneProgress = document.createElement("div");
+    laneProgress.className = "timeline-progress source-lane-progress";
+    track.append(laneProgress);
+
+    setupScrubDragging(track);
 
     cutTimes.forEach((time) => {
       const divider = document.createElement("div");
@@ -7086,7 +9420,8 @@ function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
         const marker = document.createElement("button");
         marker.type = "button";
         marker.className = "timeline-marker source-lane-marker";
-        marker.classList.toggle("is-active", keyframe.id === state.motion.selectedKeyId);
+        marker.classList.toggle("is-active", keyframe.id === primaryTimelineKeyId());
+        marker.classList.toggle("is-selected", timelineSelectedKeyIds.has(keyframe.id));
         marker.classList.toggle("is-cut-marker", keyframe.transition === "cut");
         marker.classList.toggle("is-dragging", timelineDrag?.id === keyframe.id);
         marker.classList.toggle("is-locked", sourceEditLocked(keyframe.source));
@@ -7099,7 +9434,8 @@ function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
         marker.addEventListener("mousedown", (event) => beginTimelineMarkerDrag(event, keyframe.id));
         marker.addEventListener("click", (event) => {
           event.stopPropagation();
-          selectKeyframe(keyframe.id);
+          if (suppressTimelineMarkerClick) return;
+          selectTimelineMarker(keyframe.id, event, source.id);
         });
         track.append(marker);
       });
@@ -7126,7 +9462,7 @@ function shotCutTimes(keyframes = state.motion.keyframes) {
   const unique = new Set();
   keyframes.forEach((keyframe) => {
     if (normalizeTransition(keyframe.transition) !== "cut" || keyframe.time <= 0.001) return;
-    unique.add(Number(keyframe.time.toFixed(2)));
+    unique.add(Number(keyframe.time.toFixed(4)));
   });
   return [...unique].sort((a, b) => a - b);
 }
@@ -7141,25 +9477,26 @@ function selectSourceOnStage(sourceId) {
 
 function beginTimelineMarkerDrag(event, keyframeId) {
   if (timelineDrag) return;
-  event.preventDefault();
-  event.stopPropagation();
-  cancelPreview();
+  if (event.button != null && event.button !== 0) return;
   const keyframe = state.motion.keyframes.find((entry) => entry.id === keyframeId);
   if (!keyframe) return;
-  if (sourceEditLocked(keyframe.source)) {
+  if ((event.metaKey || event.ctrlKey || event.shiftKey) && !timelineSelectedKeyIds.has(keyframe.id)) return;
+  event.stopPropagation();
+  cancelPreview();
+  const selectedIds = timelineSelectedKeyIds.has(keyframe.id) && timelineSelectedKeyIds.size > 1
+    ? [...timelineSelectedKeyIds]
+    : [keyframe.id];
+  const groupedIds = expandSynchronizedCutSelection(state.motion.keyframes, selectedIds);
+  const groupedKeys = state.motion.keyframes.filter((entry) => groupedIds.includes(entry.id));
+  if (groupedKeys.some((entry) => sourceEditLocked(entry.source))) {
     selectKeyframe(keyframe.id);
-    notifyEditLocked(sourceLabel(keyframe.source));
+    notifyApp("선택한 키 또는 같은 시점의 즉시 전환 키가 잠겨 있어 이동할 수 없습니다.");
     return;
   }
   const track = event.currentTarget.closest(".source-lane-track, .timeline-track") || $("#timelineTrack");
   const trackRect = track.getBoundingClientRect();
-  const groupedKeys = keyframe.transition === "cut"
-    ? state.motion.keyframes.filter((entry) => (
-      entry.transition === "cut"
-      && Math.abs(entry.time - keyframe.time) < 0.05
-      && !sourceEditLocked(entry.source)
-    ))
-    : [keyframe];
+  const selectionBefore = [...timelineSelectedKeyIds];
+  setTimelineSelection(groupedIds, keyframe.id);
   timelineDrag = {
     id: keyframeId,
     pointerId: event.pointerId ?? "mouse",
@@ -7167,20 +9504,24 @@ function beginTimelineMarkerDrag(event, keyframeId) {
     startDuration: state.motion.duration,
     startTime: keyframe.time,
     startState: clone(state),
+    startKeyframes: clone(state.motion.keyframes),
+    selectedIds: groupedIds,
+    selectionBefore,
     group: groupedKeys.map((entry) => ({ id: entry.id, startTime: entry.time })),
     trackRect: {
       left: trackRect.left,
       width: Math.max(1, trackRect.width),
     },
     moved: false,
+    lastReason: "",
   };
   if (event.pointerId != null) event.currentTarget.setPointerCapture?.(event.pointerId);
   setActiveSource(keyframe.source);
   selectSourceOnStage(keyframe.source);
-  state.motion.selectedKeyId = keyframeId;
-  state.motion.playhead = keyframe.time;
-  updatePlayheadDisplay(state.motion.playhead);
-  draw();
+  evaluatedViewState = interpolateStateAtTime(keyframe.time);
+  updatePlayheadDisplay(keyframe.time);
+  syncUi(false);
+  draw(evaluatedViewState);
 }
 
 document.addEventListener("pointermove", (event) => {
@@ -7214,25 +9555,29 @@ document.addEventListener("mouseup", (event) => {
 });
 
 function updateTimelineMarkerDrag(clientX) {
-  const keyframe = state.motion.keyframes.find((entry) => entry.id === timelineDrag.id);
-  if (!keyframe) return;
   const rawPercent = clamp((clientX - timelineDrag.trackRect.left) / timelineDrag.trackRect.width, 0, 1);
   const rawTime = rawPercent * timelineDrag.startDuration;
-  const draggedEntries = (timelineDrag.group || [])
-    .map((grouped) => state.motion.keyframes.find((entry) => entry.id === grouped.id))
-    .filter(Boolean);
-  const requestedTime = Number(rawTime.toFixed(2));
-  const targetTime = draggedEntries.length > 1
-    ? availableGroupedKeyTime(requestedTime, draggedEntries, timelineDrag.startDuration)
-    : availableKeyTime(requestedTime, keyframe.source, {
-      excludeId: keyframe.id,
-      maxTime: timelineDrag.startDuration,
-    });
-  moveTimelineDragGroup(targetTime);
-  state.motion.selectedKeyId = keyframe.id;
-  state.motion.playhead = keyframe.time;
-  state.motion.keyframes = sortKeyframes(state.motion.keyframes);
-  timelineDrag.moved = true;
+  const result = moveTimelineSelection(
+    timelineDrag.startKeyframes,
+    timelineDrag.selectedIds,
+    timelineDrag.id,
+    rawTime,
+    { mode: timelineSnapMode, fps: state.motion.fps, maximum: timelineDrag.startDuration },
+  );
+  if (!result.ok) {
+    timelineDrag.lastReason = result.reason;
+    return;
+  }
+  state.motion.keyframes = sortKeyframes(result.keyframes);
+  setTimelineSelection(result.ids, result.primaryId, { updateAnchor: false });
+  const primary = selectedKeyframe();
+  state.motion.playhead = primary?.time ?? state.motion.playhead;
+  evaluatedViewState = null;
+  timelineDrag.moved = result.keyframes.some((keyframe) => {
+    const original = timelineDrag.startKeyframes.find((entry) => entry.id === keyframe.id);
+    return original && !sameTimelineTime(original.time, keyframe.time, 0.00005);
+  });
+  timelineDrag.lastReason = "";
   syncUi(false);
   draw();
 }
@@ -7242,15 +9587,14 @@ function finishTimelineMarkerDrag() {
   if (timelineDrag.pointerId !== "mouse") {
     timelineDrag.target?.releasePointerCapture?.(timelineDrag.pointerId);
   }
-  const changedSources = new Set((timelineDrag.group || []).map((grouped) => (
-    state.motion.keyframes.find((entry) => entry.id === grouped.id)?.source
-  )).filter(Boolean));
-  changedSources.forEach(reconcileSourcePathConstraints);
+  suppressTimelineMarkerClick = completedDrag.moved;
+  if (suppressTimelineMarkerClick) window.setTimeout(() => { suppressTimelineMarkerClick = false; }, 0);
   timelineDrag = null;
   if (completedDrag.moved) commit();
   else {
+    if (completedDrag.lastReason === "order") notifyApp("같은 대상의 다른 키를 넘어 이동할 수 없습니다.");
     syncUi();
-    draw();
+    draw(evaluatedViewState || state);
   }
 }
 
@@ -7261,22 +9605,22 @@ function cancelTimelineMarkerDrag() {
     cancelledDrag.target?.releasePointerCapture?.(cancelledDrag.pointerId);
   }
   timelineDrag = null;
-  if (cancelledDrag.startState) restoreUncommittedState(cancelledDrag.startState);
-}
-
-function moveTimelineDragGroup(targetTime) {
-  const delta = targetTime - timelineDrag.startTime;
-  (timelineDrag.group || []).forEach((grouped) => {
-    const entry = state.motion.keyframes.find((keyframe) => keyframe.id === grouped.id);
-    if (entry) entry.time = Number(clamp(grouped.startTime + delta, 0, MAX_TIMELINE_DURATION).toFixed(2));
-  });
+  if (cancelledDrag.startState) {
+    restoreUncommittedState(cancelledDrag.startState);
+    setTimelineSelection(cancelledDrag.selectionBefore, cancelledDrag.id, { updateAnchor: false });
+    syncUi();
+    draw(evaluatedViewState || state);
+  }
 }
 
 function updatePlayheadDisplay(time) {
   const safeTime = clamp(Number(time || 0), 0, state.motion.duration);
-  $("#timelineProgress").style.width = `${(safeTime / state.motion.duration) * 100}%`;
+  const percent = (safeTime / state.motion.duration) * 100;
+  document.querySelectorAll(".timeline-progress").forEach((progress) => {
+    progress.style.width = `${percent}%`;
+  });
   const timeInput = $("#keyTimeInput");
-  if (document.activeElement !== timeInput) timeInput.value = safeTime.toFixed(1);
+  if (document.activeElement !== timeInput) timeInput.value = formatTimelineTime(safeTime);
 }
 
 function escapeHtml(value) {
@@ -7433,7 +9777,7 @@ $("#cameraHeightValue").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
-  val = clamp(val, 0.4, 3);
+  val = clamp(val, 0.4, 35);
   state.camera.height = val;
   $("#cameraHeightSlider").value = val;
   applyCameraTracking(state);
@@ -7478,7 +9822,7 @@ $("#cameraPanValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
 $("#cameraTiltSlider").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing("camera");
-  state.camera.tiltDeg = clamp(Number(event.target.value), -60, 60);
+  state.camera.tiltDeg = clamp(Number(event.target.value), -90, 90);
   syncCameraDerivedAim(state.camera, state);
   $("#cameraTiltValue").value = Math.round(state.camera.tiltDeg);
   selected = { kind: "camera" };
@@ -7494,7 +9838,7 @@ $("#cameraTiltValue").addEventListener("input", (event) => {
   materializeEvaluatedViewForEditing("camera");
   let val = Number(event.target.value);
   if (!Number.isFinite(val)) return;
-  val = clamp(val, -60, 60);
+  val = clamp(val, -90, 90);
   state.camera.tiltDeg = val;
   $("#cameraTiltSlider").value = val;
   syncCameraDerivedAim(state.camera, state);
@@ -7549,6 +9893,7 @@ function addItem(type, rawName, assetType = "generic") {
     shape: type === "prop" ? "square" : "circle",
     facing: 0,
     bodyPose: type === "actor" ? defaultBodyPose() : null,
+    locomotionMode: type === "actor" ? "auto" : "pose",
     assetType: safeAssetType,
     scaleX: 1,
     scaleY: 1,
@@ -7574,7 +9919,7 @@ $("#environmentPresetButtons").addEventListener("click", (event) => {
     .map((item) => item.id)
     .forEach((itemId) => removeItemById(itemId));
   const presetInstanceId = uid();
-  const added = preset.items.map(([assetType, name, x, y, facing, size]) => sanitizeItemPose({
+  const added = preset.items.map(([assetType, name, x, y, facing, size, mountedHeight = 0]) => sanitizeItemPose({
     id: uid(),
     type: "prop",
     name,
@@ -7588,6 +9933,7 @@ $("#environmentPresetButtons").addEventListener("click", (event) => {
     scaleX: 1,
     scaleY: 1,
     scaleZ: 1,
+    mountedHeight,
     motionEnabled: propDefinition(assetType).kind === "vehicle",
     presetInstanceId,
   }));
@@ -7655,6 +10001,81 @@ $("#sizeValue").addEventListener("input", (event) => {
 });
 $("#sizeValue").addEventListener("change", finalizeLiveProjectInputEdit);
 
+$("#actorElevationSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "actor") return;
+  item.verticalOffset = clamp(Number(event.target.value), -1, 5);
+  $("#actorElevationValue").value = item.verticalOffset.toFixed(2);
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#actorElevationSlider").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#actorElevationValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "actor") return;
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, -1, 5);
+  item.verticalOffset = val;
+  $("#actorElevationSlider").value = val;
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#actorElevationValue").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#propElevationSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "prop") return;
+  item.mountedHeight = clamp(Number(event.target.value), -1, 5);
+  $("#propElevationValue").value = item.mountedHeight.toFixed(2);
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#propElevationSlider").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#propElevationValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "prop") return;
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, -1, 5);
+  item.mountedHeight = val;
+  $("#propElevationSlider").value = val;
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#propElevationValue").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#actorPitchSlider").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "actor") return;
+  item.pitch = clamp(Number(event.target.value), -90, 90);
+  $("#actorPitchValue").value = Math.round(item.pitch);
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#actorPitchSlider").addEventListener("change", finalizeLiveProjectInputEdit);
+
+$("#actorPitchValue").addEventListener("input", (event) => {
+  materializeEvaluatedViewForEditing();
+  const item = selectedItem();
+  if (!item || item.type !== "actor") return;
+  let val = Number(event.target.value);
+  if (!Number.isFinite(val)) return;
+  val = clamp(val, -90, 90);
+  item.pitch = val;
+  $("#actorPitchSlider").value = val;
+  draw();
+  if (viewMode === "3d") renderThreeView(state, true);
+});
+$("#actorPitchValue").addEventListener("change", finalizeLiveProjectInputEdit);
+
 $("#selectedPropAsset").addEventListener("change", (event) => {
   materializeEvaluatedViewForEditing();
   const item = selectedItem();
@@ -7703,6 +10124,13 @@ $("#propMotionToggle").addEventListener("change", (event) => {
     draw();
   });
   $("#propScale" + axis + "Value").addEventListener("change", finalizeLiveProjectInputEdit);
+});
+
+$("#actorLocomotionMode").addEventListener("change", (event) => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
+  actor.locomotionMode = actorLocomotionModes[event.target.value] ? event.target.value : "auto";
+  commit();
 });
 
 $("#actorPlacementMode").addEventListener("change", (event) => {
@@ -7817,13 +10245,14 @@ $("#actorPoseCustomNameInput").addEventListener("keydown", (event) => {
 $("#actorPoseResetBtn").addEventListener("click", () => applyActorPosePreset("neutral"));
 
 $("#actorPoseMirrorBtn").addEventListener("click", () => {
-  const actor = selectedItem();
+  const actor = selectedPoseActor();
   if (!actor || actor.type !== "actor" || sourceEditLocked(actor.id)) return;
   materializeEvaluatedViewForEditing(actor.id);
   const current = state.items.find((item) => item.id === actor.id);
   current.bodyPose = mirrorBodyPose(current.bodyPose);
   selectedPoseActorId = current.id;
-  commit();
+  updateExistingSourceKeyframe(current.id);
+  commit({ preserveSourceIds: [current.id] });
   notifyApp("배우 포즈를 좌우 반전했습니다.");
 });
 
@@ -8063,6 +10492,13 @@ $("#addCutBtn").addEventListener("click", addProjectCut);
 $("#openCutBtn").addEventListener("click", () => openCutInBlocking());
 $("#duplicateCutBtn").addEventListener("click", duplicateProjectCut);
 $("#deleteCutBtn").addEventListener("click", deleteProjectCut);
+$(".cut-version-panel").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-cut-version-action]");
+  if (!button) return;
+  if (button.dataset.cutVersionAction === "capture") captureCutVersion(button.dataset.slot);
+  if (button.dataset.cutVersionAction === "restore") restoreCutVersion(button.dataset.slot);
+});
+$("#compareCutVersionsBtn").addEventListener("click", showCutVersionComparison);
 $("#selectedCutIssueCount").addEventListener("click", () => {
   const button = $("#selectedCutIssueCount");
   const list = $("#selectedCutIssueList");
@@ -8070,6 +10506,37 @@ $("#selectedCutIssueCount").addEventListener("click", () => {
   const expanded = button.getAttribute("aria-expanded") === "true";
   button.setAttribute("aria-expanded", String(!expanded));
   list.hidden = expanded;
+});
+
+$("#selectedCutIssueList").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-continuity-action]");
+  const cut = currentCut();
+  if (!button || !cut) return;
+  const finding = continuityFindingsForCut(cut).find((entry) => entry.id === button.dataset.issueId);
+  if (!finding) return;
+  pushProjectHistory();
+  cut.continuity = storyboardCore.normalizedContinuity(cut.continuity);
+  if (button.dataset.continuityAction === "restore") {
+    delete cut.continuity.overrides[finding.id];
+    notifyApp("연속성 예외를 해제했습니다.");
+  } else {
+    const note = $("#selectedCutIssueList").querySelector(`[data-continuity-note="${CSS.escape(finding.id)}"]`)?.value.trim();
+    if (!note) {
+      notifyApp("예외 처리 이유를 먼저 적어주세요.");
+      projectHistory.pop();
+      syncHistoryButtons();
+      return;
+    }
+    cut.continuity.overrides[finding.id] = {
+      signature: finding.signature,
+      note,
+      updatedAt: isoNow(),
+    };
+    notifyApp("의도된 연속성 변경으로 표시했습니다.");
+  }
+  touchProjectCut(cut);
+  renderStoryboardWorkspace();
+  $("#selectedCutIssueCount").click();
 });
 
 $("#storyboardStatusFilter").addEventListener("change", (event) => {
@@ -8107,6 +10574,8 @@ const storyboardInspectorInputs = [
   "#cutStatusInput",
   "#cutTitleInput",
   "#cutShotTypeInput",
+  "#cutFocalInput",
+  "#cutDurationInput",
   "#cutActionInput",
   "#cutDialogueInput",
   "#cutIntentInput",
@@ -8131,8 +10600,8 @@ storyboardInspectorInputs.forEach((selector) => {
   const input = $(selector);
   input.addEventListener("focus", captureProjectFieldEditStart);
   input.addEventListener("blur", releaseProjectFieldEdit);
-  input.addEventListener("input", () => updateStoryboardCutFromInspector(false));
-  input.addEventListener("change", () => updateStoryboardCutFromInspector(true));
+  input.addEventListener("input", (event) => updateStoryboardCutFromInspector(event.currentTarget.id, false));
+  input.addEventListener("change", (event) => updateStoryboardCutFromInspector(event.currentTarget.id, true));
 });
 
 $("#jsonBtn").addEventListener("click", () => saveManagedProject({ interactive: true }));
@@ -8190,18 +10659,70 @@ $("#projectRenameDialog").addEventListener("close", () => {
 });
 $("#videoBtn").addEventListener("click", exportVideo);
 $("#videoPanelBtn").addEventListener("click", exportVideo);
+$("#multiCamVideoBtn").addEventListener("click", exportMultiCameraVideo);
+$("#multiCamVideoPanelBtn").addEventListener("click", exportMultiCameraVideo);
+$("#multiCamPreviewBtn").addEventListener("click", exportMultiCameraPreview);
+$("#multiCamPreviewPanelBtn").addEventListener("click", exportMultiCameraPreview);
+$("#multiCamPreviewPanelBtnSecondary").addEventListener("click", exportMultiCameraPreview);
+$("#addCameraBtn").addEventListener("click", addCameraProfile);
+$("#cameraFrameModeBtn").addEventListener("click", () => {
+  cameraPreviewMode = cameraPreviewMode === "single" ? "multi" : "single";
+  updateCameraFrameModeButton();
+  if (viewMode === "3d") renderThreeView(threeView?.lastState || state, true);
+  else renderCameraFramePreview(threeView?.lastState || evaluatedViewState || state);
+});
+$("#selectedCutFrameBtn").addEventListener("click", exportSelectedCutFrame);
+$("#selectedCutVideoBtn").addEventListener("click", exportSelectedCutVideo);
 $("#blockingPlanBtn").addEventListener("click", exportBlockingPlanImage);
 $("#blockingPlanPanelBtn").addEventListener("click", exportBlockingPlanImage);
 $("#frameBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePanelBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePairBtn").addEventListener("click", exportStartEndCameraFrames);
 $("#framePairPanelBtn").addEventListener("click", exportStartEndCameraFrames);
+$("#productionPackBtn").addEventListener("click", exportProductionPack);
+$("#productionPackPanelBtn").addEventListener("click", exportProductionPack);
 $("#addKeyBtn").addEventListener("click", addMotionKey);
 $("#updateKeyBtn").addEventListener("click", updateSelectedKey);
 $("#deleteKeyBtn").addEventListener("click", deleteSelectedKey);
+$("#selectAllKeysBtn").addEventListener("click", selectAllVisibleTimelineKeys);
+$("#copyKeysBtn").addEventListener("click", copySelectedTimelineKeys);
+$("#pasteKeysBtn").addEventListener("click", pasteTimelineKeys);
+$("#retimeSelectionBtn").addEventListener("click", retimeSelectedTimelineKeys);
+$("#selectionDurationInput").addEventListener("keydown", (event) => {
+  event.stopPropagation();
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  retimeSelectedTimelineKeys();
+  event.target.blur();
+});
+$("#timelineSnapSelect").addEventListener("change", (event) => {
+  timelineSnapMode = ["frame", "0.1", "0.5", "1", "off"].includes(event.target.value)
+    ? event.target.value
+    : "frame";
+  saveTimelineSnapMode();
+  syncUi(false);
+  notifyApp(`타임라인 스냅: ${event.target.selectedOptions[0]?.textContent || "프레임"}`);
+});
+$(".timeline").addEventListener("pointerdown", () => { timelineFocused = true; });
+stageViewport.addEventListener("pointerdown", () => { timelineFocused = false; });
 $("#playBtn").addEventListener("click", playPreview);
 $("#pauseBtn").addEventListener("click", pausePreview);
 $("#stopBtn").addEventListener("click", stopPreview);
+$("#rewindBtn").addEventListener("click", stopPreview);
+
+$("#timelineTrack").addEventListener("dblclick", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  stopPreview();
+});
+
+$("#sourceTimelineList").addEventListener("dblclick", (event) => {
+  if (event.target.closest(".source-lane-track")) {
+    event.preventDefault();
+    event.stopPropagation();
+    stopPreview();
+  }
+});
 
 $$('.toolbar-menu-popover button').forEach((button) => {
   button.addEventListener("click", () => {
@@ -8249,11 +10770,7 @@ $("#keySourceSelect").addEventListener("change", (event) => {
   draw();
 });
 
-$("#timelineTrack").addEventListener("click", (event) => {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const percent = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-  scrubToTime(percent * state.motion.duration);
-});
+setupScrubDragging($("#timelineTrack"));
 
 $("#timelineMode").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-timeline-view]");
@@ -8295,9 +10812,12 @@ $("#keyTransitionSelect").addEventListener("change", (event) => {
   }
   const previousMode = normalizeTransition(keyframe.transition);
   const nextMode = normalizeTransition(event.target.value);
-  const sameTimeKeys = state.motion.keyframes.filter((entry) => (
-    Math.abs(entry.time - keyframe.time) < 0.05 && !sourceEditLocked(entry.source)
-  ));
+  const sameTimeKeys = state.motion.keyframes.filter((entry) => timelineTimesMatch(entry.time, keyframe.time));
+  if (sameTimeKeys.some((entry) => sourceEditLocked(entry.source))) {
+    notifyApp("같은 시점의 키가 잠겨 있어 도착 방식을 함께 바꿀 수 없습니다.");
+    syncUi();
+    return;
+  }
   if (nextMode === "cut") {
     sameTimeKeys.forEach((entry) => {
       if (keysForSource(entry.source)[0]?.id !== entry.id) entry.transition = "cut";
@@ -8348,7 +10868,7 @@ $("#durationInput").addEventListener("change", (event) => {
   state.motion.duration = nextDuration;
   state.motion.playhead = clamp(state.motion.playhead * scale, 0, state.motion.duration);
   state.motion.keyframes.forEach((keyframe) => {
-    keyframe.time = clamp(Number((keyframe.time * scale).toFixed(2)), 0, state.motion.duration);
+    keyframe.time = clamp(Number((keyframe.time * scale).toFixed(4)), 0, state.motion.duration);
   });
   commit();
 });
@@ -8381,8 +10901,9 @@ function addMotionKey() {
   const selectedKey = activeSourceId() === "all"
     ? changedKeys.find((keyframe) => keyframe.source === selectedStageSource) || changedKeys[0]
     : changedKeys[0];
-  state.motion.selectedKeyId = selectedKey?.id || state.motion.selectedKeyId;
-  state.motion.playhead = selectedKey?.time ?? requestedTime;
+  setTimelineSelection(changedKeys.map((keyframe) => keyframe.id), selectedKey?.id || "");
+  const baseTime = selectedKey?.time ?? requestedTime;
+  advancePlayheadAfterKeyframe(baseTime);
   commit();
   const skipped = requestedSources.length - sources.length;
   notifyApp(skipped
@@ -8392,7 +10913,7 @@ function addMotionKey() {
 
 function updateSelectedKey() {
   const sourceId = activeSourceId();
-  const keyframe = sourceId === "all"
+  let keyframe = sourceId === "all"
     ? selectedKeyframe()
     : selectedKeyframe()?.source === sourceId
       ? selectedKeyframe()
@@ -8402,23 +10923,33 @@ function updateSelectedKey() {
     notifyEditLocked(sourceLabel(keyframe.source));
     return;
   }
+  const requestedTime = readTimelineTimeInput(keyframe.time);
+  const cutGroupIds = expandSynchronizedCutSelection(state.motion.keyframes, [keyframe.id]);
+  const cutGroup = state.motion.keyframes.filter((entry) => cutGroupIds.includes(entry.id));
+  if (cutGroup.some((entry) => sourceEditLocked(entry.source))) {
+    notifyApp("같은 시점의 즉시 전환 키가 잠겨 있어 키를 갱신할 수 없습니다.");
+    return;
+  }
+  const timing = moveTimelineSelection(
+    state.motion.keyframes,
+    cutGroupIds,
+    keyframe.id,
+    requestedTime,
+    { mode: timelineSnapMode, fps: state.motion.fps, maximum: MAX_TIMELINE_DURATION },
+  );
+  if (!timing.ok) {
+    notifyApp(timing.reason === "order"
+      ? "같은 대상의 다른 키를 넘어 갱신할 수 없습니다."
+      : "요청한 시간에 다른 키가 있어 갱신하지 않았습니다.");
+    syncUi();
+    return;
+  }
   materializeEvaluatedViewForEditing(keyframe.source);
   const previousPose = clone(keyframe.pose);
-  const requestedTime = readTimelineTimeInput(keyframe.time);
-  const cutGroup = keyframe.transition === "cut"
-    ? state.motion.keyframes.filter((entry) => (
-      entry.transition === "cut"
-      && Math.abs(entry.time - keyframe.time) < 0.05
-      && !sourceEditLocked(entry.source)
-    ))
-    : [keyframe];
-  const time = cutGroup.length > 1
-    ? availableGroupedKeyTime(requestedTime, cutGroup, MAX_TIMELINE_DURATION)
-    : availableKeyTime(requestedTime, keyframe.source, { excludeId: keyframe.id, maxTime: MAX_TIMELINE_DURATION });
-  ensureDurationCovers(time);
-  cutGroup.forEach((entry) => {
-    entry.time = time;
-  });
+  state.motion.keyframes = sortKeyframes(timing.keyframes);
+  keyframe = state.motion.keyframes.find((entry) => entry.id === keyframe.id);
+  const time = keyframe.time;
+  ensureDurationCovers(Math.max(...timing.ids.map((id) => state.motion.keyframes.find((entry) => entry.id === id)?.time || 0)));
   const nextPose = poseForSource(keyframe.source);
   keyframe.pose = keyframe.source === "camera"
     ? mergeLockedCameraPose(nextPose, keyframe.pose)
@@ -8431,29 +10962,139 @@ function updateSelectedKey() {
   }
   state.motion.playhead = time;
   state.motion.keyframes = sortKeyframes(state.motion.keyframes);
+  setTimelineSelection(timing.ids, keyframe.id);
   commit();
   notifyApp("선택한 키를 갱신했습니다.");
 }
 
 function deleteSelectedKey() {
-  const keyframe = selectedKeyframe();
-  if (!keyframe) return;
-  if (sourceEditLocked(keyframe.source)) {
-    notifyEditLocked(sourceLabel(keyframe.source));
+  const selectedKeys = selectedTimelineKeyframes();
+  const primary = selectedKeyframe() || selectedKeys[0];
+  if (!selectedKeys.length || !primary) return;
+  if (selectedKeys.some((keyframe) => sourceEditLocked(keyframe.source))) {
+    notifyApp("선택한 키 중 잠긴 대상이 있어 삭제하지 않았습니다.");
     return;
   }
-  state.motion.keyframes = state.motion.keyframes.filter((entry) => entry.id !== keyframe.id);
-  const next = nearestKeyframe(keysForSource(keyframe.source), keyframe.time)
-    || nearestKeyframe(sortKeyframes(state.motion.keyframes), keyframe.time);
-  state.motion.selectedKeyId = next?.id || null;
+  const ids = new Set(selectedKeys.map((keyframe) => keyframe.id));
+  state.motion.keyframes = state.motion.keyframes.filter((entry) => !ids.has(entry.id));
+  const next = nearestKeyframe(keysForSource(primary.source), primary.time)
+    || nearestKeyframe(sortKeyframes(state.motion.keyframes), primary.time);
   if (next) {
     setActiveSource(next.source);
     selectSourceOnStage(next.source);
-    applyKeyframeToStage(next);
+    setTimelineSelection([next.id], next.id);
   }
-  else state.motion.selectedKeyId = null;
+  else setTimelineSelection([], "");
   commit();
-  notifyApp("선택한 키를 삭제했습니다.");
+  if (next) {
+    evaluatedViewState = interpolateStateAtTime(next.time);
+    syncUi();
+    draw(evaluatedViewState);
+  }
+  notifyApp(`키 ${selectedKeys.length}개를 삭제했습니다.`);
+}
+
+function selectAllVisibleTimelineKeys() {
+  const visibleSourceIds = new Set(visibleSourceDefinitions().map((source) => source.id));
+  const keys = sortKeyframes(state.motion.keyframes).filter((keyframe) => visibleSourceIds.has(keyframe.source));
+  if (!keys.length) return;
+  const currentId = primaryTimelineKeyId();
+  setTimelineSelection(keys.map((keyframe) => keyframe.id), keys.some((keyframe) => keyframe.id === currentId) ? currentId : keys[0].id);
+  syncUi();
+  draw(evaluatedViewState || state);
+  notifyApp(`보이는 키 ${keys.length}개를 선택했습니다.`);
+}
+
+function copySelectedTimelineKeys() {
+  const keys = selectedTimelineKeyframes();
+  if (!keys.length) return;
+  const baseTime = Math.min(...keys.map((keyframe) => keyframe.time));
+  const primaryId = primaryTimelineKeyId();
+  timelineClipboard = {
+    version: 1,
+    entries: keys.map((keyframe) => ({
+      source: keyframe.source,
+      offset: Number((keyframe.time - baseTime).toFixed(4)),
+      keyframe: clone(keyframe),
+    })),
+    primaryIndex: Math.max(0, keys.findIndex((keyframe) => keyframe.id === primaryId)),
+  };
+  syncUi(false);
+  notifyApp(`키 ${keys.length}개를 복사했습니다. 현재 시간에 붙여넣을 수 있습니다.`);
+}
+
+function timelineSourceCanReceivePaste(sourceId) {
+  if (sourceId === "camera") return true;
+  const item = state.items.find((entry) => entry.id === sourceId);
+  return Boolean(item && isIndependentMotionSource(item, state));
+}
+
+function pasteTimelineKeys() {
+  const entries = timelineClipboard?.entries || [];
+  if (!entries.length) return;
+  const invalid = entries.find((entry) => !timelineSourceCanReceivePaste(entry.source));
+  if (invalid) {
+    notifyApp(`${sourceLabel(invalid.source)}은(는) 현재 독립 동선 대상이 아니어서 붙여넣지 않았습니다.`);
+    return;
+  }
+  const locked = entries.find((entry) => sourceEditLocked(entry.source));
+  if (locked) {
+    notifyApp(`${sourceLabel(locked.source)} 편집 잠금을 해제한 뒤 붙여넣으세요.`);
+    return;
+  }
+  const plan = resolveTimelinePasteTimes(
+    state.motion.keyframes,
+    entries.map((entry) => ({ source: entry.source, offset: entry.offset })),
+    displayPlayhead(),
+    { mode: timelineSnapMode, fps: state.motion.fps, maximum: MAX_TIMELINE_DURATION },
+  );
+  if (!plan.ok) {
+    notifyApp("선택한 구간을 넣을 빈 시간이 없습니다. 현재 시간을 옮겨 다시 시도하세요.");
+    return;
+  }
+  ensureDurationCovers(Math.max(...plan.times));
+  const created = entries.map((entry, index) => ({
+    ...clone(entry.keyframe),
+    id: uid(),
+    time: plan.times[index],
+  }));
+  created.forEach((keyframe) => showSourceTimeline(keyframe.source));
+  state.motion.keyframes = sortKeyframes([...state.motion.keyframes, ...created]);
+  const primary = created[timelineClipboard.primaryIndex] || created[0];
+  setTimelineSelection(created.map((keyframe) => keyframe.id), primary.id);
+  state.motion.playhead = primary.time;
+  commit();
+  notifyApp(`현재 시간부터 키 ${created.length}개를 붙여넣었습니다.`);
+}
+
+function retimeSelectedTimelineKeys() {
+  const keys = selectedTimelineKeyframes();
+  if (keys.length < 2) return;
+  if (keys.some((keyframe) => sourceEditLocked(keyframe.source))) {
+    notifyApp("선택한 키 중 잠긴 대상이 있어 구간을 바꾸지 않았습니다.");
+    return;
+  }
+  const requestedDuration = Number($("#selectionDurationInput").value);
+  const result = scaleTimelineSelection(
+    state.motion.keyframes,
+    keys.map((keyframe) => keyframe.id),
+    requestedDuration,
+    { mode: timelineSnapMode, fps: state.motion.fps, maximum: MAX_TIMELINE_DURATION },
+  );
+  if (!result.ok) {
+    notifyApp(result.reason === "order"
+      ? "같은 대상의 다른 키를 넘어설 수 없습니다. 구간 길이를 조정하세요."
+      : "선택 구간에 다른 키가 겹쳐 시간을 바꾸지 않았습니다.");
+    syncUi();
+    return;
+  }
+  const primaryId = primaryTimelineKeyId();
+  state.motion.keyframes = sortKeyframes(result.keyframes);
+  setTimelineSelection(result.ids, primaryId);
+  const primary = selectedKeyframe();
+  if (primary) state.motion.playhead = primary.time;
+  commit();
+  notifyApp(`선택 구간을 ${result.duration.toFixed(2)}초로 맞췄습니다.`);
 }
 
 function createSourceKeyframe(sourceId, time, pathMode = "straight") {
@@ -8462,6 +11103,7 @@ function createSourceKeyframe(sourceId, time, pathMode = "straight") {
   if (keyframe) {
     applyPathModeToKeyframe(keyframe, pathMode);
     state.motion.keyframes.push(keyframe);
+    clearLiveSourceEdit(sourceId, time);
   }
   return keyframe;
 }
@@ -8539,30 +11181,16 @@ function keysForSource(sourceId, keyframes = state.motion.keyframes) {
 }
 
 function availableKeyTime(requestedTime, sourceId = activeSourceId(), options = {}) {
-  let time = clamp(requestedTime, 0, options.maxTime ?? state.motion.duration);
-  const step = 0.1;
   const candidateKeys = (sourceId === "all" ? state.motion.keyframes : keysForSource(sourceId))
     .filter((keyframe) => keyframe.id !== options.excludeId);
   const maxTime = options.maxTime ?? state.motion.duration;
-  const hasCollision = () => candidateKeys.some((keyframe) => Math.abs(keyframe.time - time) < 0.05);
-  while (hasCollision() && time + step <= maxTime) time = Number((time + step).toFixed(1));
-  while (hasCollision() && time - step >= 0) time = Number((time - step).toFixed(1));
-  return clamp(time, 0, maxTime);
-}
-
-function availableGroupedKeyTime(requestedTime, groupedKeys, maxTime = state.motion.duration) {
-  let time = clamp(requestedTime, 0, maxTime);
-  const step = 0.1;
-  const groupedIds = new Set(groupedKeys.map((keyframe) => keyframe.id));
-  const groupedSources = new Set(groupedKeys.map((keyframe) => keyframe.source));
-  const hasCollision = () => state.motion.keyframes.some((keyframe) => (
-    !groupedIds.has(keyframe.id)
-    && groupedSources.has(keyframe.source)
-    && Math.abs(keyframe.time - time) < 0.05
-  ));
-  while (hasCollision() && time + step <= maxTime) time = Number((time + step).toFixed(1));
-  while (hasCollision() && time - step >= 0) time = Number((time - step).toFixed(1));
-  return clamp(time, 0, maxTime);
+  const plan = resolveTimelinePasteTimes(
+    candidateKeys,
+    [{ source: sourceId, offset: 0 }],
+    requestedTime,
+    { mode: timelineSnapMode, fps: state.motion.fps, maximum: maxTime },
+  );
+  return plan.ok ? plan.times[0] : snapTimelineTime(requestedTime, 0, maxTime);
 }
 
 function selectKeyframe(id) {
@@ -8570,9 +11198,9 @@ function selectKeyframe(id) {
   if (!keyframe) return;
   setActiveSource(keyframe.source);
   selectSourceOnStage(keyframe.source);
-  applyKeyframeToStage(keyframe);
+  previewKeyframeOnStage(keyframe);
   syncUi();
-  draw();
+  draw(evaluatedViewState);
 }
 
 function scrubToTime(time) {
@@ -8588,15 +11216,16 @@ function displayPlayhead() {
 }
 
 function restoreUncommittedState(startState) {
+  clearLiveSourceEdits();
   state = clone(startState);
-  evaluatedViewState = null;
   sanitizeState();
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   const cut = currentCut();
   if (cut) cut.blocking = state;
   selected = selectedExists(selected) ? selected : { kind: "camera" };
   selectKeyForSource(selectedSourceId() || activeSourceId());
   syncUi();
-  draw();
+  draw(evaluatedViewState);
   syncProjectChrome();
 }
 
@@ -8626,7 +11255,7 @@ function interpolateStateAtTime(time) {
   next.camera = interpolateSourceAtTime("camera", safeTime, state.camera);
   next.items = state.items.map((item) => interpolateSourceAtTime(item.id, safeTime, item));
   next.motion.playhead = safeTime;
-  return applyCameraTracking(next);
+  return applyLiveSourceEdits(applyActiveCameraTracking(next, state), safeTime);
 }
 
 function interpolateSourceAtTime(sourceId, time, fallbackPose) {
@@ -8681,9 +11310,9 @@ function stopPreview() {
 function cancelPreview() {
   if (preview) cancelAnimationFrame(preview);
   preview = null;
-  evaluatedViewState = null;
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   updatePlayheadDisplay(state.motion.playhead);
-  draw();
+  draw(evaluatedViewState);
   syncPlaybackControls();
 }
 
@@ -8757,7 +11386,7 @@ function computePrevisQuality(renderState = state) {
     },
     {
       id: "lens",
-      label: `${renderState.camera.focal}mm / ${Math.round(focalToFov(renderState.camera.focal))}° 화각`,
+      label: `${renderState.camera.focal}mm / ${Math.round(focalToFov(renderState.camera.focal, cameraSensorWidth(renderState)))}° 화각`,
       ok: renderState.camera.focal >= 14 && renderState.camera.focal <= 135,
       weight: 8,
     },
@@ -8812,7 +11441,7 @@ function analyzeFraming(renderState = state) {
     const frameState = interpolateRenderStateAtTime(renderState, time);
     const camera = frameState.camera;
     const heading = degToRad(camera.panDeg);
-    const halfFov = degToRad(focalToFov(camera.focal)) / 2;
+    const halfFov = degToRad(focalToFov(camera.focal, cameraSensorWidth(frameState))) / 2;
     const subjects = framingSubjectsForMode(frameState)
       .map((item) => resolvedItemPose(item, frameState))
       .map((item) => framingSubjectStatus(item, camera, heading, halfFov));
@@ -8847,7 +11476,7 @@ function framingSampleTimes(renderState = state) {
     .filter((time) => Number.isFinite(time))
     .map((time) => clamp(time, 0, duration))
     .sort((a, b) => a - b)
-    .filter((time, index, list) => index === 0 || Math.abs(time - list[index - 1]) > 0.05)
+    .filter((time, index, list) => index === 0 || !sameTimelineTime(time, list[index - 1], 0.0005))
     .slice(0, 24);
 }
 
@@ -8902,7 +11531,7 @@ function interpolateRenderStateAtTime(renderState, time) {
   next.camera = interpolateSourceAtTimeFor(renderState, "camera", safeTime, renderState.camera);
   next.items = renderState.items.map((item) => interpolateSourceAtTimeFor(renderState, item.id, safeTime, item));
   next.motion.playhead = safeTime;
-  return applyCameraTracking(next);
+  return applyLiveSourceEdits(applyActiveCameraTracking(next, renderState), safeTime);
 }
 
 function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
@@ -8914,15 +11543,52 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
 
   let start = keyframes[0];
   let end = last;
+  let segmentIndex = 0;
   for (let i = 0; i < keyframes.length - 1; i += 1) {
     if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
       start = keyframes[i];
       end = keyframes[i + 1];
+      segmentIndex = i;
       break;
     }
   }
-  const progress = transitionProgress(time, start.time, end.time, end.transition);
-  return interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallbackPose, end);
+  const transition = normalizeTransition(end.transition);
+  const easedProgress = transitionProgress(time, start.time, end.time, transition);
+  const rawProgress = clamp((time - start.time) / Math.max(0.000001, end.time - start.time), 0, 1);
+  // Spatial blocking must cross ordinary key boundaries without braking at
+  // every marker. Holds and cuts retain their explicit discontinuous behavior.
+  const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
+  const routeMotion = sourceRouteMotionStats(renderState, sourceId, keyframes, segmentIndex);
+  return interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallbackPose, end, {
+    startTime: start.time,
+    endTime: end.time,
+    currentTime: time,
+    ...routeMotion,
+  });
+}
+
+function sourceRouteMotionStats(renderState, sourceId, keyframes, activeSegmentIndex) {
+  if (sourceId === "camera") return {};
+  const size = stageWorldSize(renderState);
+  let distanceBefore = 0;
+  let movingDistance = 0;
+  let movingDuration = 0;
+  keyframes.slice(1).forEach((end, index) => {
+    const start = keyframes[index];
+    const transition = normalizeTransition(end.transition);
+    if (transition === "hold" || transition === "cut") return;
+    const distance = Math.hypot(
+      (Number(end.pose?.x || 0) - Number(start.pose?.x || 0)) * size.width,
+      (Number(end.pose?.y || 0) - Number(start.pose?.y || 0)) * size.depth,
+    );
+    if (index < activeSegmentIndex) distanceBefore += distance;
+    movingDistance += distance;
+    movingDuration += Math.max(0, Number(end.time) - Number(start.time));
+  });
+  return {
+    routeDistanceBefore: distanceBefore,
+    routeAverageSpeed: movingDuration > 0 ? movingDistance / movingDuration : 0,
+  };
 }
 
 function mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose) {
@@ -8935,7 +11601,7 @@ function mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose) {
   );
 }
 
-function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallbackPose, endKeyframe = null) {
+function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallbackPose, endKeyframe = null, timing = null) {
   const from = mergePoseWithFallbackFor(renderState, sourceId, startPose, fallbackPose);
   const to = mergePoseWithFallbackFor(renderState, sourceId, endPose, fallbackPose);
   const segment = sanitizeMotionSegment(endKeyframe?.segment, sourceId);
@@ -8949,9 +11615,62 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
       panDeg: lerpAngle(from.panDeg, to.panDeg, t),
       tiltDeg: lerp(from.tiltDeg, to.tiltDeg, t),
       focal: Math.round(lerp(from.focal, to.focal, t)),
+      focusDistanceM: lerp(from.focusDistanceM, to.focusDistanceM, t),
       trackingTargetId: sanitizeTrackingTargetId(t < 0.5 ? from.trackingTargetId : to.trackingTargetId, renderState),
     }, renderState);
   }
+  const keyedBodyPose = from.type === "actor" ? interpolateBodyPose(from.bodyPose, to.bodyPose, t) : null;
+  const locomotion = from.type === "actor"
+    ? actorLocomotionForSegment(renderState, from, to, t, endKeyframe, timing, keyedBodyPose)
+    : { pose: null, bob: 0 };
+
+  let interpolatedFacing = lerpAngle(from.facing, to.facing, t);
+  if (from.type === "actor") {
+    const requestedMode = actorLocomotionModes[to.locomotionMode] ? to.locomotionMode : "auto";
+    const transition = normalizeTransition(endKeyframe?.transition);
+    const isMovingSegment = requestedMode !== "pose" && transition !== "hold" && transition !== "cut";
+
+    if (isMovingSegment) {
+      const size = stageWorldSize(renderState);
+      const totalDistance = Math.hypot((to.x - from.x) * size.width, (to.y - from.y) * size.depth);
+      if (totalDistance > 0.05) {
+        const dt = 0.005;
+        const t1 = Math.max(0, t - dt);
+        const t2 = Math.min(1, t + dt);
+
+        const p1 = evaluateMotionSegment(renderState, sourceId, from, to, t1, segment);
+        const p2 = evaluateMotionSegment(renderState, sourceId, from, to, t2, segment);
+
+        const dx = (p2.x - p1.x) * size.width;
+        const dy = (p2.y - p1.y) * size.depth;
+
+        if (Math.hypot(dx, dy) > 0.001) {
+          const tangentAngle = radToDeg(Math.atan2(dy, dx));
+
+          // Tangent at start (t=0)
+          const posS1 = evaluateMotionSegment(renderState, sourceId, from, to, 0, segment);
+          const posS2 = evaluateMotionSegment(renderState, sourceId, from, to, dt, segment);
+          const tangentStart = radToDeg(Math.atan2((posS2.y - posS1.y) * size.depth, (posS2.x - posS1.x) * size.width));
+
+          // Tangent at end (t=1)
+          const posE1 = evaluateMotionSegment(renderState, sourceId, from, to, 1 - dt, segment);
+          const posE2 = evaluateMotionSegment(renderState, sourceId, from, to, 1, segment);
+          const tangentEnd = radToDeg(Math.atan2((posE2.y - posE1.y) * size.depth, (posE2.x - posE1.x) * size.width));
+
+          // Compute user offset relative to path tangent at start and end
+          const offsetStart = ((from.facing - tangentStart + 540) % 360) - 180;
+          const offsetEnd = ((to.facing - tangentEnd + 540) % 360) - 180;
+
+          // Interpolate the offset angle
+          const offset = lerpAngle(offsetStart, offsetEnd, t);
+
+          // Final facing is tangent angle plus the interpolated offset
+          interpolatedFacing = (tangentAngle + offset + 360) % 360;
+        }
+      }
+    }
+  }
+
   return {
     ...from,
     x: spatial.x,
@@ -8960,8 +11679,10 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
     scaleX: lerp(from.scaleX, to.scaleX, t),
     scaleY: lerp(from.scaleY, to.scaleY, t),
     scaleZ: lerp(from.scaleZ, to.scaleZ, t),
-    facing: lerpAngle(from.facing, to.facing, t),
-    bodyPose: from.type === "actor" ? interpolateBodyPose(from.bodyPose, to.bodyPose, t) : null,
+    verticalOffset: lerp(Number(from.verticalOffset || 0), Number(to.verticalOffset || 0), t) + locomotion.bob,
+    pitch: lerp(Number(from.pitch || 0), Number(to.pitch || 0), t),
+    facing: interpolatedFacing,
+    bodyPose: locomotion.pose,
     color: to.color,
     shape: to.shape,
     assetType: to.assetType,
@@ -8970,6 +11691,30 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
     name: to.name,
     visible: t < 0.5 ? from.visible !== false : to.visible !== false,
   };
+}
+
+function actorLocomotionForSegment(renderState, from, to, progress, endKeyframe, timing, keyedPose) {
+  const pose = sanitizeBodyPose(keyedPose);
+  const requestedMode = actorLocomotionModes[to.locomotionMode] ? to.locomotionMode : "auto";
+  const transition = normalizeTransition(endKeyframe?.transition);
+  if (requestedMode === "pose"
+    || transition === "hold"
+    || transition === "cut"
+    || (to.placementMode === "auto" && to.mountId)
+    || Math.abs(Number(to.pitch || 0)) > 25) {
+    return { pose, bob: 0 };
+  }
+
+  const size = stageWorldSize(renderState);
+  const distance = Math.hypot((to.x - from.x) * size.width, (to.y - from.y) * size.depth);
+  if (distance < 0.05) return { pose, bob: 0 };
+  const duration = Math.max(0.001, Number(timing?.endTime || 0) - Number(timing?.startTime || 0));
+  const speed = Math.max(0, Number(timing?.routeAverageSpeed ?? (distance / duration)));
+  const mode = requestedMode === "auto" ? (speed >= 2.4 ? "run" : "walk") : requestedMode;
+  const strideLength = mode === "run" ? 1.9 : 1.35;
+  const travelled = Math.max(0, Number(timing?.routeDistanceBefore || 0)) + distance * clamp(progress, 0, 1);
+  const phase = (travelled / strideLength) * Math.PI * 2;
+  return proceduralLocomotion(pose, mode, phase, 1);
 }
 
 function evaluateMotionSegment(renderState, sourceId, from, to, progress, segment) {
@@ -9031,7 +11776,12 @@ function sampleMotionPathPoses(renderState, sourceId, keyframes, samplesPerSegme
     const start = keyframes[index - 1];
     const end = keyframes[index];
     for (let step = 1; step <= samplesPerSegment; step += 1) {
-      samples.push(interpolatePoseFor(renderState, sourceId, start.pose, end.pose, step / samplesPerSegment, fallback, end));
+      const progress = step / samplesPerSegment;
+      samples.push(interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallback, end, {
+        startTime: start.time,
+        endTime: end.time,
+        currentTime: lerp(start.time, end.time, progress),
+      }));
     }
   }
   return samples;
@@ -9042,10 +11792,15 @@ function sanitizeCameraPoseFor(renderState, camera) {
   const sanitized = {
     x: clamp(Number(camera.x ?? renderState.camera.x), 0.02, 0.98),
     y: clamp(Number(camera.y ?? renderState.camera.y), 0.02, 0.98),
-    height: clamp(Number(camera.height ?? renderState.camera.height ?? 1.6), 0.4, 3),
+    height: clamp(Number(camera.height ?? renderState.camera.height ?? 1.6), 0.4, 35),
     panDeg: normalizePanDeg(Number.isFinite(Number(camera.panDeg)) ? camera.panDeg : orientation.panDeg),
-    tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, -60, 60),
+    tiltDeg: clamp(Number.isFinite(Number(camera.tiltDeg)) ? Number(camera.tiltDeg) : orientation.tiltDeg, -90, 90),
     focal: clamp(Number(camera.focal ?? renderState.camera.focal), 14, 135),
+    focusDistanceM: clamp(
+      finiteNumber(camera.focusDistanceM, renderState.camera.focusDistanceM ?? 5),
+      CAMERA_FOCUS_DISTANCE_MIN,
+      CAMERA_FOCUS_DISTANCE_MAX,
+    ),
     trackingTargetId: sanitizeTrackingTargetId(camera.trackingTargetId ?? renderState.camera.trackingTargetId, renderState),
     locks: sanitizeCameraLocks(renderState.camera.locks),
   };
@@ -9053,13 +11808,25 @@ function sanitizeCameraPoseFor(renderState, camera) {
 }
 
 async function exportProductionPack() {
-  syncPlayheadFromTimeInput();
-  const pack = await buildProductionPack();
-  const zip = await createZip(pack.files);
-  presentExport(zip, `${slug(state.sceneTitle)}_previs_pack.zip`, "제작팩 ZIP");
+  if (!beginMediaExport()) return;
+  try {
+    syncPlayheadFromTimeInput();
+    notifyApp("촬영 자료 프리뷰를 준비하고 있습니다.");
+    const pack = await buildProductionPack();
+    const zip = await createZip(pack.files);
+    presentExport(zip, `${slug(project?.title || state.sceneTitle)}_production_pack.zip`, "촬영 자료 ZIP", buildProductionPackPreview(pack));
+  } catch (error) {
+    console.error("production pack export failed", error);
+    presentExportError("촬영 자료를 준비하지 못했습니다. 3D 프리뷰가 정상적으로 보이는지 확인한 뒤 다시 시도하세요.");
+  } finally {
+    mediaExportProgress = "";
+    endMediaExport();
+  }
 }
 
 async function buildProductionPack() {
+  syncActiveCutDocument(false);
+  syncActiveCameraProfile();
   const quality = computePrevisQuality();
   const topdown = await renderTopdownPngBlob();
   const cameraFrame = await captureCameraFrameBlob(state);
@@ -9069,7 +11836,10 @@ async function buildProductionPack() {
   const files = [
     { path: "manifest.json", content: JSON.stringify(manifest, null, 2) },
     { path: "project/frisframe.json", content: JSON.stringify({ app: SERVICE_NAME, state }, null, 2) },
+    { path: "project/storyboard_project.json", content: JSON.stringify({ app: SERVICE_NAME, schemaVersion: PROJECT_SCHEMA_VERSION, project }, null, 2) },
+    { path: "project/cut_list.csv", content: buildProjectCutListCsv() },
     { path: "project/camera_plan.json", content: JSON.stringify(buildCameraPlan(), null, 2) },
+    { path: "project/multi_camera_plan.json", content: JSON.stringify(buildMultiCameraPlan(), null, 2) },
     { path: "project/motion_keyframes.csv", content: buildMotionCsv() },
     { path: "project/framing_analysis.json", content: JSON.stringify(quality.framing, null, 2) },
     { path: "docs/shot_bible.md", content: buildShotBibleMarkdown(quality) },
@@ -9078,6 +11848,7 @@ async function buildProductionPack() {
     { path: "docs/on_set_checklist.md", content: buildOnSetChecklist(quality) },
     { path: "docs/framing_analysis.md", content: buildFramingAnalysisMarkdown(quality.framing) },
     { path: "docs/camera_storyboard.md", content: buildCameraStoryboardMarkdown(storyboard) },
+    { path: "docs/continuity_report.md", content: buildContinuityReportMarkdown() },
     { path: "docs/seedance_prompt.md", content: buildSeedancePrompt() },
     { path: "docs/quality_report.json", content: JSON.stringify(quality, null, 2) },
     { path: "blender/blender_previs_scene.py", content: buildBlenderPrevisScript() },
@@ -9086,7 +11857,15 @@ async function buildProductionPack() {
     { path: "storyboard/contact_sheet.png", blob: storyboardContactSheet },
     ...storyboard.map((frame) => ({ path: frame.path, blob: frame.blob })),
   ];
-  return { manifest, files };
+  return {
+    manifest,
+    files,
+    previews: {
+      topdown,
+      cameraFrame,
+      storyboardContactSheet,
+    },
+  };
 }
 
 function buildPrevisManifest(quality, storyboard = []) {
@@ -9101,12 +11880,19 @@ function buildPrevisManifest(quality, storyboard = []) {
     actorCount: state.items.filter((item) => item.type === "actor").length,
     propCount: state.items.filter((item) => item.type === "prop").length,
     keyframeCount: state.motion.keyframes.length,
+    cameraCount: cameraProfileCount(state),
+    cameraNames: multiCameraCore.normalizeProfiles(
+      state.cameras,
+      state.camera,
+      state.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
+      state.cameraSetup,
+    ).slice(0, 4).map((profile) => profile.name),
     quality: {
       score: quality.score,
       readiness: quality.readiness,
       framingReviewCount: quality.framing.reviewCount,
     },
-    exports: ["Seedance prompt", "Blender previs", "Top-down blocking", "Camera storyboard"],
+    exports: ["Project cut list", "Continuity report", "Blender previs", "Top-down blocking", "Camera storyboard", "Multi-camera plan"],
     storyboardFrames: storyboard.map((frame) => ({
       time: frame.time,
       path: frame.path,
@@ -9114,7 +11900,10 @@ function buildPrevisManifest(quality, storyboard = []) {
     })),
     files: [
       "project/frisframe.json",
+      "project/storyboard_project.json",
+      "project/cut_list.csv",
       "project/camera_plan.json",
+      "project/multi_camera_plan.json",
       "project/motion_keyframes.csv",
       "project/framing_analysis.json",
       "docs/shot_bible.md",
@@ -9123,6 +11912,7 @@ function buildPrevisManifest(quality, storyboard = []) {
       "docs/on_set_checklist.md",
       "docs/framing_analysis.md",
       "docs/camera_storyboard.md",
+      "docs/continuity_report.md",
       "docs/seedance_prompt.md",
       "docs/quality_report.json",
       "blender/blender_previs_scene.py",
@@ -9134,11 +11924,127 @@ function buildPrevisManifest(quality, storyboard = []) {
   };
 }
 
+function buildProductionPackPreview(pack) {
+  const cuts = project?.scenes?.flatMap((scene) => scene.cuts || []) || [];
+  const unresolved = cuts.flatMap((cut) => cutIssueFindings(cut).filter((finding) => !finding.overridden));
+  const warnings = unresolved.length
+    ? [`미해결 확인 항목 ${unresolved.length}개가 보고서에 포함됩니다.`]
+    : ["미해결 확인 항목이 없습니다."];
+  return {
+    type: "images",
+    summary: [
+      `프로젝트: ${project?.title || state.sceneTitle || "제목 없음"}`,
+      `현재 컷: ${storyboardCutCode(currentScene(), currentCut())}`,
+      `준비 상태: ${pack.manifest.quality.score}/100 · ${pack.manifest.quality.readiness}`,
+      `파일 수: ${pack.files.length}`,
+      "",
+      "포함 내용",
+      "- 전체 프로젝트 컷 리스트 CSV",
+      "- 연속성 및 검토 보고서",
+      `- ${pack.manifest.cameraCount}대 카메라별 설정·키프레임 데이터`,
+      "- Blender 프리비즈 스크립트",
+      "- 2D 동선도와 3D 카메라 프레임",
+      "- 카메라 스토리보드와 촬영 체크리스트",
+    ].join("\n"),
+    items: [
+      { blob: pack.previews.topdown, caption: "현재 컷 2D 동선도" },
+      { blob: pack.previews.cameraFrame, caption: "현재 재생 위치 카메라 프레임" },
+      { blob: pack.previews.storyboardContactSheet, caption: "카메라 키·시작·끝 스토리보드" },
+    ],
+    notes: [
+      ...warnings,
+      "프리비즈 MP4는 용량과 제작 시간을 줄이기 위해 별도의 ‘프리비즈 영상’에서 확인하고 저장합니다.",
+      "이 창을 닫으면 아무 파일도 저장되지 않습니다.",
+    ],
+  };
+}
+
+function buildProjectCutListCsv() {
+  const rows = [[
+    "scene", "cut", "title", "status", "shot_type", "focal_mm", "sensor_format", "sensor_width_mm",
+    "aperture_f", "focus_distance_m", "duration_seconds", "fps", "key_count", "action", "dialogue",
+    "camera_count", "camera_names", "continuity_notes", "unresolved_issue_count",
+  ]];
+  (project?.scenes || []).forEach((scene) => {
+    (scene.cuts || []).forEach((cut) => {
+      const blocking = cut.blocking || {};
+      const setup = sanitizeCameraSetup(blocking.cameraSetup);
+      const camera = blocking.camera || {};
+      const cameraProfiles = multiCameraCore.normalizeProfiles(
+        blocking.cameras,
+        blocking.camera,
+        blocking.motion?.keyframes?.filter((keyframe) => keyframe.source === "camera"),
+        blocking.cameraSetup,
+      ).slice(0, 4);
+      rows.push([
+        `S${String(scene.number || 1).padStart(2, "0")}`,
+        `C${String(cut.number || 1).padStart(2, "0")}`,
+        cut.title,
+        storyboardStatusLabels[cut.status] || cut.status,
+        cut.shotType,
+        camera.focal || "",
+        setup.sensorFormat,
+        setup.sensorWidthMm,
+        setup.apertureFStop,
+        round(finiteNumber(camera.focusDistanceM, 5), 2),
+        blocking.motion?.duration || 0,
+        blocking.motion?.fps || 24,
+        blocking.motion?.keyframes?.length || 0,
+        cameraProfiles.length,
+        cameraProfiles.map((profile) => profile.name).join(" | "),
+        cut.action,
+        cut.dialogue,
+        cut.notes,
+        cutIssueFindings(cut).filter((finding) => !finding.overridden).length,
+      ]);
+    });
+  });
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function buildContinuityReportMarkdown() {
+  const lines = [
+    `# 연속성·검토 보고서 · ${project?.title || state.sceneTitle || "제목 없음"}`,
+    "",
+    `생성 시각: ${new Date().toLocaleString("ko-KR")}`,
+    "",
+  ];
+  let findingCount = 0;
+  (project?.scenes || []).forEach((scene) => {
+    lines.push(`## S${String(scene.number || 1).padStart(2, "0")} · ${scene.heading || "장면"}`, "");
+    (scene.cuts || []).forEach((cut) => {
+      const findings = cutIssueFindings(cut);
+      const active = findings.filter((finding) => !finding.overridden);
+      findingCount += active.length;
+      lines.push(`### ${storyboardCutCode(scene, cut)} · ${cut.title || "새 컷"}`);
+      lines.push(`- 상태: ${storyboardStatusLabels[cut.status] || cut.status}`);
+      lines.push(`- 미해결 항목: ${active.length}`);
+      if (!findings.length) lines.push("- 확인된 문제가 없습니다.");
+      findings.forEach((finding) => {
+        const overrideNote = finding.overridden ? ` · 의도된 변경: ${finding.override?.note || "사유 없음"}` : "";
+        lines.push(`- [${finding.overridden ? "예외" : "확인"}] ${finding.message}${overrideNote}`);
+      });
+      lines.push("");
+    });
+  });
+  if (!findingCount) lines.splice(3, 0, "현재 미해결 항목이 없습니다.", "");
+  return lines.join("\n");
+}
+
 function buildCameraPlan() {
   const cam = state.camera;
+  const setup = sanitizeCameraSetup(state.cameraSetup);
+  const multiCamera = buildMultiCameraPlan();
   return {
+    activeCameraId: multiCamera.activeCameraId,
+    cameraCount: multiCamera.cameraCount,
+    cameras: multiCamera.cameras,
     lensMm: cam.focal,
-    horizontalFovDeg: Math.round(focalToFov(cam.focal)),
+    sensorFormat: setup.sensorFormat,
+    sensorWidthMm: setup.sensorWidthMm,
+    apertureFStop: setup.apertureFStop,
+    focusDistanceM: round(cam.focusDistanceM, 2),
+    horizontalFovDeg: Math.round(focalToFov(cam.focal, setup.sensorWidthMm)),
     headingDeg: cameraHeadingDeg(cam),
     aspect: state.aspect,
     duration: state.motion.duration,
@@ -9151,6 +12057,45 @@ function buildCameraPlan() {
       pose: sanitizeCameraPose(keyframe.pose),
       headingDeg: cameraHeadingDeg(sanitizeCameraPose(keyframe.pose)),
     })),
+  };
+}
+
+function buildMultiCameraPlan(renderState = state) {
+  const profiles = multiCameraCore.normalizeProfiles(
+    renderState.cameras,
+    renderState.camera,
+    renderState.motion?.keyframes?.filter((keyframe) => keyframe.source === "camera"),
+    renderState.cameraSetup,
+  ).slice(0, 4);
+  const activeId = multiCameraCore.resolveActiveId(renderState.activeCameraId, profiles);
+  return {
+    activeCameraId: activeId,
+    cameraCount: profiles.length,
+    cameras: profiles.map((profile) => {
+      const profileState = cameraDocumentForProfile(clone(renderState), profile.id);
+      const camera = sanitizeCameraPoseFor(profileState, profileState.camera);
+      const setup = sanitizeCameraSetup(profileState.cameraSetup);
+      return {
+        id: profile.id,
+        name: profile.name,
+        color: profile.color,
+        lensMm: camera.focal,
+        sensorFormat: setup.sensorFormat,
+        sensorWidthMm: setup.sensorWidthMm,
+        apertureFStop: setup.apertureFStop,
+        focusDistanceM: round(camera.focusDistanceM, 2),
+        horizontalFovDeg: Math.round(focalToFov(camera.focal, setup.sensorWidthMm)),
+        position: { x: round(camera.x), y: round(camera.y), heightM: round(camera.height, 2) },
+        orientation: { panDeg: round(camera.panDeg, 1), tiltDeg: round(camera.tiltDeg, 1) },
+        trackingTargetId: camera.trackingTargetId || null,
+        keyframes: keysForSource("camera", profileState.motion.keyframes).map((keyframe) => ({
+          id: keyframe.id,
+          time: keyframe.time,
+          transition: normalizeTransition(keyframe.transition),
+          pose: sanitizeCameraPoseFor(profileState, keyframe.pose),
+        })),
+      };
+    }),
   };
 }
 
@@ -9333,8 +12278,11 @@ function selectedPresetMarkdown() {
 
 function cameraMarkdown() {
   const cam = state.camera;
+  const setup = sanitizeCameraSetup(state.cameraSetup);
   return [
-    `- Lens: ${cam.focal}mm / ${Math.round(focalToFov(cam.focal))}° horizontal FOV.`,
+    `- Lens: ${cam.focal}mm on ${cameraSensorFormats[setup.sensorFormat]?.label || "custom"} ${setup.sensorWidthMm}mm / ${Math.round(focalToFov(cam.focal, setup.sensorWidthMm))}° horizontal FOV.`,
+    `- Exposure metadata: f/${setup.apertureFStop}; focus distance ${round(cam.focusDistanceM, 2)}m.`,
+    "- FrisFrame previews sensor-aware framing without depth-of-field blur; Blender output carries the optical metadata.",
     `- Camera mark: (${pct(cam.x)}, ${pct(cam.y)}), ${round(cam.height, 2)}m high.`,
     `- Pan: ${round(cam.panDeg, 1)}° on the blocking map.`,
     `- Tilt: ${round(cam.tiltDeg, 1)}° vertically.`,
@@ -9352,10 +12300,25 @@ function buildBeatTableMarkdown() {
 }
 
 function buildMotionCsv() {
-  const rows = [["time", "transition", "source", "type", "x", "y", "height", "pan_deg", "tilt_deg", "focal", "facing", "size", "name", "asset_type", "scale_x", "scale_y", "scale_z", "mount_id", "seat_index"]];
-  sortKeyframes(state.motion.keyframes).forEach((keyframe) => {
+  const rows = [["time", "transition", "source", "type", "x", "y", "height", "pan_deg", "tilt_deg", "focal", "sensor_format", "sensor_width_mm", "aperture_f", "focus_distance_m", "facing", "size", "name", "asset_type", "scale_x", "scale_y", "scale_z", "mount_id", "seat_index", "vertical_offset", "pitch_deg", "locomotion_mode", "camera_id"]];
+  const profiles = multiCameraCore.normalizeProfiles(
+    state.cameras,
+    state.camera,
+    state.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
+    state.cameraSetup,
+  ).slice(0, 4);
+  const cameraEntries = profiles.flatMap((profile) => profile.keyframes.map((keyframe) => ({ keyframe, profile })));
+  const entries = [
+    ...state.motion.keyframes
+      .filter((keyframe) => keyframe.source !== "camera")
+      .map((keyframe) => ({ keyframe, profile: null })),
+    ...cameraEntries,
+  ].sort((a, b) => Number(a.keyframe.time || 0) - Number(b.keyframe.time || 0));
+  entries.forEach(({ keyframe, profile }) => {
     if (keyframe.source === "camera") {
-      const camera = sanitizeCameraPose(keyframe.pose);
+      const profileState = profile ? cameraDocumentForProfile(clone(state), profile.id) : state;
+      const camera = sanitizeCameraPoseFor(profileState, keyframe.pose);
+      const setup = sanitizeCameraSetup(profileState.cameraSetup);
       rows.push([
         keyframe.time,
         normalizeTransition(keyframe.transition),
@@ -9367,6 +12330,10 @@ function buildMotionCsv() {
         camera.panDeg,
         camera.tiltDeg,
         camera.focal,
+        setup.sensorFormat,
+        setup.sensorWidthMm,
+        setup.apertureFStop,
+        camera.focusDistanceM,
         "",
         "",
         "Camera",
@@ -9376,17 +12343,25 @@ function buildMotionCsv() {
         "",
         "",
         "",
+        "",
+        "",
+        "",
+        profile?.id || activeCameraProfile(state)?.id || "camera-1",
       ]);
       return;
     }
     const item = sanitizeSourcePose(keyframe.source, keyframe.pose);
-    rows.push([keyframe.time, normalizeTransition(keyframe.transition), sourceLabel(keyframe.source), item.type, item.x, item.y, "", "", "", "", item.facing, item.size, item.name, item.assetType, item.scaleX, item.scaleY, item.scaleZ, item.mountId, item.seatIndex]);
+    rows.push([keyframe.time, normalizeTransition(keyframe.transition), sourceLabel(keyframe.source), item.type, item.x, item.y, "", "", "", "", "", "", "", "", item.facing, item.size, item.name, item.assetType, item.scaleX, item.scaleY, item.scaleZ, item.mountId, item.seatIndex, item.verticalOffset, item.pitch, item.type === "actor" ? item.locomotionMode : "", ""]);
   });
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
 function buildBlenderPrevisScript() {
   const size = stageWorldSize(state);
+  const setup = sanitizeCameraSetup(state.cameraSetup);
+  const renderAspect = aspectMap[state.aspect] || 16 / 9;
+  const renderWidth = renderAspect >= 1 ? 1920 : Math.round(1920 * renderAspect);
+  const renderHeight = renderAspect >= 1 ? Math.round(1920 / renderAspect) : 1920;
   const lines = [
     "import bpy",
     "import math",
@@ -9399,6 +12374,8 @@ function buildBlenderPrevisScript() {
     `scene.frame_start = 1`,
     `scene.frame_end = ${Math.max(1, Math.round(state.motion.duration * state.motion.fps))}`,
     `scene.render.fps = ${state.motion.fps}`,
+    `scene.render.resolution_x = ${renderWidth}`,
+    `scene.render.resolution_y = ${renderHeight}`,
     "",
     "def mat(name, color):",
     "    material = bpy.data.materials.new(name)",
@@ -9435,7 +12412,8 @@ function buildBlenderPrevisScript() {
     const [x, y] = blenderXY(item);
     const safeName = pyString(`@${item.name}`);
     if (item.type === "actor") {
-      lines.push(`bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=${round(0.28 * item.size)}, depth=${round(1.35 * item.size)}, location=(${x}, ${y}, ${round(0.675 * item.size)}))`);
+      const actorZ = Number(item.verticalOffset || 0) + Number(item.mountedHeight || 0) + 0.675 * Number(item.size || 1);
+      lines.push(`bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=${round(0.28 * item.size)}, depth=${round(1.35 * item.size)}, location=(${x}, ${y}, ${round(actorZ)}))`);
       lines.push(`obj = bpy.context.object`);
       lines.push(`obj.name = ${safeName}`);
       lines.push("obj.data.materials.append(actor_mat)");
@@ -9451,18 +12429,24 @@ function buildBlenderPrevisScript() {
       lines.push(`obj.dimensions = (${round(0.72 * item.size)}, ${round(0.72 * item.size)}, ${round(0.36 * item.size)})`);
       lines.push("obj.data.materials.append(prop_mat)");
     }
+    if (item.type === "actor") lines.push(`obj.rotation_euler[0] = math.radians(${round(item.pitch || 0)})`);
     lines.push(`obj.rotation_euler[2] = math.radians(${round(90 - item.facing)})`);
     lines.push(`objects[${pyString(item.id)}] = obj`);
     lines.push("");
   });
 
-  const [targetX, targetY] = blenderXY({ x: state.camera.aimX, y: state.camera.aimY });
   const [camX, camY] = blenderXY(state.camera);
+  const [targetX, targetY, targetZ] = blenderCameraTarget(state.camera);
   lines.push(`bpy.ops.object.camera_add(location=(${camX}, ${camY}, ${round(state.camera.height)}))`);
   lines.push("cam = bpy.context.object");
   lines.push("bpy.context.scene.camera = cam");
   lines.push(`cam.data.lens = ${state.camera.focal}`);
-  lines.push(`look_at(cam, (${targetX}, ${targetY}, ${round(state.camera.focusHeight)}))`);
+  lines.push("cam.data.sensor_fit = 'HORIZONTAL'");
+  lines.push(`cam.data.sensor_width = ${setup.sensorWidthMm}`);
+  lines.push("cam.data.dof.use_dof = True");
+  lines.push(`cam.data.dof.aperture_fstop = ${setup.apertureFStop}`);
+  lines.push(`cam.data.dof.focus_distance = ${round(state.camera.focusDistanceM, 3)}`);
+  lines.push(`look_at(cam, (${targetX}, ${targetY}, ${targetZ}))`);
   lines.push("");
 
   const previousBlenderFrames = new Map();
@@ -9473,13 +12457,15 @@ function buildBlenderPrevisScript() {
     if (keyframe.source === "camera") {
       const camera = sanitizeCameraPose(keyframe.pose);
       const [x, y] = blenderXY(camera);
-      const [ax, ay] = blenderXY({ x: camera.aimX, y: camera.aimY });
+      const [ax, ay, az] = blenderCameraTarget(camera);
       lines.push(`cam.location = (${x}, ${y}, ${round(camera.height)})`);
-      lines.push(`look_at(cam, (${ax}, ${ay}, ${round(camera.focusHeight)}))`);
+      lines.push(`look_at(cam, (${ax}, ${ay}, ${az}))`);
       lines.push(`cam.data.lens = ${camera.focal}`);
+      lines.push(`cam.data.dof.focus_distance = ${round(camera.focusDistanceM, 3)}`);
       lines.push(`cam.keyframe_insert(data_path='location', frame=${frame})`);
       lines.push(`cam.keyframe_insert(data_path='rotation_euler', frame=${frame})`);
       lines.push(`cam.data.keyframe_insert(data_path='lens', frame=${frame})`);
+      lines.push(`cam.data.keyframe_insert(data_path='dof.focus_distance', frame=${frame})`);
       if (previousFrame != null) {
         lines.push(`set_interpolation(cam, ${previousFrame}, '${interpolation}')`);
         lines.push(`set_interpolation(cam.data, ${previousFrame}, '${interpolation}')`);
@@ -9491,6 +12477,10 @@ function buildBlenderPrevisScript() {
       lines.push("if obj:");
       lines.push(`    obj.location.x = ${x}`);
       lines.push(`    obj.location.y = ${y}`);
+      if (item.type === "actor") {
+        lines.push(`    obj.location.z = ${round(Number(item.verticalOffset || 0) + Number(item.mountedHeight || 0) + 0.675 * Number(item.size || 1))}`);
+        lines.push(`    obj.rotation_euler[0] = math.radians(${round(item.pitch || 0)})`);
+      }
       lines.push(`    obj.rotation_euler[2] = math.radians(${round(90 - item.facing)})`);
       lines.push(`    obj.keyframe_insert(data_path='location', frame=${frame})`);
       lines.push(`    obj.keyframe_insert(data_path='rotation_euler', frame=${frame})`);
@@ -9515,9 +12505,10 @@ async function captureCameraFrameBlob(renderState = state) {
   if (!window.THREE || !initThreeView()) throw new Error("3D 카메라 프레임을 준비하지 못했습니다.");
   let blob = null;
   await withCameraFrameCapture(async () => {
-    renderThreeView(renderState, true, { guide: false });
+    renderThreeView(renderState, true, { guide: false, multiCamera: false });
     await nextFrame();
-    blob = await canvasToBlob(threeView.frameCanvas, "image/png");
+    const compCanvas = getCompositedFrameCanvas(renderState) || threeView.frameCanvas;
+    blob = await canvasToBlob(compCanvas, "image/png");
   });
   if (!blob) throw new Error("3D 카메라 프레임을 렌더링하지 못했습니다.");
   return blob;
@@ -9531,17 +12522,18 @@ async function captureStoryboardFrames() {
     for (let index = 0; index < times.length; index += 1) {
       const time = times[index];
       const renderState = interpolateStateAtTime(time);
-      renderThreeView(renderState, true, { guide: false });
+      renderThreeView(renderState, true, { guide: false, multiCamera: false });
       await nextFrame();
       const safeTime = String(Math.round(time * 10)).padStart(4, "0");
       const path = `storyboard/frame_${String(index + 1).padStart(2, "0")}_${safeTime}.png`;
+      const compCanvas = getCompositedFrameCanvas(renderState) || threeView.frameCanvas;
       frames.push({
         time,
         path,
         relativePath: `../${path}`,
         label: `${time.toFixed(1)}s`,
         summary: storyboardFrameSummary(renderState, time),
-        blob: await canvasToBlob(threeView.frameCanvas, "image/png"),
+        blob: await canvasToBlob(compCanvas, "image/png"),
       });
     }
   });
@@ -9583,7 +12575,7 @@ function storyboardTimes() {
     .filter((time) => Number.isFinite(time))
     .map((time) => clamp(time, 0, state.motion.duration))
     .sort((a, b) => a - b)
-    .filter((time, index, list) => index === 0 || Math.abs(time - list[index - 1]) > 0.05)
+    .filter((time, index, list) => index === 0 || !sameTimelineTime(time, list[index - 1], 0.0005))
     .slice(0, 12);
 }
 
@@ -9732,7 +12724,7 @@ async function renderCameraFrameBlobAtTime(time, documentState, size = exportSiz
     documentState,
     clamp(Number(time || 0), 0, documentState.motion.duration),
   );
-  renderThreeView(renderState, true, { ...size, guide: false });
+  renderThreeView(renderState, true, { ...size, guide: false, multiCamera: false });
   await nextFrame();
   const blob = await canvasToBlob(threeView.frameCanvas, "image/png");
   resizeThreeView();
@@ -9756,6 +12748,128 @@ async function exportCurrentCameraFrame() {
   } finally {
     endMediaExport();
   }
+}
+
+async function exportMultiCameraPreview() {
+  if (!beginMediaExport()) return;
+  syncActiveCutDocument(false);
+  syncActiveCameraProfile();
+  const exportState = clone(state);
+  const time = clamp(Number(displayPlayhead() || 0), 0, exportState.motion.duration);
+  const profiles = multiCameraCore.normalizeProfiles(
+    exportState.cameras,
+    exportState.camera,
+    exportState.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
+    exportState.cameraSetup,
+  ).slice(0, 4);
+  try {
+    notifyApp(`${profiles.length}대 멀티캠 프리뷰를 준비하고 있습니다.`);
+    const items = [];
+    for (const profile of profiles) {
+      const profileState = cameraDocumentForProfile(exportState, profile.id);
+      const blob = await renderCameraFrameBlobAtTime(time, profileState, exportSize(profileState));
+      items.push({ blob, caption: `${profile.name} · ${time.toFixed(1)}초` });
+    }
+    const sheet = await renderMultiCameraContactSheet(items, exportState, time);
+    presentExport(
+      sheet,
+      `${slug(exportState.sceneTitle)}_multicam_${formatFrameTime(time)}.png`,
+      "멀티카메라 프리뷰 PNG",
+      {
+        type: "images",
+        summary: `${profiles.length}대 카메라 · ${time.toFixed(1)}초 · 각 화면의 이미지 복사 가능`,
+        items,
+        notes: [
+          "저장 버튼은 전체 멀티캠 시트를 저장합니다.",
+          "개별 카메라 이미지는 각 화면의 이미지 복사 버튼으로 클립보드에 넣을 수 있습니다.",
+        ],
+      },
+    );
+  } catch (error) {
+    console.error("multi-camera preview failed", error);
+    presentExportError(error?.message || "멀티캠 프리뷰를 준비하지 못했습니다.");
+  } finally {
+    endMediaExport();
+  }
+}
+
+async function renderMultiCameraContactSheet(items, renderState, time) {
+  const columns = items.length <= 1 ? 1 : 2;
+  const rows = Math.ceil(items.length / columns);
+  const tileWidth = 960;
+  const tileHeight = Math.round(tileWidth / (aspectMap[renderState.aspect] || 16 / 9));
+  const labelHeight = 58;
+  const gap = 24;
+  const margin = 44;
+  const sheet = document.createElement("canvas");
+  sheet.width = margin * 2 + columns * tileWidth + (columns - 1) * gap;
+  sheet.height = margin * 2 + rows * (tileHeight + labelHeight) + (rows - 1) * gap;
+  const context = sheet.getContext("2d");
+  context.fillStyle = "#0b0e12";
+  context.fillRect(0, 0, sheet.width, sheet.height);
+  context.fillStyle = "#f1f5ef";
+  context.font = '800 28px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+  context.fillText(`${renderState.sceneTitle || "FrisFrame"} · 멀티카메라`, margin, 32);
+  context.fillStyle = "#8e9aa1";
+  context.font = '600 16px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+  context.fillText(`${time.toFixed(1)}초 · ${items.length}대`, margin, 58);
+  for (let index = 0; index < items.length; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = margin + column * (tileWidth + gap);
+    const y = margin + row * (tileHeight + labelHeight + gap) + 24;
+    const image = await imageFromBlob(items[index].blob);
+    context.drawImage(image, x, y, tileWidth, tileHeight);
+    context.strokeStyle = "#3d4e58";
+    context.lineWidth = 2;
+    context.strokeRect(x, y, tileWidth, tileHeight);
+    context.fillStyle = "#c7d6d2";
+    context.font = '700 18px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+    context.fillText(items[index].caption, x, y + tileHeight + 34);
+  }
+  return canvasToBlob(sheet, "image/png");
+}
+
+async function exportSelectedCutFrame() {
+  const cut = currentCut();
+  const scene = currentScene();
+  if (!cut || !scene) return;
+  if (!beginMediaExport()) return;
+  try {
+    syncActiveCutDocument(false);
+    const exportState = clone(cut.blocking);
+    const time = clamp(Number(cut.thumbnailTime || 0), 0, exportState.motion.duration);
+    const profile = activeCameraProfile(exportState);
+    const blob = await renderCameraFrameBlobAtTime(time, exportState, exportSize(exportState));
+    presentExport(
+      blob,
+      `${slug(`S${scene.number}_C${cut.number}_${cut.title}`)}_${slug(profile?.name || "camera")}.png`,
+      "선택 컷 카메라 프레임 PNG",
+      {
+        type: "image",
+        blob,
+        caption: `${storyboardCutCode(scene, cut)} · ${profile?.name || "카메라"} · ${time.toFixed(1)}초`,
+        notes: ["이미지 복사 버튼으로 현재 컷 프레임을 클립보드에 넣을 수 있습니다."],
+      },
+    );
+  } catch (error) {
+    presentExportError(error?.message || "선택 컷 이미지를 준비하지 못했습니다.");
+  } finally {
+    endMediaExport();
+  }
+}
+
+async function exportSelectedCutVideo() {
+  const cut = currentCut();
+  const scene = currentScene();
+  if (!cut || !scene) return;
+  syncActiveCutDocument(false);
+  const profile = activeCameraProfile(cut.blocking);
+  await exportVideoForDocument(clone(cut.blocking), {
+    filename: `${slug(`S${scene.number}_C${cut.number}_${cut.title}`)}_${slug(profile?.name || "camera")}_previs.mp4`,
+    exportLabel: "선택 컷 프리비즈 H.264 MP4",
+    cutLabel: `${storyboardCutCode(scene, cut)} · ${profile?.name || "카메라"}`,
+  });
 }
 
 async function exportStartEndCameraFrames() {
@@ -10747,7 +13861,35 @@ function renderToCanvas(target, renderState, options = {}) {
 }
 
 async function exportVideo() {
+  syncActiveCameraProfile();
+  return exportVideoForDocument(clone(state));
+}
+
+async function exportMultiCameraVideo() {
+  syncActiveCutDocument(false);
+  syncActiveCameraProfile();
   const exportState = clone(state);
+  const profiles = multiCameraCore.normalizeProfiles(
+    exportState.cameras,
+    exportState.camera,
+    exportState.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
+    exportState.cameraSetup,
+  ).slice(0, 4);
+  if (profiles.length < 2) {
+    notifyApp("멀티캠 영상을 만들려면 카메라를 2대 이상 추가하세요.");
+    return;
+  }
+  return exportVideoForDocument(exportState, {
+    multiCamera: true,
+    cameraCount: profiles.length,
+    filename: `${slug(exportState.sceneTitle)}_multicam_previs.mp4`,
+    exportLabel: "멀티카메라 프리비즈 H.264 MP4",
+    cutLabel: `${profiles.length}대 멀티캠 · 카메라 순서대로 분할 표시`,
+  });
+}
+
+async function exportVideoForDocument(documentState, options = {}) {
+  const exportState = clone(documentState || state);
   const fps = clamp(Math.round(Number(exportState.motion.fps || 24)), 12, 60);
   const frameCount = Math.max(2, Math.round(exportState.motion.duration * fps));
   if (frameCount > 1800 && !confirm(
@@ -10759,7 +13901,7 @@ async function exportVideo() {
     endMediaExport();
     return;
   }
-  const size = exportVideoSize(exportState);
+  const size = exportVideoSize(exportState, options);
   const previousSelection = clone(selected);
   let jobId = "";
   try {
@@ -10796,7 +13938,7 @@ async function exportVideo() {
 
       const progress = frameCount <= 1 ? 0 : index / (frameCount - 1);
       const renderState = interpolateRenderStateAtTime(exportState, progress * exportState.motion.duration);
-      renderThreeView(renderState, true, size);
+      renderThreeView(renderState, true, { ...size, multiCamera: options.multiCamera === true });
       await nextFrame();
       const frameBlob = await canvasToBlob(threeView.frameCanvas, "image/jpeg", 0.9);
 
@@ -10824,11 +13966,12 @@ async function exportVideo() {
     renderMediaExportBusy();
     const blob = await finishMp4ExportJob(jobId);
     jobId = "";
-    const filename = `${slug(exportState.sceneTitle)}_previs_preview.mp4`;
-    presentExport(blob, filename, "프리비즈 H.264 MP4", {
+    const filename = options.filename || `${slug(exportState.sceneTitle)}_previs_preview.mp4`;
+    const label = options.exportLabel || "프리비즈 H.264 MP4";
+    presentExport(blob, filename, label, {
       type: "video",
       blob,
-      caption: `${exportState.motion.duration.toFixed(1)}초 · ${fps}FPS · ${frameCount}프레임`,
+      caption: `${options.cutLabel ? `${options.cutLabel} · ` : ""}${exportState.motion.duration.toFixed(1)}초 · ${fps}FPS · ${frameCount}프레임${options.multiCamera ? ` · ${options.cameraCount || cameraProfileCount(exportState)}대` : ""}`,
     });
   } catch (error) {
     if (jobId) await cancelMp4ExportJob(jobId);
@@ -10844,8 +13987,15 @@ async function exportVideo() {
   }
 }
 
-function exportVideoSize(renderState = state) {
+function exportVideoSize(renderState = state, options = {}) {
   const ratio = aspectMap[renderState.aspect] || 16 / 9;
+  if (options.multiCamera) {
+    const count = Math.max(1, Math.min(4, Number(options.cameraCount || cameraProfileCount(renderState))));
+    const layout = cameraPreviewGridLayout(count);
+    const tileWidth = ratio >= 1 ? 960 : Math.round(960 * ratio);
+    const tileHeight = ratio >= 1 ? Math.round(960 / ratio) : 960;
+    return { width: tileWidth * layout.columns, height: tileHeight * layout.rows };
+  }
   if (ratio >= 1) return { width: 1280, height: Math.round(1280 / ratio) };
   return { width: Math.round(1280 * ratio), height: 1280 };
 }
@@ -10920,6 +14070,15 @@ function renderMediaExportBusy() {
     "#framePanelBtn": "현재 프레임",
     "#framePairBtn": "시작·끝 프레임",
     "#framePairPanelBtn": "시작·끝",
+    "#productionPackBtn": "촬영 자료 ZIP",
+    "#productionPackPanelBtn": "촬영 자료",
+    "#multiCamPreviewBtn": "멀티캠 프리뷰",
+    "#multiCamPreviewPanelBtn": "멀티캠 보기",
+    "#multiCamPreviewPanelBtnSecondary": "멀티캠",
+    "#multiCamVideoBtn": "멀티캠 영상",
+    "#multiCamVideoPanelBtn": "멀티캠 영상",
+    "#selectedCutFrameBtn": "이 컷 이미지",
+    "#selectedCutVideoBtn": "이 컷 영상",
     "#videoBtn": "프리비즈 영상",
     "#videoPanelBtn": "프리비즈 영상",
   };
@@ -10927,7 +14086,7 @@ function renderMediaExportBusy() {
     const button = $(selector);
     if (!button) return;
     button.disabled = mediaExportBusy;
-    const isVideoButton = selector === "#videoBtn" || selector === "#videoPanelBtn";
+    const isVideoButton = ["#videoBtn", "#videoPanelBtn", "#multiCamVideoBtn", "#multiCamVideoPanelBtn", "#selectedCutVideoBtn"].includes(selector);
     const text = mediaExportBusy && isVideoButton ? mediaExportProgress || "준비 중" : label;
     const textElement = button.querySelector("span");
     if (textElement) textElement.textContent = text;
@@ -10940,7 +14099,8 @@ function renderMediaExportBusy() {
 
 function buildSeedancePrompt() {
   const cam = state.camera;
-  const fov = Math.round(focalToFov(cam.focal));
+  const setup = sanitizeCameraSetup(state.cameraSetup);
+  const fov = Math.round(focalToFov(cam.focal, setup.sensorWidthMm));
   const angle = cameraHeadingDeg(cam);
   const actors = state.items.filter((item) => item.type === "actor");
   const props = state.items.filter((item) => item.type === "prop");
@@ -10961,7 +14121,7 @@ function buildSeedancePrompt() {
     "Motion responsibility by segment:",
     ...motionResponsibility,
     "",
-    `Camera: position (${pct(cam.x)}, ${pct(cam.y)}) at ${round(cam.height, 2)}m height, pan ${round(cam.panDeg, 1)}°, tilt ${round(cam.tiltDeg, 1)}°, approximate ${cam.focal}mm lens / ${fov}° horizontal field of view, facing ${angle}° on the top-down map.`,
+    `Camera: position (${pct(cam.x)}, ${pct(cam.y)}) at ${round(cam.height, 2)}m height, pan ${round(cam.panDeg, 1)}°, tilt ${round(cam.tiltDeg, 1)}°, ${cam.focal}mm lens on ${setup.sensorWidthMm}mm sensor / ${fov}° horizontal field of view, f/${setup.apertureFStop}, focus ${round(cam.focusDistanceM, 2)}m, facing ${angle}° on the top-down map.`,
     "",
     "Motion keyframes:",
     ...keyframes.map((keyframe) => `- ${sourceLabel(keyframe.source)} · ${keyframe.label} at ${keyframe.time.toFixed(1)}s · ${keyTransitionLabels[normalizeTransition(keyframe.transition)]}: ${keyframeSummary(keyframe)}.`),
@@ -11005,7 +14165,7 @@ function buildSeedanceGuideSegments(renderState) {
 function keyframeSummary(keyframe) {
   if (keyframe.source === "camera") {
     const camera = sanitizeCameraPose(keyframe.pose);
-    return `H ${round(camera.height, 2)}m · camera (${pct(camera.x)}, ${pct(camera.y)}) · pan ${round(camera.panDeg, 1)}° · tilt ${round(camera.tiltDeg, 1)}°`;
+    return `H ${round(camera.height, 2)}m · camera (${pct(camera.x)}, ${pct(camera.y)}) · pan ${round(camera.panDeg, 1)}° · tilt ${round(camera.tiltDeg, 1)}° · focus ${round(camera.focusDistanceM, 2)}m`;
   }
   const item = sanitizeSourcePose(keyframe.source, keyframe.pose);
   return `@${item.name} ${positionText(item)} facing ${Math.round(item.facing)}°`;
@@ -11022,7 +14182,11 @@ function positionText(item) {
   return `${horizontal} ${depth} area at (${pct(pose.x)}, ${pct(pose.y)})`;
 }
 
-function presentExport(data, filename, label, preview = null) {
+function presentExport(data, filename, label, preview) {
+  if (!preview || !["image", "images", "video", "text"].includes(preview.type)) {
+    presentExportError("저장 전에 확인할 프리뷰가 없어 내보내기를 중단했습니다.");
+    return;
+  }
   const blob = data instanceof Blob ? data : new Blob([String(data)], { type: "text/plain;charset=utf-8" });
   revokePendingExportUrls(pendingExport);
   const url = URL.createObjectURL(blob);
@@ -11037,6 +14201,7 @@ function presentExport(data, filename, label, preview = null) {
   info.textContent = `${label}입니다. 아래 프리뷰를 확인한 뒤 저장하세요. 자동으로 저장되지 않습니다.`;
   body.append(name, info);
   renderExportPreview(body, preview);
+  $("#exportSaveStatus").textContent = "자동 저장 안 함";
   $("#exportDownloadBtn").hidden = false;
   $("#exportDialog").showModal();
 }
@@ -11048,6 +14213,13 @@ function renderExportPreview(body, preview) {
   const heading = document.createElement("h3");
   heading.textContent = "저장 전 프리뷰";
   section.append(heading);
+
+  if (preview.summary) {
+    const summary = document.createElement("pre");
+    summary.className = "export-preview-text";
+    summary.textContent = String(preview.summary);
+    section.append(summary);
+  }
 
   if (preview.type === "image") {
     section.append(createExportPreviewFigure(preview.blob, preview.caption, "image"));
@@ -11180,37 +14352,51 @@ function presentExportError(message) {
   $("#exportDialog").showModal();
 }
 
-$("#exportDownloadBtn").addEventListener("click", (event) => {
+$("#exportDownloadBtn").addEventListener("click", async (event) => {
   // Keep every export behind a genuine user action. Programmatic clicks must never download files.
   if (!event.isTrusted || !pendingExport) return;
-  const exportUrl = pendingExport.url;
-  const link = document.createElement("a");
-  link.href = exportUrl;
-  link.download = pendingExport.filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  const completedExport = pendingExport;
-  pendingExport = null;
-  $("#exportDialog").close();
-  if (completedExport.filename.endsWith("_storyboard_project.json")) {
-    notifyApp("프로젝트 JSON 백업을 저장했습니다.");
+  const saveButton = event.currentTarget;
+  const status = $("#exportSaveStatus");
+  const exportInfo = pendingExport;
+  saveButton.disabled = true;
+  status.textContent = "저장 위치를 선택하세요";
+  try {
+    if (typeof window.frisframeDesktop?.saveFile === "function") {
+      const result = await window.frisframeDesktop.saveFile({
+        filename: exportInfo.filename,
+        bytes: new Uint8Array(await exportInfo.blob.arrayBuffer()),
+      });
+      if (result?.canceled) {
+        status.textContent = "저장이 취소되었습니다. 프리뷰는 유지됩니다";
+        return;
+      }
+      if (!result?.ok) throw new Error("Desktop file save failed.");
+    } else {
+      const link = document.createElement("a");
+      link.href = exportInfo.url;
+      link.download = exportInfo.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+    }
+    pendingExport = null;
+    $("#exportDialog").close();
+    if (exportInfo.filename.endsWith("_storyboard_project.json")) {
+      notifyApp("프로젝트 JSON 백업을 저장했습니다.");
+    }
+    revokePendingExportUrls(exportInfo, 2000);
+  } catch (error) {
+    console.error("export save failed", error);
+    status.textContent = "파일을 저장하지 못했습니다. 다시 시도하세요";
+  } finally {
+    saveButton.disabled = false;
   }
-  revokePendingExportUrls(completedExport, 2000);
 });
 
 $("#exportDialog").addEventListener("close", () => {
   revokePendingExportUrls(pendingExport);
   pendingExport = null;
 });
-
-function downloadUrl(url, filename) {
-  presentExport(url, filename, "파일");
-}
-
-function downloadBlob(blob, filename) {
-  presentExport(blob, filename, "파일");
-}
 
 function canvasToBlob(sourceCanvas, type = "image/png", quality) {
   return new Promise((resolve, reject) => {
@@ -11298,6 +14484,865 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+let draggedAnnoId = null;
+let draggedAnnoStartPos = null;
+let dragStartPointer = null;
+let selectedAnnoId = null;
+const ERASER_RADIUS = 20; // px — Photoshop-style partial erase radius
+
+function findAnnotationAt(clientX, clientY) {
+  const currentTab = viewMode === "2d" ? "2d" : "3d";
+  const items = state.annotations || [];
+  
+  let w, h, offsetX = 0, offsetY = 0;
+  let rect = null;
+  
+  if (currentTab === "2d") {
+    rect = stageRect;
+    const stageCanvasRect = canvas.getBoundingClientRect();
+    const clickX = clientX - stageCanvasRect.left;
+    const clickY = clientY - stageCanvasRect.top;
+    
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item.tab !== "2d") continue;
+      
+      if (item.type === "text" && item.text) {
+        const px = rect.x + item.x * rect.w;
+        const py = rect.y + item.y * rect.h;
+        
+        ctx.save();
+        ctx.font = "bold 15px sans-serif";
+        const textWidth = ctx.measureText(item.text).width;
+        ctx.restore();
+        
+        const textPadding = 8;
+        const textHeight = 26;
+        
+        const x1 = px - textPadding;
+        const x2 = px + textWidth + textPadding;
+        const y1 = py - 20;
+        const y2 = py - 20 + textHeight;
+        
+        if (clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2) {
+          return item;
+        }
+      } else if (item.type === "pen" && item.points) {
+        for (let pt of item.points) {
+          const px = rect.x + pt.x * rect.w;
+          const py = rect.y + pt.y * rect.h;
+          if (Math.hypot(clickX - px, clickY - py) < 15) {
+            return item;
+          }
+        }
+      } else if (item.type === "arrow" && item.start && item.end) {
+        const px1 = rect.x + item.start.x * rect.w;
+        const py1 = rect.y + item.start.y * rect.h;
+        const px2 = rect.x + item.end.x * rect.w;
+        const py2 = rect.y + item.end.y * rect.h;
+        const midX = (px1 + px2) / 2;
+        const midY = (py1 + py2) / 2;
+        if (Math.hypot(clickX - px1, clickY - py1) < 15 || 
+            Math.hypot(clickX - px2, clickY - py2) < 15 ||
+            Math.hypot(clickX - midX, clickY - midY) < 15) {
+          return item;
+        }
+      }
+    }
+  } else {
+    const threeWrap = document.getElementById("threeWrap");
+    if (!threeWrap || threeWrap.hidden) return null;
+    const wrapRect = threeWrap.getBoundingClientRect();
+    const parentRect = threeWrap.parentElement.getBoundingClientRect();
+    offsetX = wrapRect.left - parentRect.left;
+    offsetY = wrapRect.top - parentRect.top;
+    w = wrapRect.width;
+    h = wrapRect.height;
+    
+    const overlay = document.getElementById("annotationOverlay");
+    const overlayRect = overlay.getBoundingClientRect();
+    const clickX = clientX - overlayRect.left;
+    const clickY = clientY - overlayRect.top;
+    
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item.tab !== "3d") continue;
+      
+      if (item.type === "text" && item.text) {
+        const px = offsetX + item.x * w;
+        const py = offsetY + item.y * h;
+        
+        const overlayCtx = overlay.getContext("2d");
+        overlayCtx.save();
+        overlayCtx.font = "bold 15px sans-serif";
+        const textWidth = overlayCtx.measureText(item.text).width;
+        overlayCtx.restore();
+        
+        const textPadding = 8;
+        const textHeight = 26;
+        
+        const x1 = px - textPadding;
+        const x2 = px + textWidth + textPadding;
+        const y1 = py - 20;
+        const y2 = py - 20 + textHeight;
+        
+        if (clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2) {
+          return item;
+        }
+      } else if (item.type === "pen" && item.points) {
+        for (let pt of item.points) {
+          const px = offsetX + pt.x * w;
+          const py = offsetY + pt.y * h;
+          if (Math.hypot(clickX - px, clickY - py) < 15) {
+            return item;
+          }
+        }
+      } else if (item.type === "arrow" && item.start && item.end) {
+        const px1 = offsetX + item.start.x * w;
+        const py1 = offsetY + item.start.y * h;
+        const px2 = offsetX + item.end.x * w;
+        const py2 = offsetY + item.end.y * h;
+        const midX = (px1 + px2) / 2;
+        const midY = (py1 + py2) / 2;
+        if (Math.hypot(clickX - px1, clickY - py1) < 15 || 
+            Math.hypot(clickX - px2, clickY - py2) < 15 ||
+            Math.hypot(clickX - midX, clickY - midY) < 15) {
+          return item;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function selectAnnoTool(tool) {
+  const overlay = document.getElementById("annotationOverlay");
+  if (!overlay) return;
+
+  const toolButtons = {
+    select: document.getElementById("annoToolSelect"),
+    pen: document.getElementById("annoToolPen"),
+    arrow: document.getElementById("annoToolArrow"),
+    text: document.getElementById("annoToolText"),
+    eraser: document.getElementById("annoToolEraser")
+  };
+
+  // Toggle: clicking the active tool turns it off
+  if (currentAnnoTool === tool) {
+    currentAnnoTool = "none";
+  } else {
+    currentAnnoTool = tool;
+  }
+
+  Object.keys(toolButtons).forEach(key => {
+    if (toolButtons[key]) {
+      toolButtons[key].classList.toggle("active", key === currentAnnoTool);
+    }
+  });
+
+  if (currentAnnoTool !== "none") {
+    overlay.classList.add("active");
+    if (currentAnnoTool === "eraser") {
+      // None custom cursor — we draw the eraser circle on the overlay canvas
+      overlay.style.cursor = "none";
+    } else if (currentAnnoTool === "select") {
+      overlay.style.cursor = "default";
+    } else {
+      overlay.style.cursor = "crosshair";
+    }
+  } else {
+    overlay.classList.remove("active");
+    overlay.style.cursor = "default";
+    // Clear drag state when fully deactivating
+    draggedAnnoId = null;
+    draggedAnnoStartPos = null;
+    dragStartPointer = null;
+  }
+  // NOTE: selectedAnnoId is intentionally NOT cleared here so
+  // delete-selected still works after switching away from select tool.
+
+  drawAnnotations();
+}
+
+/**
+ * Photoshop-style eraser applied at (clientX, clientY).
+ *  - Pen strokes: removes points within ERASER_RADIUS px; splits into sub-strokes.
+ *  - Arrows: removes if the eraser circle overlaps the line.
+ *  - Text: removes if the eraser center is inside the bounding box.
+ * Returns true when any annotation changed.
+ */
+function applyEraserAt(clientX, clientY) {
+  const currentTab = viewMode === "2d" ? "2d" : "3d";
+  const r = ERASER_RADIUS;
+  let changed = false;
+
+  // Coordinate helpers -------------------------------------------------------
+  function screenToCanvas(item) {
+    // Returns screen-space pixel coords for a normalised annotation coordinate.
+    // Returns {x, y} in overlay-canvas CSS-pixel space.
+    if (currentTab === "2d") {
+      const stageCanvasRect = canvas.getBoundingClientRect();
+      const overlayRect = document.getElementById("annotationOverlay").getBoundingClientRect();
+      const ox = stageCanvasRect.left - overlayRect.left;
+      const oy = stageCanvasRect.top - overlayRect.top;
+      return {
+        x: ox + stageRect.x + item.x * stageRect.w,
+        y: oy + stageRect.y + item.y * stageRect.h
+      };
+    } else {
+      const threeWrap = document.getElementById("threeWrap");
+      if (!threeWrap) return { x: 0, y: 0 };
+      const wr = threeWrap.getBoundingClientRect();
+      const pr = threeWrap.parentElement.getBoundingClientRect();
+      return {
+        x: (wr.left - pr.left) + item.x * wr.width,
+        y: (wr.top - pr.top) + item.y * wr.height
+      };
+    }
+  }
+
+  function ptScreenPos(pt) { return screenToCanvas(pt); }
+
+  function lineSegDistSq(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return (px - ax) ** 2 + (py - ay) ** 2;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    return (px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2;
+  }
+
+  // Eraser screen position (CSS-pixel relative to overlay)
+  const overlayEl = document.getElementById("annotationOverlay");
+  const overlayRect = overlayEl ? overlayEl.getBoundingClientRect() : { left: 0, top: 0 };
+  const ex = clientX - overlayRect.left;
+  const ey = clientY - overlayRect.top;
+
+  const surviving = [];
+
+  for (const anno of state.annotations) {
+    if (anno.tab !== currentTab) {
+      surviving.push(anno);
+      continue;
+    }
+
+    if (anno.type === "pen" && anno.points && anno.points.length > 0) {
+      // Filter out points within radius
+      const kept = anno.points.map(pt => {
+        const s = ptScreenPos(pt);
+        return Math.hypot(ex - s.x, ey - s.y) > r;
+      });
+
+      // Split into continuous sub-strokes
+      const segments = [];
+      let seg = null;
+      for (let i = 0; i < anno.points.length; i++) {
+        if (kept[i]) {
+          if (!seg) seg = [];
+          seg.push(anno.points[i]);
+        } else {
+          if (seg && seg.length >= 2) segments.push(seg);
+          seg = null;
+        }
+      }
+      if (seg && seg.length >= 2) segments.push(seg);
+
+      if (segments.length === 0) {
+        // Entire stroke erased
+        if (selectedAnnoId === anno.id) selectedAnnoId = null;
+        changed = true;
+      } else if (segments.length === 1 && segments[0].length === anno.points.length) {
+        // Unchanged
+        surviving.push(anno);
+      } else {
+        // Replaced by sub-strokes
+        changed = true;
+        if (selectedAnnoId === anno.id) selectedAnnoId = null;
+        for (const s of segments) {
+          surviving.push({ id: uid(), type: "pen", tab: anno.tab, color: anno.color, points: s });
+        }
+      }
+
+    } else if (anno.type === "arrow" && anno.start && anno.end) {
+      const s1 = screenToCanvas(anno.start);
+      const s2 = screenToCanvas(anno.end);
+      const distSq = lineSegDistSq(ex, ey, s1.x, s1.y, s2.x, s2.y);
+      if (distSq <= r * r) {
+        if (selectedAnnoId === anno.id) selectedAnnoId = null;
+        changed = true;
+      } else {
+        surviving.push(anno);
+      }
+
+    } else if (anno.type === "text" && anno.text) {
+      // Use the text bounding box (same calc as drawing)
+      const sp = screenToCanvas({ x: anno.x, y: anno.y });
+      const overlayCtxTemp = overlayEl ? overlayEl.getContext("2d") : null;
+      let tw = 80;
+      if (overlayCtxTemp) {
+        overlayCtxTemp.save();
+        overlayCtxTemp.font = "bold 15px sans-serif";
+        tw = overlayCtxTemp.measureText(anno.text).width;
+        overlayCtxTemp.restore();
+      }
+      const pad = 8, th = 26;
+      const x1 = sp.x - pad - r * 0.5, y1 = sp.y - 20 - r * 0.5;
+      const x2 = sp.x + tw + pad + r * 0.5, y2 = sp.y - 20 + th + r * 0.5;
+      if (ex >= x1 && ex <= x2 && ey >= y1 && ey <= y2) {
+        if (selectedAnnoId === anno.id) selectedAnnoId = null;
+        changed = true;
+      } else {
+        surviving.push(anno);
+      }
+
+    } else {
+      surviving.push(anno);
+    }
+  }
+
+  if (changed) {
+    state.annotations = surviving;
+  }
+  return changed;
+}
+
+/** Draws the eraser circle preview on the annotation overlay at the given client position */
+function drawEraserCursor(clientX, clientY) {
+  const overlayEl = document.getElementById("annotationOverlay");
+  if (!overlayEl) return;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const overlayRect = overlayEl.getBoundingClientRect();
+  const ex = clientX - overlayRect.left;
+  const ey = clientY - overlayRect.top;
+  const ctxAnno = overlayEl.getContext("2d");
+  // Draw eraser preview circle on top of existing annotation canvas content
+  ctxAnno.save();
+  ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctxAnno.beginPath();
+  ctxAnno.arc(ex, ey, ERASER_RADIUS, 0, Math.PI * 2);
+  ctxAnno.strokeStyle = "rgba(255,255,255,0.8)";
+  ctxAnno.lineWidth = 1.5;
+  ctxAnno.setLineDash([3, 3]);
+  ctxAnno.stroke();
+  ctxAnno.beginPath();
+  ctxAnno.arc(ex, ey, 2, 0, Math.PI * 2);
+  ctxAnno.fillStyle = "rgba(255,100,100,0.9)";
+  ctxAnno.fill();
+  ctxAnno.restore();
+}
+
+function onAnnoPointerDown(e) {
+  if (currentAnnoTool === "none") return;
+  const overlay = document.getElementById("annotationOverlay");
+  if (!overlay) return;
+  try {
+    overlay.setPointerCapture(e.pointerId);
+  } catch (err) {}
+
+  if (activeSourceId() !== "all" && sourceEditLocked(activeSourceId())) {
+    notifyApp("편집이 잠긴 대상 상태에서는 주석을 편집할 수 없습니다.");
+    return;
+  }
+
+  if (currentAnnoTool === "select") {
+    const item = findAnnotationAt(e.clientX, e.clientY);
+    if (item) {
+      draggedAnnoId = item.id;
+      selectedAnnoId = item.id;
+      if (item.size && typeof window.updateAnnoSizeUI === "function") {
+        window.updateAnnoSizeUI(item.size);
+      }
+      dragStartPointer = { x: e.clientX, y: e.clientY };
+      if (item.type === "text") {
+        draggedAnnoStartPos = { x: item.x, y: item.y };
+      } else if (item.type === "arrow") {
+        draggedAnnoStartPos = {
+          start: { x: item.start.x, y: item.start.y },
+          end: { x: item.end.x, y: item.end.y }
+        };
+      } else if (item.type === "pen") {
+        draggedAnnoStartPos = item.points.map(pt => ({ x: pt.x, y: pt.y }));
+      }
+    } else {
+      selectedAnnoId = null;
+    }
+    drawAnnotations();
+    draw();
+    return;
+  }
+
+  if (currentAnnoTool === "eraser") {
+    isAnnoDrawing = true;
+    if (applyEraserAt(e.clientX, e.clientY)) {
+      commit();
+      drawAnnotations();
+      drawEraserCursor(e.clientX, e.clientY);
+      draw();
+    } else {
+      drawAnnotations();
+      drawEraserCursor(e.clientX, e.clientY);
+    }
+    return;
+  }
+
+  isAnnoDrawing = true;
+
+  const canvasWrap = document.querySelector(".canvas-wrap");
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const clickX = e.clientX - wrapRect.left;
+  const clickY = e.clientY - wrapRect.top;
+
+  annoStartPoint = { x: clickX, y: clickY, clientX: e.clientX, clientY: e.clientY };
+
+  if (currentAnnoTool === "pen") {
+    annoPoints = [{ x: clickX, y: clickY, clientX: e.clientX, clientY: e.clientY }];
+  } else if (currentAnnoTool === "text") {
+    // Create inline text input immediately at the click position (no dialog)
+    const currentTab = viewMode === "2d" ? "2d" : "3d";
+    const existingInput = document.querySelector(".annotation-text-input");
+    if (existingInput) existingInput.blur(); // Commit any pending text first
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "annotation-text-input";
+    input.style.left = `${clickX - 8}px`;
+    input.style.top = `${clickY - 16}px`;
+    const fSize = (currentAnnoSize || 3) * 5;
+    input.style.fontSize = `${fSize}px`;
+    input.style.lineHeight = `${fSize + 4}px`;
+    input.style.height = `${fSize + 12}px`;
+    input.style.width = `${Math.max(160, fSize * 10)}px`;
+    input.placeholder = "텍스트 입력 후 Enter...";
+    canvasWrap.appendChild(input);
+
+    // Normalise click position now (before state changes)
+    function normalizeTextCoord(cx, cy) {
+      if (currentTab === "2d") {
+        const stageCanvasRect = canvas.getBoundingClientRect();
+        const canvasX = cx - stageCanvasRect.left;
+        const canvasY = cy - stageCanvasRect.top;
+        return fromCanvas({ x: canvasX, y: canvasY });
+      } else {
+        const threeCanvasRect = document.getElementById("threeCanvas").getBoundingClientRect();
+        return {
+          x: clamp((cx - threeCanvasRect.left) / threeCanvasRect.width, 0, 1),
+          y: clamp((cy - threeCanvasRect.top) / threeCanvasRect.height, 0, 1)
+        };
+      }
+    }
+    const mappedPos = normalizeTextCoord(e.clientX, e.clientY);
+
+    let handled = false;
+    function finalizeText() {
+      if (handled) return;
+      handled = true;
+      const val = input.value.trim();
+      if (val) {
+        state.annotations.push({
+          id: uid(), type: "text", tab: currentTab,
+          color: currentAnnoColor,
+          size: currentAnnoSize,
+          x: mappedPos.x, y: mappedPos.y,
+          text: val
+        });
+        commit();
+      }
+      input.remove();
+      drawAnnotations();
+    }
+
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); finalizeText(); }
+      else if (ev.key === "Escape") { handled = true; input.remove(); drawAnnotations(); }
+      ev.stopPropagation();
+    });
+    input.addEventListener("blur", () => setTimeout(finalizeText, 80));
+
+    // Delay focus slightly so the pointerdown doesn't immediately blur it
+    requestAnimationFrame(() => input.focus());
+    isAnnoDrawing = false;
+  }
+}
+
+function onAnnoPointerMove(e) {
+  const overlay = document.getElementById("annotationOverlay");
+  if (!overlay) return;
+
+  if (currentAnnoTool === "eraser") {
+    // Always show the eraser circle cursor (even when not drawing)
+    drawAnnotations();
+    drawEraserCursor(e.clientX, e.clientY);
+    if (isAnnoDrawing) {
+      if (applyEraserAt(e.clientX, e.clientY)) {
+        commit();
+        drawAnnotations();
+        drawEraserCursor(e.clientX, e.clientY);
+        draw();
+      }
+    }
+    return;
+  }
+
+  if (currentAnnoTool === "select") {
+    if (draggedAnnoId) {
+      const item = state.annotations.find(anno => anno.id === draggedAnnoId);
+      if (item) {
+        const dxRaw = e.clientX - dragStartPointer.x;
+        const dyRaw = e.clientY - dragStartPointer.y;
+        
+        const currentTab = viewMode === "2d" ? "2d" : "3d";
+        let dx = 0, dy = 0;
+        
+        if (currentTab === "2d") {
+          dx = dxRaw / stageRect.w;
+          dy = dyRaw / stageRect.h;
+        } else {
+          const threeWrap = document.getElementById("threeWrap");
+          if (threeWrap) {
+            const wrapRect = threeWrap.getBoundingClientRect();
+            dx = dxRaw / wrapRect.width;
+            dy = dyRaw / wrapRect.height;
+          }
+        }
+        
+        if (item.type === "text") {
+          item.x = draggedAnnoStartPos.x + dx;
+          item.y = draggedAnnoStartPos.y + dy;
+        } else if (item.type === "arrow") {
+          item.start.x = draggedAnnoStartPos.start.x + dx;
+          item.start.y = draggedAnnoStartPos.start.y + dy;
+          item.end.x = draggedAnnoStartPos.end.x + dx;
+          item.end.y = draggedAnnoStartPos.end.y + dy;
+        } else if (item.type === "pen") {
+          item.points.forEach((pt, idx) => {
+            pt.x = draggedAnnoStartPos[idx].x + dx;
+            pt.y = draggedAnnoStartPos[idx].y + dy;
+          });
+        }
+        
+        if (currentTab === "2d") {
+          draw();
+        } else {
+          drawAnnotations();
+        }
+      }
+    } else {
+      const item = findAnnotationAt(e.clientX, e.clientY);
+      if (item) {
+        overlay.style.cursor = "move";
+      } else {
+        overlay.style.cursor = "default";
+      }
+    }
+    return;
+  }
+
+  if (!isAnnoDrawing) return;
+  const canvasWrap = document.querySelector(".canvas-wrap");
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const currentX = e.clientX - wrapRect.left;
+  const currentY = e.clientY - wrapRect.top;
+
+  if (currentAnnoTool === "pen") {
+    annoPoints.push({ x: currentX, y: currentY, clientX: e.clientX, clientY: e.clientY });
+    drawAnnotations({
+      type: "pen",
+      color: currentAnnoColor,
+      size: currentAnnoSize,
+      points: annoPoints
+    });
+  } else if (currentAnnoTool === "arrow") {
+    drawAnnotations({
+      type: "arrow",
+      color: currentAnnoColor,
+      size: currentAnnoSize,
+      start: annoStartPoint,
+      end: { x: currentX, y: currentY }
+    });
+  }
+}
+
+function onAnnoPointerUp(e) {
+  if (currentAnnoTool === "select") {
+    if (draggedAnnoId) {
+      draggedAnnoId = null;
+      draggedAnnoStartPos = null;
+      dragStartPointer = null;
+      commit();
+    }
+    return;
+  }
+
+  if (currentAnnoTool === "eraser") {
+    if (isAnnoDrawing) {
+      isAnnoDrawing = false;
+      const overlay = document.getElementById("annotationOverlay");
+      if (overlay) {
+        try {
+          overlay.releasePointerCapture(e.pointerId);
+        } catch (err) {}
+      }
+    }
+    return;
+  }
+
+  if (!isAnnoDrawing) return;
+  isAnnoDrawing = false;
+  const overlay = document.getElementById("annotationOverlay");
+  if (!overlay) return;
+  try {
+    overlay.releasePointerCapture(e.pointerId);
+  } catch (err) {}
+
+  const canvasWrap = document.querySelector(".canvas-wrap");
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const currentX = e.clientX - wrapRect.left;
+  const currentY = e.clientY - wrapRect.top;
+
+  const currentTab = viewMode === "2d" ? "2d" : "3d";
+
+  function normalizeCoord(clientX, clientY) {
+    if (currentTab === "2d") {
+      const stageCanvasRect = canvas.getBoundingClientRect();
+      const canvasX = clientX - stageCanvasRect.left;
+      const canvasY = clientY - stageCanvasRect.top;
+      return fromCanvas({ x: canvasX, y: canvasY });
+    } else {
+      const threeCanvasRect = document.getElementById("threeCanvas").getBoundingClientRect();
+      return {
+        x: clamp((clientX - threeCanvasRect.left) / threeCanvasRect.width, 0, 1),
+        y: clamp((clientY - threeCanvasRect.top) / threeCanvasRect.height, 0, 1)
+      };
+    }
+  }
+
+  if (currentAnnoTool === "pen") {
+    if (annoPoints.length >= 2) {
+      const mappedPoints = annoPoints.map(pt => normalizeCoord(pt.clientX, pt.clientY));
+      state.annotations.push({
+        id: uid(),
+        type: "pen",
+        tab: currentTab,
+        color: currentAnnoColor,
+        size: currentAnnoSize,
+        points: mappedPoints
+      });
+      commit();
+    }
+    annoPoints = [];
+  } else if (currentAnnoTool === "arrow") {
+    const startMapped = normalizeCoord(annoStartPoint.clientX, annoStartPoint.clientY);
+    const endMapped = normalizeCoord(e.clientX, e.clientY);
+    const dist = Math.hypot(e.clientX - annoStartPoint.clientX, e.clientY - annoStartPoint.clientY);
+    if (dist > 5) {
+      state.annotations.push({
+        id: uid(),
+        type: "arrow",
+        tab: currentTab,
+        color: currentAnnoColor,
+        size: currentAnnoSize,
+        start: startMapped,
+        end: endMapped
+      });
+      commit();
+    }
+  } else if (currentAnnoTool === "text") {
+    // Text input is created in onAnnoPointerDown; nothing to do here.
+  }
+
+  drawAnnotations();
+}
+
+function onAnnoPointerCancel(e) {
+  isAnnoDrawing = false;
+  annoPoints = [];
+  drawAnnotations();
+}
+
+function setupAnnotations() {
+  const overlay = document.getElementById("annotationOverlay");
+  const toolbar = document.getElementById("annotationToolbar");
+  if (!overlay || !toolbar) return;
+
+  resizeAnnotationOverlay();
+  window.addEventListener("resize", resizeAnnotationOverlay);
+
+  const toolButtons = {
+    select: document.getElementById("annoToolSelect"),
+    pen: document.getElementById("annoToolPen"),
+    arrow: document.getElementById("annoToolArrow"),
+    text: document.getElementById("annoToolText"),
+    eraser: document.getElementById("annoToolEraser")
+  };
+
+  if (toolButtons.select) toolButtons.select.addEventListener("click", () => selectAnnoTool("select"));
+  if (toolButtons.pen) toolButtons.pen.addEventListener("click", () => selectAnnoTool("pen"));
+  if (toolButtons.arrow) toolButtons.arrow.addEventListener("click", () => selectAnnoTool("arrow"));
+  if (toolButtons.text) toolButtons.text.addEventListener("click", () => selectAnnoTool("text"));
+  if (toolButtons.eraser) toolButtons.eraser.addEventListener("click", () => selectAnnoTool("eraser"));
+
+  // Toolbar drag movement logic
+  const handle = document.getElementById("annoToolbarHandle");
+  if (handle) {
+    let isDragging = false;
+    let startX, startY;
+    let initialLeft, initialTop;
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      toolbar.style.right = "auto";
+      toolbar.style.left = `${initialLeft + dx}px`;
+      toolbar.style.top = `${initialTop + dy}px`;
+      e.stopPropagation();
+    };
+
+    const onPointerUp = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+      e.stopPropagation();
+    };
+
+    handle.addEventListener("pointerdown", (e) => {
+      isDragging = true;
+      try {
+        handle.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      const rect = toolbar.getBoundingClientRect();
+      const wrapRect = toolbar.parentElement.getBoundingClientRect();
+      initialLeft = rect.left - wrapRect.left;
+      initialTop = rect.top - wrapRect.top;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+
+      e.stopPropagation();
+      e.preventDefault();
+    });
+  }
+
+  const colorButtons = toolbar.querySelectorAll(".annotation-color-btn");
+  colorButtons.forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      colorButtons.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentAnnoColor = btn.dataset.color;
+    });
+  });
+
+  const sizeBtn = document.getElementById("annoSizeBtn");
+  const sizePopover = document.getElementById("annoSizePopover");
+  const sizeSlider = document.getElementById("annoToolSize");
+  const sizeBadge = document.getElementById("annoSizeBadge");
+  const sizeVal = document.getElementById("annoSizeValue");
+
+  if (sizeBtn && sizePopover) {
+    sizeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      sizePopover.classList.toggle("hidden");
+    });
+    document.addEventListener("click", (e) => {
+      if (sizePopover && !sizePopover.contains(e.target) && !sizeBtn.contains(e.target)) {
+        sizePopover.classList.add("hidden");
+      }
+    });
+  }
+
+  function updateAnnoSizeUI(val) {
+    currentAnnoSize = val;
+    if (sizeSlider) sizeSlider.value = val;
+    if (sizeBadge) sizeBadge.textContent = val;
+    if (sizeVal) sizeVal.textContent = val;
+  }
+  window.updateAnnoSizeUI = updateAnnoSizeUI;
+
+  if (sizeSlider) {
+    sizeSlider.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value, 10);
+      updateAnnoSizeUI(val);
+      if (selectedAnnoId) {
+        const item = state.annotations.find(a => a.id === selectedAnnoId);
+        if (item) {
+          item.size = val;
+          commit();
+          drawAnnotations();
+          draw();
+        }
+      }
+    });
+  }
+
+  const undoBtn = document.getElementById("annoUndoBtn");
+  if (undoBtn) {
+    undoBtn.addEventListener("click", () => {
+      if (activeSourceId() !== "all" && sourceEditLocked(activeSourceId())) {
+        notifyApp("편집이 잠긴 대상 상태에서는 주석을 수정할 수 없습니다.");
+        return;
+      }
+      const currentTab = viewMode === "2d" ? "2d" : "3d";
+      const indices = [];
+      state.annotations.forEach((anno, index) => {
+        if (anno.tab === currentTab) indices.push(index);
+      });
+      if (indices.length > 0) {
+        const lastIndex = indices[indices.length - 1];
+        state.annotations.splice(lastIndex, 1);
+        commit();
+        notifyApp("마지막 주석을 되돌렸습니다.");
+      }
+    });
+  }
+
+  const clearBtn = document.getElementById("annoClearBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      if (activeSourceId() !== "all" && sourceEditLocked(activeSourceId())) {
+        notifyApp("편집이 잠긴 대상 상태에서는 주석을 수정할 수 없습니다.");
+        return;
+      }
+      const currentTab = viewMode === "2d" ? "2d" : "3d";
+      const initialCount = state.annotations.length;
+      state.annotations = state.annotations.filter(anno => anno.tab !== currentTab);
+      if (state.annotations.length !== initialCount) {
+        commit();
+        notifyApp("현재 화면의 모든 주석을 지웠습니다.");
+      }
+    });
+  }
+
+  const deleteSelectedBtn = document.getElementById("annoDeleteSelectedBtn");
+  if (deleteSelectedBtn) {
+    deleteSelectedBtn.addEventListener("click", () => {
+      if (!selectedAnnoId) {
+        notifyApp("선택 도구(S)로 주석을 먼저 선택하세요.");
+        return;
+      }
+      if (activeSourceId() !== "all" && sourceEditLocked(activeSourceId())) {
+        notifyApp("편집이 잠긴 대상 상태에서는 주석을 수정할 수 없습니다.");
+        return;
+      }
+      state.annotations = state.annotations.filter(anno => anno.id !== selectedAnnoId);
+      selectedAnnoId = null;
+      commit();
+      notifyApp("선택한 주석을 삭제했습니다.");
+      drawAnnotations();
+      draw();
+    });
+  }
+
+  overlay.addEventListener("pointerdown", onAnnoPointerDown);
+  overlay.addEventListener("pointermove", onAnnoPointerMove);
+  overlay.addEventListener("pointerup", onAnnoPointerUp);
+  overlay.addEventListener("pointercancel", onAnnoPointerCancel);
+}
+
 function round(value, digits = 4) {
   const factor = 10 ** digits;
   return Math.round(Number(value) * factor) / factor;
@@ -11320,6 +15365,16 @@ function blenderXY(point) {
   ];
 }
 
+function blenderCameraTarget(camera, distanceM = 10) {
+  const [x, y] = blenderXY(camera);
+  const direction = cameraDirection(camera);
+  return [
+    round(x + direction.x * distanceM),
+    round(y + direction.z * distanceM),
+    round(Number(camera.height || 1.6) + direction.y * distanceM),
+  ];
+}
+
 function pyString(value) {
   return JSON.stringify(String(value ?? ""));
 }
@@ -11334,13 +15389,508 @@ function slug(value) {
   );
 }
 
+let jogDragH = null;
+let jogDragV = null;
+
+function setupThreeJogDial() {
+  const dialH = $("#threeJogDialH");
+  const dialV = $("#threeJogDialV");
+
+  if (dialH) {
+    dialH.addEventListener("pointerdown", (event) => {
+      if (!threeView?.ready) return;
+      event.stopPropagation();
+      dialH.setPointerCapture(event.pointerId);
+
+      const rect = dialH.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const startAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
+      const startTheta = threeView.orbit.theta;
+
+      jogDragH = {
+        pointerId: event.pointerId,
+        cx,
+        cy,
+        startAngle,
+        startTheta,
+      };
+    });
+
+    dialH.addEventListener("pointermove", (event) => {
+      if (!jogDragH || event.pointerId !== jogDragH.pointerId) return;
+      event.stopPropagation();
+
+      const angle = Math.atan2(event.clientY - jogDragH.cy, event.clientX - jogDragH.cx);
+      const deltaAngle = angle - jogDragH.startAngle;
+
+      // Update theta
+      threeView.orbit.theta = jogDragH.startTheta + deltaAngle * 1.25;
+
+      const deg = Math.round(threeView.orbit.theta * (180 / Math.PI));
+      const knob = $("#jogDialKnobH");
+      if (knob) knob.style.transform = `rotate(${deg}deg)`;
+
+      renderThreeView(threeView.lastState || state, true);
+    });
+
+    const endDragH = (event) => {
+      if (!jogDragH || event.pointerId !== jogDragH.pointerId) return;
+      event.stopPropagation();
+      dialH.releasePointerCapture(event.pointerId);
+      jogDragH = null;
+    };
+
+    dialH.addEventListener("pointerup", endDragH);
+    dialH.addEventListener("pointercancel", endDragH);
+
+    dialH.addEventListener("dblclick", (event) => {
+      event.stopPropagation();
+      if (!threeView?.ready) return;
+      threeView.orbit.theta = -0.62;
+      const deg = Math.round(threeView.orbit.theta * (180 / Math.PI));
+      const knob = $("#jogDialKnobH");
+      if (knob) knob.style.transform = `rotate(${deg}deg)`;
+      renderThreeView(threeView.lastState || state, true);
+    });
+  }
+
+  if (dialV) {
+    dialV.addEventListener("pointerdown", (event) => {
+      if (!threeView?.ready) return;
+      event.stopPropagation();
+      dialV.setPointerCapture(event.pointerId);
+
+      const rect = dialV.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const startAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
+      const startPhi = threeView.orbit.phi;
+
+      jogDragV = {
+        pointerId: event.pointerId,
+        cx,
+        cy,
+        startAngle,
+        startPhi,
+      };
+    });
+
+    dialV.addEventListener("pointermove", (event) => {
+      if (!jogDragV || event.pointerId !== jogDragV.pointerId) return;
+      event.stopPropagation();
+
+      const angle = Math.atan2(event.clientY - jogDragV.cy, event.clientX - jogDragV.cx);
+      const deltaAngle = angle - jogDragV.startAngle;
+
+      // Update phi, clamp to avoid inversion
+      const newPhi = jogDragV.startPhi + deltaAngle * 1.25;
+      threeView.orbit.phi = Math.max(-0.85, Math.min(1.48, newPhi));
+
+      const deg = Math.round(threeView.orbit.phi * (180 / Math.PI));
+      const knob = $("#jogDialKnobV");
+      if (knob) knob.style.transform = `rotate(${deg}deg)`;
+
+      renderThreeView(threeView.lastState || state, true);
+    });
+
+    const endDragV = (event) => {
+      if (!jogDragV || event.pointerId !== jogDragV.pointerId) return;
+      event.stopPropagation();
+      dialV.releasePointerCapture(event.pointerId);
+      jogDragV = null;
+    };
+
+    dialV.addEventListener("pointerup", endDragV);
+    dialV.addEventListener("pointercancel", endDragV);
+
+    dialV.addEventListener("dblclick", (event) => {
+      event.stopPropagation();
+      if (!threeView?.ready) return;
+      threeView.orbit.phi = 0.68;
+      const deg = Math.round(threeView.orbit.phi * (180 / Math.PI));
+      const knob = $("#jogDialKnobV");
+      if (knob) knob.style.transform = `rotate(${deg}deg)`;
+      renderThreeView(threeView.lastState || state, true);
+    });
+  }
+}
+
+function setupScrubDragging(element) {
+  let isScrubbing = false;
+
+  element.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    if (event.target.closest(".timeline-marker")) return;
+
+    isScrubbing = true;
+    element.setPointerCapture(event.pointerId);
+
+    const handleMove = (clientX) => {
+      const rect = element.getBoundingClientRect();
+      const percent = clamp((clientX - rect.left) / rect.width, 0, 1);
+      let targetTime = percent * state.motion.duration;
+
+      // Snap to closest keyframe within 80ms
+      const snapThreshold = 0.08;
+      let closestSnap = null;
+      let minDiff = snapThreshold;
+      state.motion.keyframes.forEach(kf => {
+        const diff = Math.abs(kf.time - targetTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestSnap = kf.time;
+        }
+      });
+
+      if (closestSnap !== null) {
+        targetTime = closestSnap;
+      }
+
+      scrubToTime(targetTime);
+    };
+
+    handleMove(event.clientX);
+
+    const onPointerMove = (e) => {
+      if (!isScrubbing) return;
+      handleMove(e.clientX);
+    };
+
+    const onPointerUp = (e) => {
+      if (!isScrubbing) return;
+      isScrubbing = false;
+      element.releasePointerCapture(e.pointerId);
+      element.removeEventListener("pointermove", onPointerMove);
+      element.removeEventListener("pointerup", onPointerUp);
+      element.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    element.addEventListener("pointermove", onPointerMove);
+    element.addEventListener("pointerup", onPointerUp);
+    element.addEventListener("pointercancel", onPointerUp);
+  });
+}
+
+// --- Direct Annotations & Screen Pencil Logic ---
+let currentAnnoTool = "none";
+let currentAnnoColor = "#ff4d4f";
+let currentAnnoSize = 3;
+let isAnnoDrawing = false;
+let annoPoints = [];
+let annoStartPoint = null;
+
+function resizeAnnotationOverlay() {
+  const overlay = document.getElementById("annotationOverlay");
+  const wrap = document.querySelector(".canvas-wrap");
+  if (!overlay || !wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  overlay.width = Math.floor(rect.width * dpr);
+  overlay.height = Math.floor(rect.height * dpr);
+  drawAnnotations();
+}
+
+function drawArrow(context, fromX, fromY, toX, toY, color, size = 3) {
+  context.save();
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = size;
+  context.lineCap = "round";
+  
+  context.beginPath();
+  context.moveTo(fromX, fromY);
+  context.lineTo(toX, toY);
+  context.stroke();
+  
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const headLen = Math.max(10, size * 5);
+  context.beginPath();
+  context.moveTo(toX, toY);
+  context.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+  context.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+function drawStageAnnotations(renderState, rect) {
+  const items = renderState.annotations || [];
+  items.forEach((item) => {
+    if (item.tab !== "2d") return;
+    ctx.save();
+    ctx.strokeStyle = item.color;
+    ctx.fillStyle = item.color;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    let pxVal, pyVal, textW, textH, textPad;
+
+    if (item.type === "pen" && item.points && item.points.length > 0) {
+      ctx.lineWidth = item.size || 3;
+      ctx.beginPath();
+      const mappedPts = item.points.map(pt => ({ x: rect.x + pt.x * rect.w, y: rect.y + pt.y * rect.h }));
+      ctx.moveTo(mappedPts[0].x, mappedPts[0].y);
+      for (let i = 1; i < mappedPts.length - 1; i++) {
+        const xc = (mappedPts[i].x + mappedPts[i + 1].x) / 2;
+        const yc = (mappedPts[i].y + mappedPts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(mappedPts[i].x, mappedPts[i].y, xc, yc);
+      }
+      if (mappedPts.length > 1) {
+        ctx.lineTo(mappedPts[mappedPts.length - 1].x, mappedPts[mappedPts.length - 1].y);
+      }
+      ctx.stroke();
+
+      if (item.id === selectedAnnoId) {
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        item.points.forEach((pt) => {
+          const px = rect.x + pt.x * rect.w;
+          const py = rect.y + pt.y * rect.h;
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        });
+        roundRect(ctx, minX - 8, minY - 8, maxX - minX + 16, maxY - minY + 16, 4);
+        ctx.stroke();
+      }
+    } else if (item.type === "arrow" && item.start && item.end) {
+      const fromX = rect.x + item.start.x * rect.w;
+      const fromY = rect.y + item.start.y * rect.h;
+      const toX = rect.x + item.end.x * rect.w;
+      const toY = rect.y + item.end.y * rect.h;
+      drawArrow(ctx, fromX, fromY, toX, toY, item.color, item.size || 3);
+
+      if (item.id === selectedAnnoId) {
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        const minX = Math.min(fromX, toX) - 8;
+        const minY = Math.min(fromY, toY) - 8;
+        const maxX = Math.max(fromX, toX) + 8;
+        const maxY = Math.max(fromY, toY) + 8;
+        roundRect(ctx, minX, minY, maxX - minX, maxY - minY, 4);
+        ctx.stroke();
+      }
+    } else if (item.type === "text" && item.text) {
+      const px = rect.x + item.x * rect.w;
+      const py = rect.y + item.y * rect.h;
+      const fSize = (item.size || 3) * 5;
+      ctx.font = `bold ${fSize}px sans-serif`;
+      ctx.textBaseline = "middle";
+      
+      const textWidth = ctx.measureText(item.text).width;
+      const textHeight = fSize + 11;
+      const textPadding = Math.max(8, fSize / 2);
+      const boxOffset = fSize + 5;
+      
+      ctx.fillStyle = "rgba(12, 16, 22, 0.95)";
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 2;
+      roundRect(ctx, px - textPadding, py - boxOffset, textWidth + textPadding * 2, textHeight, 6);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(item.text, px, py - boxOffset + textHeight / 2);
+
+      if (item.id === selectedAnnoId) {
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        roundRect(ctx, px - textPadding - 3, py - boxOffset - 3, textWidth + textPadding * 2 + 6, textHeight + 6, 8);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  });
+}
+
+function draw3DAnnotationsOnContext(ctxTarget, width, height, offsetX = 0, offsetY = 0, targetState = state, showSelection = false) {
+  const items = targetState.annotations || [];
+  items.forEach((item) => {
+    if (item.tab !== "3d") return;
+    ctxTarget.save();
+    ctxTarget.strokeStyle = item.color;
+    ctxTarget.fillStyle = item.color;
+    ctxTarget.lineWidth = item.size || 3;
+    ctxTarget.lineCap = "round";
+    ctxTarget.lineJoin = "round";
+
+    if (item.type === "pen" && item.points && item.points.length > 0) {
+      ctxTarget.lineWidth = item.size || 3;
+      ctxTarget.beginPath();
+      const mappedPts = item.points.map(pt => ({ x: offsetX + pt.x * width, y: offsetY + pt.y * height }));
+      ctxTarget.moveTo(mappedPts[0].x, mappedPts[0].y);
+      for (let i = 1; i < mappedPts.length - 1; i++) {
+        const xc = (mappedPts[i].x + mappedPts[i + 1].x) / 2;
+        const yc = (mappedPts[i].y + mappedPts[i + 1].y) / 2;
+        ctxTarget.quadraticCurveTo(mappedPts[i].x, mappedPts[i].y, xc, yc);
+      }
+      if (mappedPts.length > 1) {
+        ctxTarget.lineTo(mappedPts[mappedPts.length - 1].x, mappedPts[mappedPts.length - 1].y);
+      }
+      ctxTarget.stroke();
+
+      if (showSelection && item.id === selectedAnnoId) {
+        ctxTarget.restore();
+        ctxTarget.save();
+        ctxTarget.strokeStyle = "#38bdf8";
+        ctxTarget.lineWidth = 2;
+        ctxTarget.setLineDash([4, 4]);
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        item.points.forEach((pt) => {
+          const px = offsetX + pt.x * width;
+          const py = offsetY + pt.y * height;
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        });
+        roundRect(ctxTarget, minX - 8, minY - 8, maxX - minX + 16, maxY - minY + 16, 4);
+        ctxTarget.stroke();
+      }
+    } else if (item.type === "arrow" && item.start && item.end) {
+      const fromX = offsetX + item.start.x * width;
+      const fromY = offsetY + item.start.y * height;
+      const toX = offsetX + item.end.x * width;
+      const toY = offsetY + item.end.y * height;
+      drawArrow(ctxTarget, fromX, fromY, toX, toY, item.color, item.size || 3);
+
+      if (showSelection && item.id === selectedAnnoId) {
+        ctxTarget.restore();
+        ctxTarget.save();
+        ctxTarget.strokeStyle = "#38bdf8";
+        ctxTarget.lineWidth = 2;
+        ctxTarget.setLineDash([4, 4]);
+        const minX = Math.min(fromX, toX) - 8;
+        const minY = Math.min(fromY, toY) - 8;
+        const maxX = Math.max(fromX, toX) + 8;
+        const maxY = Math.max(fromY, toY) + 8;
+        roundRect(ctxTarget, minX, minY, maxX - minX, maxY - minY, 4);
+        ctxTarget.stroke();
+      }
+    } else if (item.type === "text" && item.text) {
+      const px = offsetX + item.x * width;
+      const py = offsetY + item.y * height;
+      const fSize = (item.size || 3) * 5;
+      ctxTarget.font = `bold ${fSize}px sans-serif`;
+      ctxTarget.textBaseline = "middle";
+      
+      const textWidth = ctxTarget.measureText(item.text).width;
+      const textHeight = fSize + 11;
+      const textPadding = Math.max(8, fSize / 2);
+      const boxOffset = fSize + 5;
+      
+      ctxTarget.fillStyle = "rgba(12, 16, 22, 0.95)";
+      ctxTarget.strokeStyle = item.color;
+      ctxTarget.lineWidth = 2;
+      roundRect(ctxTarget, px - textPadding, py - boxOffset, textWidth + textPadding * 2, textHeight, 6);
+      ctxTarget.fill();
+      ctxTarget.stroke();
+      
+      ctxTarget.fillStyle = "#ffffff";
+      ctxTarget.fillText(item.text, px, py - boxOffset + textHeight / 2);
+
+      if (showSelection && item.id === selectedAnnoId) {
+        ctxTarget.restore();
+        ctxTarget.save();
+        ctxTarget.strokeStyle = "#38bdf8";
+        ctxTarget.lineWidth = 2;
+        ctxTarget.setLineDash([4, 4]);
+        roundRect(ctxTarget, px - textPadding - 3, py - boxOffset - 3, textWidth + textPadding * 2 + 6, textHeight + 6, 8);
+        ctxTarget.stroke();
+      }
+    }
+    ctxTarget.restore();
+  });
+}
+
+function getCompositedFrameCanvas(targetState = state) {
+  if (!threeView?.frameCanvas) return null;
+  const src = threeView.frameCanvas;
+  const offscreen = document.createElement("canvas");
+  offscreen.width = src.width;
+  offscreen.height = src.height;
+  const ctxOff = offscreen.getContext("2d");
+  ctxOff.drawImage(src, 0, 0);
+  draw3DAnnotationsOnContext(ctxOff, offscreen.width, offscreen.height, 0, 0, targetState, false);
+  return offscreen;
+}
+
+function drawAnnotations(tempAnno = null) {
+  const overlay = document.getElementById("annotationOverlay");
+  if (!overlay) return;
+  const ctxAnno = overlay.getContext("2d");
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  ctxAnno.clearRect(0, 0, overlay.width, overlay.height);
+
+  ctxAnno.save();
+  ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  if (viewMode === "3d" && workspaceMode === "blocking") {
+    const threeWrap = document.getElementById("threeWrap");
+    if (threeWrap && !threeWrap.hidden) {
+      const wrapRect = threeWrap.getBoundingClientRect();
+      const parentRect = threeWrap.parentElement.getBoundingClientRect();
+      const offsetX = wrapRect.left - parentRect.left;
+      const offsetY = wrapRect.top - parentRect.top;
+      const width = wrapRect.width;
+      const height = wrapRect.height;
+      draw3DAnnotationsOnContext(ctxAnno, width, height, offsetX, offsetY, state, true);
+    }
+  }
+
+  if (tempAnno) {
+    ctxAnno.save();
+    ctxAnno.strokeStyle = tempAnno.color;
+    ctxAnno.fillStyle = tempAnno.color;
+    ctxAnno.lineWidth = 3;
+    ctxAnno.lineCap = "round";
+    ctxAnno.lineJoin = "round";
+
+    if (tempAnno.type === "pen" && tempAnno.points && tempAnno.points.length > 0) {
+      ctxAnno.lineWidth = currentAnnoSize;
+      ctxAnno.beginPath();
+      ctxAnno.moveTo(tempAnno.points[0].x, tempAnno.points[0].y);
+      for (let i = 1; i < tempAnno.points.length - 1; i++) {
+        const xc = (tempAnno.points[i].x + tempAnno.points[i + 1].x) / 2;
+        const yc = (tempAnno.points[i].y + tempAnno.points[i + 1].y) / 2;
+        ctxAnno.quadraticCurveTo(tempAnno.points[i].x, tempAnno.points[i].y, xc, yc);
+      }
+      if (tempAnno.points.length > 1) {
+        ctxAnno.lineTo(tempAnno.points[tempAnno.points.length - 1].x, tempAnno.points[tempAnno.points.length - 1].y);
+      }
+      ctxAnno.stroke();
+    } else if (tempAnno.type === "arrow" && tempAnno.start && tempAnno.end) {
+      drawArrow(ctxAnno, tempAnno.start.x, tempAnno.start.y, tempAnno.end.x, tempAnno.end.y, tempAnno.color, currentAnnoSize);
+    }
+    ctxAnno.restore();
+  }
+
+  ctxAnno.restore();
+}
+
 function init() {
+  clearLiveSourceEdits();
   populatePropCatalogControls();
   sanitizeState();
   project = createDefaultProject(state);
   activeSceneId = project.scenes[0].id;
   activeCutId = project.scenes[0].cuts[0].id;
   state = project.scenes[0].cuts[0].blocking;
+  setupCameraFrameResize();
+  setupThreeJogDial();
   setupResponsivePanels();
   selectKeyForSource(selectedSourceId() || activeSourceId());
   commit();
@@ -11360,7 +15910,8 @@ function init() {
   resizeCanvas();
   requestAnimationFrame(() => centerStageOnContent());
   refreshLucideIcons();
-  
+  setupAnnotations();
+
   const urlParams = new URLSearchParams(window.location.search);
   const shareId = urlParams.get("project");
   const shareToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("share") || "";

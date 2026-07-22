@@ -1,11 +1,12 @@
 {
   "name": "frisframe-desktop",
-  "version": "0.3.0",
+  "version": "0.3.17",
   "private": true,
   "description": "FrisFrame desktop previs studio",
   "main": "electron/main.cjs",
-  "author": "FrisFrame",
-  "license": "UNLICENSED",
+  "author": "Egoist Film",
+  "copyright": "Copyright (c) 2026 Egoist Film",
+  "license": "MIT",
   "scripts": {
     "icon:build": "node electron/scripts/build-icon.cjs",
     "vendor:sync": "node electron/scripts/sync-vendor.cjs",
@@ -19,7 +20,7 @@
     "check": "python3 quality_check.py && node tests/electron-contract.test.cjs"
   },
   "devDependencies": {
-    "electron": "43.1.0",
+    "electron": "43.1.1",
     "electron-builder": "26.15.3",
     "ffmpeg-static": "5.3.0",
     "lucide": "0.468.0",
@@ -37,6 +38,7 @@
     "files": [
       "electron/main.cjs",
       "electron/clipboard.cjs",
+      "electron/file-save.cjs",
       "electron/preload.cjs",
       "electron/startup.html",
       "package.json"
@@ -53,6 +55,10 @@
       {
         "from": "THIRD_PARTY_NOTICES.md",
         "to": "licenses/THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "LICENSE",
+        "to": "licenses/FrisFrame-LICENSE.txt"
       },
       {
         "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",

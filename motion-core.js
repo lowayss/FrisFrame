@@ -20,6 +20,16 @@
     return ["smooth", "linear", "hold", "cut"].includes(value) ? value : "smooth";
   }
 
+  function cameraDirectionVector(panDeg = 180, tiltDeg = 0) {
+    const pan = finiteNumber(panDeg, 180) * Math.PI / 180;
+    const tilt = clamp(finiteNumber(tiltDeg, 0), -90, 90) * Math.PI / 180;
+    return {
+      x: Math.cos(tilt) * Math.cos(pan),
+      y: Math.sin(tilt),
+      z: Math.cos(tilt) * Math.sin(pan),
+    };
+  }
+
   function transitionProgress(time, startTime, endTime, transition = "smooth") {
     const start = finiteNumber(startTime, 0);
     const end = finiteNumber(endTime, start + 1);
@@ -63,6 +73,20 @@
       if (["hold", "cut"].includes(normalizeTransition(end.transition))) return false;
       return currentTime >= Number(start.time) - epsilon && currentTime < Number(end.time) - epsilon;
     }) || null;
+  }
+
+  function rescaleKeyframeTimes(keyframes = [], previousDuration = 1, nextDuration = 1, maximumDuration = 60) {
+    const previous = finiteNumber(previousDuration, 0);
+    const next = finiteNumber(nextDuration, previous);
+    const maximum = Math.max(1, finiteNumber(maximumDuration, 60));
+    if (!Array.isArray(keyframes) || previous <= 0 || next <= 0 || Math.abs(previous - next) < 0.000001) {
+      return Array.isArray(keyframes) ? keyframes.map((keyframe) => ({ ...keyframe })) : [];
+    }
+    const scale = next / previous;
+    return keyframes.map((keyframe) => ({
+      ...keyframe,
+      time: Number(clamp(finiteNumber(keyframe?.time, 0) * scale, 0, maximum).toFixed(4)),
+    }));
   }
 
   const pathModes = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"];
@@ -175,6 +199,7 @@
 
   return {
     activeMotionSegment,
+    cameraDirectionVector,
     circularArcPoint,
     constrainPathEndpoint,
     finiteNumber,
@@ -183,6 +208,7 @@
     normalizeTransition,
     poseFieldsChanged,
     quadraticBezierPoint,
+    rescaleKeyframeTimes,
     samplePlanarPath,
     transitionProgress,
   };

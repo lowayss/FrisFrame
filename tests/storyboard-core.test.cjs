@@ -57,3 +57,73 @@ test("legacy blocking becomes one project scene and cut without losing timing", 
   assert.equal(project.scenes[0].cuts[0].blocking.motion.duration, 7);
   assert.equal(project.scenes[0].cuts[0].status, "blocking");
 });
+
+test("continuity report detects an axis crossing and screen-direction reversal", () => {
+  const actor = (id, name, x) => ({
+    id,
+    continuityId: id,
+    type: "actor",
+    name,
+    x,
+    y: 0.5,
+    facing: 90,
+    visible: true,
+    bodyPose: {},
+  });
+  const previous = {
+    aspect: "16:9",
+    camera: { x: 0.5, y: 0.3, panDeg: 180 },
+    items: [actor("a", "수아", 0.4), actor("b", "민호", 0.6)],
+  };
+  const current = {
+    aspect: "16:9",
+    camera: { x: 0.5, y: 0.7, panDeg: 180 },
+    items: [actor("a", "수아", 0.4), actor("b", "민호", 0.6)],
+  };
+  const report = core.continuityReport({
+    previousCutId: "cut-1",
+    previous,
+    current,
+    previousMotion: { a: { x: 0, y: 0.1 } },
+    currentMotion: { a: { x: 0, y: -0.1 } },
+  });
+
+  assert.ok(report.some((finding) => finding.kind === "axis-180"));
+  assert.ok(report.some((finding) => finding.kind === "screen-direction"));
+});
+
+test("continuity override only matches the same issue signature", () => {
+  const finding = { id: "cut-1:aspect:scene", signature: "16:9|4:3" };
+  const continuity = {
+    overrides: {
+      [finding.id]: { signature: finding.signature, note: "의도된 전환", updatedAt: "2026-07-16" },
+    },
+  };
+  assert.equal(core.findingIsOverridden(finding, continuity), true);
+  assert.equal(core.findingIsOverridden({ ...finding, signature: "16:9|1:1" }, continuity), false);
+});
+
+test("cut snapshots stay non-recursive and compare creative fields", () => {
+  const cut = {
+    id: "cut-1",
+    title: "A안",
+    action: "걷는다",
+    notes: "오른손",
+    shotType: "MS",
+    status: "approved",
+    snapshots: { A: { nested: true } },
+    continuity: { overrides: {} },
+    blocking: { camera: { focal: 35 }, motion: { duration: 4, keyframes: [{ id: "k1" }] } },
+  };
+  const snapshot = core.cutSnapshotDocument(cut);
+  assert.equal("snapshots" in snapshot, false);
+  assert.equal("continuity" in snapshot, false);
+  assert.equal("status" in snapshot, false);
+  const comparison = core.compareCutDocuments(snapshot, {
+    ...snapshot,
+    title: "B안",
+    blocking: { ...snapshot.blocking, camera: { focal: 85 } },
+  });
+  assert.equal(comparison.find((row) => row.label === "컷 제목").changed, true);
+  assert.equal(comparison.find((row) => row.label === "렌즈").changed, true);
+});

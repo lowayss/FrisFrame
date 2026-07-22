@@ -280,14 +280,239 @@
     };
   }
 
+  function continuityIdentity(item) {
+    return String(item?.continuityId || `${item?.type || "item"}:${compact(item?.name).toLowerCase()}`);
+  }
+
+  function angleDelta(first, second) {
+    return Math.abs((((Number(second || 0) - Number(first || 0)) % 360) + 540) % 360 - 180);
+  }
+
+  function rounded(value, digits = 2) {
+    const factor = 10 ** digits;
+    return Math.round(Number(value || 0) * factor) / factor;
+  }
+
+  function continuityFinding(previousCutId, kind, message, subjectIds = [], signatureParts = [], severity = "warning") {
+    const ids = [...new Set(subjectIds.map(String).filter(Boolean))].sort();
+    return {
+      id: `${String(previousCutId || "previous")}:${kind}:${ids.join("|") || "scene"}`,
+      signature: signatureParts.map((value) => String(value)).join("|"),
+      kind,
+      severity,
+      message,
+      subjectIds: ids,
+    };
+  }
+
+  function bodyPoseDifference(firstPose, secondPose) {
+    const first = firstPose && typeof firstPose === "object" ? firstPose : {};
+    const second = secondPose && typeof secondPose === "object" ? secondPose : {};
+    let maximum = 0;
+    [...new Set([...Object.keys(first), ...Object.keys(second)])].forEach((joint) => {
+      const firstJoint = first[joint] && typeof first[joint] === "object" ? first[joint] : {};
+      const secondJoint = second[joint] && typeof second[joint] === "object" ? second[joint] : {};
+      ["x", "y", "z"].forEach((axis) => {
+        maximum = Math.max(maximum, Math.abs(Number(firstJoint[axis] || 0) - Number(secondJoint[axis] || 0)));
+      });
+    });
+    return maximum;
+  }
+
+  function normalizedContinuity(value = {}) {
+    const source = value && typeof value === "object" ? value : {};
+    const overrides = source.overrides && typeof source.overrides === "object" && !Array.isArray(source.overrides)
+      ? Object.fromEntries(Object.entries(source.overrides).flatMap(([id, entry]) => {
+        if (!entry || typeof entry !== "object" || !String(entry.signature || "")) return [];
+        return [[String(id), {
+          signature: String(entry.signature),
+          note: String(entry.note || "").slice(0, 240),
+          updatedAt: String(entry.updatedAt || ""),
+        }]];
+      }))
+      : {};
+    return { overrides };
+  }
+
+  function findingIsOverridden(finding, continuity) {
+    const override = normalizedContinuity(continuity).overrides[finding?.id];
+    return Boolean(override && override.signature === finding?.signature);
+  }
+
+  function continuityReport(input = {}) {
+    const previous = input.previous || {};
+    const current = input.current || {};
+    const previousCutId = String(input.previousCutId || "previous");
+    const world = input.worldSize || { width: 36, depth: 20.25 };
+    const findings = [];
+    if (previous.aspect && current.aspect && previous.aspect !== current.aspect) {
+      findings.push(continuityFinding(previousCutId, "aspect", `연속성: 화면비 ${previous.aspect} → ${current.aspect}`, [], [previous.aspect, current.aspect]));
+    }
+
+    const previousItems = new Map((previous.items || []).map((item) => [continuityIdentity(item), item]));
+    const currentItems = new Map((current.items || []).map((item) => [continuityIdentity(item), item]));
+    const commonActors = [...previousItems.entries()]
+      .filter(([identity, item]) => item.type === "actor" && currentItems.get(identity)?.type === "actor")
+      .map(([identity, item]) => ({ identity, previous: item, current: currentItems.get(identity) }))
+      .filter((entry) => entry.previous.visible !== false && entry.current.visible !== false);
+
+    let axisPair = null;
+    for (let first = 0; first < commonActors.length - 1; first += 1) {
+      for (let second = first + 1; second < commonActors.length; second += 1) {
+        const a = commonActors[first];
+        const b = commonActors[second];
+        const previousDistance = Math.hypot(b.previous.x - a.previous.x, b.previous.y - a.previous.y);
+        const currentDistance = Math.hypot(b.current.x - a.current.x, b.current.y - a.current.y);
+        if (Math.min(previousDistance, currentDistance) > 0.08) {
+          axisPair = [a, b];
+          break;
+        }
+      }
+      if (axisPair) break;
+    }
+    if (axisPair && previous.camera && current.camera) {
+      const side = (camera, first, second) => {
+        const dx = second.x - first.x;
+        const dy = second.y - first.y;
+        const length = Math.max(0.0001, Math.hypot(dx, dy));
+        return (dx * (camera.y - first.y) - dy * (camera.x - first.x)) / length;
+      };
+      const beforeSide = side(previous.camera, axisPair[0].previous, axisPair[1].previous);
+      const afterSide = side(current.camera, axisPair[0].current, axisPair[1].current);
+      if (Math.abs(beforeSide) > 0.04 && Math.abs(afterSide) > 0.04 && beforeSide * afterSide < 0) {
+        const names = axisPair.map((entry) => `@${entry.current.name}`).join("–");
+        findings.push(continuityFinding(
+          previousCutId,
+          "axis-180",
+          `연속성: ${names} 연기축을 카메라가 넘어감`,
+          axisPair.map((entry) => entry.identity),
+          [rounded(beforeSide), rounded(afterSide)],
+          "critical",
+        ));
+      }
+    }
+
+    const previousMotion = input.previousMotion || {};
+    const currentMotion = input.currentMotion || {};
+    commonActors.forEach((entry) => {
+      const before = previousMotion[entry.identity];
+      const after = currentMotion[entry.identity];
+      if (!before || !after) return;
+      const screenProjection = (vector, camera) => {
+        const angle = Number(camera?.panDeg || 0) * Math.PI / 180;
+        return Number(vector.x || 0) * -Math.sin(angle) + Number(vector.y || 0) * Math.cos(angle);
+      };
+      const beforeScreen = screenProjection(before, previous.camera);
+      const afterScreen = screenProjection(after, current.camera);
+      if (Math.abs(beforeScreen) > 0.025 && Math.abs(afterScreen) > 0.025 && beforeScreen * afterScreen < 0) {
+        findings.push(continuityFinding(
+          previousCutId,
+          "screen-direction",
+          `연속성: @${entry.current.name}의 화면 진행 방향이 반대로 바뀜`,
+          [entry.identity],
+          [rounded(beforeScreen), rounded(afterScreen)],
+        ));
+      }
+    });
+
+    previousItems.forEach((before, identity) => {
+      const after = currentItems.get(identity);
+      const label = before.type === "actor" ? `@${before.name}` : before.name;
+      if (!after) {
+        findings.push(continuityFinding(previousCutId, `${before.type}-presence`, `연속성: ${label}이 다음 컷에서 사라짐`, [identity], ["missing"]));
+        return;
+      }
+      if ((before.visible !== false) !== (after.visible !== false)) {
+        findings.push(continuityFinding(previousCutId, `${before.type}-visibility`, `연속성: ${label}의 표시 상태가 바뀜`, [identity], [before.visible !== false, after.visible !== false]));
+      }
+      const distance = Math.hypot(
+        (Number(before.x || 0) - Number(after.x || 0)) * Number(world.width || 36),
+        (Number(before.y || 0) - Number(after.y || 0)) * Number(world.depth || 20.25),
+      );
+      if (distance > (before.type === "actor" ? 0.75 : 1.0)) {
+        findings.push(continuityFinding(previousCutId, `${before.type}-position`, `연속성: ${label} 위치가 ${distance.toFixed(1)}m 이동`, [identity], [rounded(distance, 1)]));
+      }
+      const facing = angleDelta(before.facing, after.facing);
+      if (facing > 45) {
+        findings.push(continuityFinding(previousCutId, `${before.type}-facing`, `연속성: ${label} 방향이 ${Math.round(facing)}° 바뀜`, [identity], [Math.round(facing)]));
+      }
+      if (before.type === "actor") {
+        const beforeElevation = Number(before.verticalOffset || 0) + Number(before.mountedHeight || 0);
+        const afterElevation = Number(after.verticalOffset || 0) + Number(after.mountedHeight || 0);
+        if (Math.abs(beforeElevation - afterElevation) > 0.3) {
+          findings.push(continuityFinding(previousCutId, "actor-elevation", `연속성: ${label} 높이가 달라짐`, [identity], [rounded(beforeElevation), rounded(afterElevation)]));
+        }
+        if (angleDelta(before.pitch, after.pitch) > 30) {
+          findings.push(continuityFinding(previousCutId, "actor-pitch", `연속성: ${label} 몸 기울기가 크게 바뀜`, [identity], [rounded(before.pitch), rounded(after.pitch)]));
+        }
+        const poseDelta = bodyPoseDifference(before.bodyPose, after.bodyPose);
+        if (poseDelta > 45) {
+          findings.push(continuityFinding(previousCutId, "actor-pose", `연속성: ${label} 자세가 크게 바뀜`, [identity], [Math.round(poseDelta)]));
+        }
+        const beforeMounted = Boolean(before.mountId);
+        const afterMounted = Boolean(after.mountId);
+        if (beforeMounted !== afterMounted || (beforeMounted && Number(before.seatIndex || 0) !== Number(after.seatIndex || 0))) {
+          findings.push(continuityFinding(previousCutId, "actor-mount", `연속성: ${label} 탑승 또는 좌석 상태가 바뀜`, [identity], [beforeMounted, before.seatIndex || 0, afterMounted, after.seatIndex || 0]));
+        }
+      } else {
+        if (before.assetType !== after.assetType) {
+          findings.push(continuityFinding(previousCutId, "prop-type", `연속성: ${label} 소품 종류가 바뀜`, [identity], [before.assetType, after.assetType]));
+        }
+        if (before.color !== after.color) {
+          findings.push(continuityFinding(previousCutId, "prop-color", `연속성: ${label} 색상이 바뀜`, [identity], [before.color, after.color]));
+        }
+        const scaleDelta = Math.max(...["scaleX", "scaleY", "scaleZ"].map((field) => Math.abs(Number(before[field] || 1) - Number(after[field] || 1))));
+        if (scaleDelta > 0.15) {
+          findings.push(continuityFinding(previousCutId, "prop-scale", `연속성: ${label} 크기 비율이 바뀜`, [identity], [rounded(scaleDelta)]));
+        }
+      }
+    });
+    return findings;
+  }
+
+  function cutSnapshotDocument(cut = {}) {
+    return JSON.parse(JSON.stringify({
+      title: String(cut.title || "새 컷"),
+      action: String(cut.action || ""),
+      dialogue: String(cut.dialogue || ""),
+      camera: String(cut.camera || ""),
+      intent: String(cut.intent || ""),
+      notes: String(cut.notes || ""),
+      shotType: String(cut.shotType || "미정"),
+      thumbnailTime: Number(cut.thumbnailTime || 0),
+      blocking: cut.blocking || {},
+    }));
+  }
+
+  function compareCutDocuments(first = {}, second = {}) {
+    const firstBlocking = first.blocking || {};
+    const secondBlocking = second.blocking || {};
+    const rows = [
+      ["컷 제목", first.title || "", second.title || ""],
+      ["샷 크기", first.shotType || "미정", second.shotType || "미정"],
+      ["렌즈", `${firstBlocking.camera?.focal || "-"}mm`, `${secondBlocking.camera?.focal || "-"}mm`],
+      ["재생 시간", `${firstBlocking.motion?.duration || 0}초`, `${secondBlocking.motion?.duration || 0}초`],
+      ["키 수", String(firstBlocking.motion?.keyframes?.length || 0), String(secondBlocking.motion?.keyframes?.length || 0)],
+      ["액션", first.action || "없음", second.action || "없음"],
+      ["연속성 메모", first.notes || "없음", second.notes || "없음"],
+    ];
+    return rows.map(([label, a, b]) => ({ label, first: String(a), second: String(b), changed: String(a) !== String(b) }));
+  }
+
   return {
     buildStoryStructure,
+    compareCutDocuments,
+    continuityIdentity,
+    continuityReport,
+    cutSnapshotDocument,
+    findingIsOverridden,
     inferShotType,
     isSceneHeading,
     parseDuration,
     parseFocal,
     parseScenarioScenes,
     parseStoryboardSections,
+    normalizedContinuity,
     wrapLegacyProject,
   };
 });

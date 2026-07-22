@@ -7,6 +7,7 @@ const {
   interpolateBodyPose,
   mirrorBodyPose,
   presetBodyPose,
+  proceduralLocomotion,
   sanitizeBodyPose,
 } = require("../pose-core.js");
 
@@ -24,6 +25,14 @@ const walk = presetBodyPose("walk");
 assert.notEqual(walk.upperLegL.x, walk.upperLegR.x);
 const midpoint = interpolateBodyPose(neutral, walk, 0.5);
 assert.equal(midpoint.upperLegL.x, walk.upperLegL.x / 2);
+
+const walkingCycle = proceduralLocomotion(neutral, "walk", Math.PI / 2, 1);
+assert.ok(walkingCycle.pose.upperLegL.x > walkingCycle.pose.upperLegR.x, "walking must alternate the legs");
+assert.ok(walkingCycle.pose.upperArmL.x < walkingCycle.pose.upperArmR.x, "arms must counter-swing against the legs");
+assert.ok(walkingCycle.bob > 0, "walking must add a subtle body lift");
+const heldPose = proceduralLocomotion(walk, "pose", Math.PI / 2, 1);
+assert.deepEqual(heldPose.pose, walk, "pose mode must preserve the keyed pose");
+assert.equal(heldPose.bob, 0);
 
 const mirrored = mirrorBodyPose({
   upperArmL: { x: 20, y: 15, z: -30 },

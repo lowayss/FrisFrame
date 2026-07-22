@@ -4,6 +4,8 @@ __pycache__/
 .DS_Store
 node_modules/
 .venv-electron/
+.venv-electron-*/
+.runtime-cache/
 dist-runtime/
 release/
 build/pyinstaller-work/

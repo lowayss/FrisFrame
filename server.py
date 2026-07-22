@@ -39,9 +39,12 @@ STATIC_FILES = {
     "/boot-errors.js",
     "/storyboard-core.js",
     "/motion-core.js",
+    "/timeline-core.js",
     "/project-recovery-core.js",
     "/manual-guide-core.js",
     "/pose-core.js",
+    "/camera-drafting-core.js",
+    "/multi-camera-core.js",
     "/vendor/three.min.js",
     "/vendor/lucide.min.js",
 }

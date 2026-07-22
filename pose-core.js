@@ -457,6 +457,38 @@
     return sanitizeBodyPose(result);
   }
 
+  function proceduralLocomotion(input, mode = "walk", phase = 0, strength = 1) {
+    const pose = sanitizeBodyPose(input);
+    const locomotionMode = mode === "run" ? "run" : mode === "walk" ? "walk" : "pose";
+    const amount = clamp(finite(strength, 0), 0, 1);
+    if (locomotionMode === "pose" || amount <= 0) return { pose, bob: 0 };
+
+    const cycle = finite(phase, 0);
+    const swing = Math.sin(cycle);
+    const lift = 0.5 - 0.5 * Math.cos(cycle * 2);
+    const running = locomotionMode === "run";
+    const legSwing = (running ? 52 : 30) * swing * amount;
+    const armSwing = (running ? 42 : 24) * swing * amount;
+    const kneeBend = (running ? 76 : 38) * amount;
+
+    pose.upperLegL.x += legSwing;
+    pose.upperLegR.x -= legSwing;
+    pose.lowerLegL.x += (running ? 14 : 4) * amount + Math.max(0, -swing) * kneeBend;
+    pose.lowerLegR.x += (running ? 14 : 4) * amount + Math.max(0, swing) * kneeBend;
+    pose.upperArmL.x -= armSwing;
+    pose.upperArmR.x += armSwing;
+    pose.lowerArmL.x += (running ? 58 : 18) * amount;
+    pose.lowerArmR.x += (running ? 58 : 18) * amount;
+    pose.chest.x += (running ? 10 : 2) * amount;
+    pose.chest.y += swing * (running ? 7 : 4) * amount;
+    pose.head.y -= swing * (running ? 3 : 1.5) * amount;
+
+    return {
+      pose: sanitizeBodyPose(pose),
+      bob: lift * (running ? 0.075 : 0.035) * amount,
+    };
+  }
+
   return Object.freeze({
     JOINT_DEFINITIONS,
     PRESET_CATEGORIES,
@@ -465,6 +497,7 @@
     interpolateBodyPose,
     mirrorBodyPose,
     presetBodyPose,
+    proceduralLocomotion,
     sanitizeBodyPose,
   });
 }));

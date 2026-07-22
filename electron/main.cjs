@@ -7,6 +7,7 @@ const http = require("node:http");
 const path = require("node:path");
 const readline = require("node:readline");
 const { registerClipboardImageHandler } = require("./clipboard.cjs");
+const { registerFileSaveHandler } = require("./file-save.cjs");
 
 app.setName("FrisFrame");
 
@@ -31,6 +32,14 @@ registerClipboardImageHandler({
   clipboard,
   nativeImage,
   getAllowedOrigin: () => serverOrigin,
+});
+
+registerFileSaveHandler({
+  ipcMain,
+  dialog,
+  getAllowedOrigin: () => serverOrigin,
+  getDefaultDirectory: () => app.getPath("downloads"),
+  getOwnerWindow: (sender) => BrowserWindow.fromWebContents(sender),
 });
 
 function packagedRuntimePath(filename) {
@@ -206,6 +215,13 @@ async function startLocalServer() {
 }
 
 function buildApplicationMenu() {
+  app.setAboutPanelOptions({
+    applicationName: "FrisFrame",
+    applicationVersion: app.getVersion(),
+    version: app.getVersion(),
+    copyright: "Copyright (c) 2026 Egoist Film",
+    credits: "Egoist Film",
+  });
   const template = [
     {
       label: "FrisFrame",

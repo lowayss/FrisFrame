@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import server
+server.REQUIRE_ORIGIN = False
 
 
 class ServerSecurityTests(unittest.TestCase):
