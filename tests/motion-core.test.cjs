@@ -6,6 +6,7 @@ const {
   circularArcPoint,
   constrainPathEndpoint,
   composeBaseInterpolatedPose,
+  composeEvaluatedFrameBase,
   finiteNumber,
   motionSegments,
   normalizePathMode,
@@ -204,6 +205,34 @@ assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 12).map((key) => key.ti
 assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 0).map((key) => key.time), [0, 3, 6]);
 assert.deepEqual(originalTiming.map((key) => key.time), [0, 3, 6], "rescaling must not mutate the source array");
 
+const frameDocument = {
+  sceneTitle: "frame-base-test",
+  camera: { x: 0.1, focal: 35 },
+  items: [
+    { id: "actor-a", type: "actor", x: 0.2 },
+    { id: "prop-a", type: "prop", x: 0.8 },
+  ],
+  motion: { duration: 5, playhead: 1 },
+};
+const frameCalls = [];
+const evaluatedFrameBase = composeEvaluatedFrameBase(frameDocument, 9, (sourceId, safeTime, fallbackPose) => {
+  frameCalls.push([sourceId, safeTime]);
+  return { ...fallbackPose, evaluatedAt: safeTime };
+});
+assert.notEqual(evaluatedFrameBase, frameDocument, "frame assembly must clone the document");
+assert.equal(frameDocument.motion.playhead, 1, "frame assembly must not mutate authored playhead");
+assert.equal(evaluatedFrameBase.motion.playhead, 5, "frame time must clamp to duration");
+assert.deepEqual(frameCalls, [["camera", 5], ["actor-a", 5], ["prop-a", 5]]);
+assert.equal(evaluatedFrameBase.camera.evaluatedAt, 5);
+assert.equal(evaluatedFrameBase.items[0].evaluatedAt, 5);
+const evaluatedFrameStart = composeEvaluatedFrameBase(frameDocument, -3, (_sourceId, safeTime, fallbackPose) => ({ ...fallbackPose, evaluatedAt: safeTime }));
+assert.equal(evaluatedFrameStart.motion.playhead, 0, "negative frame time must clamp to zero");
+assert.throws(
+  () => composeEvaluatedFrameBase(frameDocument, 1),
+  /source evaluator/,
+  "frame assembly must not silently skip source evaluation",
+);
+
 const baseCameraPose = composeBaseInterpolatedPose({
   sourceId: "camera",
   from: { x: 0.2, y: 0.3, height: 1.5, panDeg: 350, tiltDeg: -10, focal: 24, focusDistanceM: 3, trackingTargetId: "actor-a" },
@@ -250,4 +279,4 @@ const baseActorAtLegacyThreshold = composeBaseInterpolatedPose({
 assert.equal(baseActorAtLegacyThreshold.bodyPose, destinationBodyPose,
   "base compatibility layer keeps the old 0.999 switch while the reference guard holds until the authored destination");
 
-console.log("motion-core: source timing, transitions, path constraints, camera reference speed, and base pose composition passed");
+console.log("motion-core: frame assembly, source timing, transitions, path constraints, camera reference speed, and base pose composition passed");

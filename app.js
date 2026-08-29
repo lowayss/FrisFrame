@@ -11972,12 +11972,7 @@ function interpolateState(t) {
 }
 
 function interpolateStateAtTime(time) {
-  const safeTime = clamp(time, 0, state.motion.duration);
-  const next = clone(state);
-  next.camera = interpolateSourceAtTime("camera", safeTime, state.camera);
-  next.items = state.items.map((item) => interpolateSourceAtTime(item.id, safeTime, item));
-  next.motion.playhead = safeTime;
-  return applyLiveSourceEdits(applyActiveCameraTracking(next, state), safeTime);
+  return interpolateRenderStateAtTime(state, time);
 }
 
 function interpolateSourceAtTime(sourceId, time, fallbackPose) {
@@ -12247,12 +12242,16 @@ function framingStatusLabel(status) {
 }
 
 function interpolateRenderStateAtTime(renderState, time) {
-  if (renderState === state) return interpolateStateAtTime(time);
-  const safeTime = clamp(time, 0, renderState.motion.duration);
-  const next = clone(renderState);
-  next.camera = interpolateSourceAtTimeFor(renderState, "camera", safeTime, renderState.camera);
-  next.items = renderState.items.map((item) => interpolateSourceAtTimeFor(renderState, item.id, safeTime, item));
-  next.motion.playhead = safeTime;
+  const composeEvaluatedFrameBase = window.FrisFrameMotionCore?.composeEvaluatedFrameBase;
+  if (typeof composeEvaluatedFrameBase !== "function") {
+    throw new Error("모션 코어의 프레임 조립기를 불러오지 못했습니다.");
+  }
+  const next = composeEvaluatedFrameBase(
+    renderState,
+    time,
+    (sourceId, safeTime, fallbackPose) => interpolateSourceAtTimeFor(renderState, sourceId, safeTime, fallbackPose),
+  );
+  const safeTime = Number(next.motion?.playhead || 0);
   return applyLiveSourceEdits(applyActiveCameraTracking(next, renderState), safeTime);
 }
 

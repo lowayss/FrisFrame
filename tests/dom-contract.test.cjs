@@ -111,6 +111,9 @@ assert.ok(app.includes("ensureDurationCovers(nextTime)"), "keyframe follow-up ti
 assert.match(app, /function advancePlayheadAfterKeyframe\([\s\S]*?state\.motion\.playhead = nextTime;[\s\S]*?updatePlayheadDisplay\(nextTime\);/, "key actions must visibly advance the playhead");
 assert.match(app, /renderSourceTimelines\(keyframes, cutTimes\);[\s\S]*?updatePlayheadDisplay\(displayPlayhead\(\)\);/, "split timeline lanes must receive the current playhead after they are rebuilt");
 assert.match(app, /function materializeEvaluatedViewForEditing\([\s\S]*?const baseFrame = interpolateStateAtTime\(evaluatedViewState\.motion\.playhead\);[\s\S]*?else if \(sourceId === "camera"\) \{[\s\S]*?state\.camera = clone\(baseFrame\.camera\);[\s\S]*?state\.items = clone\(visibleFrame\.items\);/, "camera editing must restore the camera without baking actor motion into authored state");
+assert.match(app, /function interpolateStateAtTime\(time\) \{\s*return interpolateRenderStateAtTime\(state, time\);\s*\}/, "interactive preview must share the render-state frame evaluator");
+assert.ok(app.includes("window.FrisFrameMotionCore?.composeEvaluatedFrameBase"), "app frame evaluation must delegate base frame assembly to motion-core");
+assert.ok(motion.includes("function composeEvaluatedFrameBase"), "motion-core must own base frame assembly");
 assert.match(app, /const DIRECT_MANIPULATION_THRESHOLD_PX = 5/, "stage selection and direct manipulation need a click threshold");
 assert.match(app, /if \(drag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "2D click selection must not materialize evaluated poses");
 assert.match(app, /if \(threeDrag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "3D click selection must not materialize evaluated poses");
@@ -138,7 +141,8 @@ assert.match(motion, /facing: lerpAngleDegrees\(from\.facing, to\.facing\)/, "mo
 assert.match(app, /function rememberLiveSourceEdit\(sourceId\)[\s\S]*?liveSourceEdits\.set\(sourceId, \{ time, pose: currentPose \}\)/, "scene edits must remain independent even when a key exists at the playhead");
 assert.ok(app.includes("function selectedPoseActor("), "pose actions must resolve an actor even after 3D selection changes");
 assert.ok(app.includes("function applyActiveCameraTracking("), "camera tracking must survive keyed interpolation");
-assert.ok(app.includes("applyActiveCameraTracking(next, state)"), "active camera tracking must be restored after state interpolation");
+assert.ok(app.includes("applyActiveCameraTracking(next, renderState)"), "active camera tracking must be restored after shared render-state interpolation");
+assert.match(app, /function interpolateStateAtTime\(time\) \{\s*return interpolateRenderStateAtTime\(state, time\);\s*\}/, "state interpolation must enter the shared render-state evaluator before tracking");
 assert.ok(app.includes("const actor = current?.type === \"actor\""), "pose mode must select an actor before showing pose controls");
 assert.ok(app.includes("function drawStoryboardNote("), "2D plan needs readable local instructions");
 assert.ok(app.includes("function drawPlanPathArrows("), "2D plan needs repeated direction arrows");
