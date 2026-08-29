@@ -180,12 +180,15 @@ function fixtureSourceEvaluator(renderState, sourceId, time, fallbackPose) {
   const plan = motionCore.sourceKeyframeEvaluationPlan(keys, time);
   if (plan.kind === "fallback") return motionCore.cloneValue(fallbackPose);
   if (plan.kind === "key") return { ...fallbackPose, ...motionCore.cloneValue(plan.keyframe.pose || {}) };
+  const interpolationProgress = sourceId !== "camera" && fallbackPose?.type === "actor"
+    ? plan.referenceProgress
+    : plan.progress;
   return fixtureWindow.interpolatePoseFor(
     renderState,
     sourceId,
     plan.start.pose,
     plan.end.pose,
-    plan.progress,
+    interpolationProgress,
     fallbackPose,
     plan.end,
     sourceId === "camera" ? { referenceProgress: plan.referenceProgress } : null,
@@ -216,15 +219,36 @@ near(quarterFrame.camera.tiltDeg, -7.5);
 near(quarterFrame.camera.focal, 29.75);
 assert.equal(Number.isInteger(quarterFrame.camera.focal), false, "24→70 mm zoom must retain sub-mm evaluation precision");
 assert.equal(quarterFrame.camera.trackingTargetId, "actor-a");
-near(quarterFrame.items[0].x, 0.3);
-near(quarterFrame.items[0].y, 0.55);
-near(quarterFrame.items[0].verticalOffset, 0.25);
-near(quarterFrame.items[0].facing, 22.5);
-assert.deepEqual(quarterFrame.items[0].bodyPose, neutralPose, "actor pose must stay held during root motion");
+near(quarterFrame.items[0].x, 0.25);
+near(quarterFrame.items[0].y, 0.525);
+near(quarterFrame.items[0].verticalOffset, 0.125);
+near(quarterFrame.items[0].facing, 11.25);
+assert.deepEqual(quarterFrame.items[0].bodyPose, neutralPose, "actor pose must stay held during eased root motion");
 
 const preArrivalFrame = fixtureFrame(1.999999);
 assert.equal(preArrivalFrame.camera.trackingTargetId, "actor-a", "tracking must not switch before the destination key");
 assert.deepEqual(preArrivalFrame.items[0].bodyPose, neutralPose, "actor pose must not switch before the destination key");
+
+const actorRunKeys = [
+  { id: "actor-run-0", time: 0, pose: { x: 0, bodyPose: neutralPose } },
+  { id: "actor-run-1", time: 1, transition: "smooth", pose: { x: 1, bodyPose: neutralPose } },
+  { id: "actor-run-2", time: 2, transition: "smooth", pose: { x: 2, bodyPose: raisedPose } },
+];
+const actorRunFirst = motionCore.sourceKeyframeEvaluationPlan(actorRunKeys, 0.5);
+const actorRunSecond = motionCore.sourceKeyframeEvaluationPlan(actorRunKeys, 1.5);
+near(actorRunFirst.referenceProgress, 0.375);
+near(actorRunSecond.referenceProgress, 0.625);
+const heldDuringSecondRun = fakeWindow.interpolatePoseFor(
+  {},
+  "actor-1",
+  actorRunSecond.start.pose,
+  actorRunSecond.end.pose,
+  actorRunSecond.referenceProgress,
+  { type: "actor" },
+  actorRunSecond.end,
+);
+assert.deepEqual(heldDuringSecondRun.bodyPose, neutralPose, "actor smooth root timing must not blend or synthesize body motion");
+
 const destinationFrame = fixtureFrame(2);
 assert.equal(destinationFrame.camera.trackingTargetId, "actor-b", "tracking must switch at the destination key");
 assert.deepEqual(destinationFrame.items[0].bodyPose, raisedPose, "authored actor pose must switch at the destination key");

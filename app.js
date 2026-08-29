@@ -12264,6 +12264,9 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
   const plan = sourceKeyframeEvaluationPlan(keyframes, time);
   if (plan.kind === "fallback") return clone(fallbackPose);
   if (plan.kind === "key") return mergePoseWithFallbackFor(renderState, sourceId, plan.keyframe.pose, fallbackPose);
+  const interpolationProgress = sourceId !== "camera" && fallbackPose?.type === "actor"
+    ? plan.referenceProgress
+    : plan.progress;
   const evaluationOptions = sourceId === "camera"
     ? { referenceProgress: plan.referenceProgress }
     : null;
@@ -12272,7 +12275,7 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
     sourceId,
     plan.start.pose,
     plan.end.pose,
-    plan.progress,
+    interpolationProgress,
     fallbackPose,
     plan.end,
     evaluationOptions,
