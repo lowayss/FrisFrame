@@ -107,6 +107,8 @@ const curveStart = { x: 0, y: 0 };
 const curveControl = { x: 0.05, y: 1.4 };
 const curveEnd = { x: 1, y: 0 };
 const equalTimeSteps = Array.from({ length: 9 }, (_entry, index) => index / 8);
+// Constant-distance remapping is camera-only by design: Seedance should receive
+// cleaner camera velocity without silently changing authored actor motion.
 const cameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
   curveStart,
   curveEnd,
