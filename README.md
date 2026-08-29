@@ -156,8 +156,9 @@ FrisFrame은 배우의 보조 움직임을 임의로 만들어내지 않습니�
 - 정확한 `1 / fps` 간격의 CFR 프레임 샘플링
 - H.264 / `yuv420p` / fast-start 출력
 - 필요할 때 MP4 구간 설정
+- 여러 컷 작업 시 내부 안전 검사를 거친 전체 컷 MP4 ZIP
 
-기존 내부 Batch/검증 인프라는 호환성과 안전성을 위해 유지될 수 있지만, **배경시트·Production Pack·Reference Prompt·인앱 AI 생성 같은 기능을 최종 워크플로로 제시하지 않습니다.**
+Reference Readiness 계산은 MP4 안전 정책으로만 사용하며 별도 사용자 단계나 점수 UI로 노출하지 않습니다. Reference Prompt 생성은 FrisFrame 밖의 MCP 대화가 담당합니다.
 
 ### 내부 Export 안전 검사
 
@@ -211,6 +212,8 @@ FrisFrame에서 MP4는 완성 애니메이션이 아니라 **Seedance에 전달�
 
 3D 선택에서는 바닥, 그리드, 경로, 장식용 Helper처럼 편집 대상이 아닌 객체를 Raycast 대상에서 제외하고 실제 배우/소품/카메라/관절/이동 핸들에 선택 비용을 집중합니다.
 
+자동 품질 검사에는 합성 대형 장면 회귀가 포함됩니다. 현재 fixture는 **320개 대상 + 8,000개 키프레임**을 만들고, 변하지 않은 상태에서 목록·대상 선택·타임라인 DOM이 반복 재생성되지 않는지 확인합니다. 이 검사는 절대적인 실기기 FPS 보장이 아니라 큰 성능 회귀를 CI에서 조기에 잡는 guard입니다.
+
 ## 로컬에서 실행하기
 
 MP4 인코딩을 포함한 로컬 브라우저 앱으로도 실행할 수 있습니다.
@@ -231,60 +234,33 @@ http://127.0.0.1:8766/
 python3 mcp_previs_server.py
 ```
 
-전체 프로젝트 검사를 실행하려면:
+전체 자동 검사는:
 
 ```bash
 python3 quality_check.py
 ```
 
-## 데스크톱 앱 빌드
+데스크톱 패키지를 로컬에서 검증하려면:
 
 ```bash
 npm install
 npm run check
-```
-
-macOS Apple Silicon:
-
-```bash
 npm run desktop:build:mac
-```
-
-Windows x64:
-
-```bash
+# 또는
 npm run desktop:build:win
+npm run desktop:verify
 ```
 
-패키징된 앱에는 로컬 Python 서버 런타임, 결정적 MCP stdio 런타임, FFmpeg가 포함되므로 일반 사용자가 별도로 Python이나 FFmpeg를 설치할 필요가 없습니다.
+## 프로젝트 저장 / 안전성
 
-## 문서
+- 자동저장과 명시적 저장은 같은 관리 프로젝트 revision을 사용합니다.
+- MCP 쓰기도 revision을 확인하므로 수동 편집과 충돌하면 조용히 덮어쓰지 않습니다.
+- managed project는 Electron 사용자 데이터 폴더의 SQLite DB에 저장합니다.
+- 로컬 DB나 백업 파일을 저장소에 추적하지 않도록 CI가 검사합니다.
+- Electron은 `contextIsolation`, `sandbox`, `webSecurity`를 유지하고 Node API를 렌더러에 직접 노출하지 않습니다.
 
-- [English README](README.en.md) — 영문 프로젝트 소개
-- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — 상세 사용 설명서
-- [`MCP_FIRST_WORKFLOW.md`](MCP_FIRST_WORKFLOW.md) — 수동/MCP 공용 프리비즈 워크플로
-- [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — Seedance 레퍼런스 영상 설계 원칙
-- [`MAINTENANCE.md`](MAINTENANCE.md) — 코드 구조와 유지보수 경계
-- [`SIGNING.md`](SIGNING.md) — macOS / Windows 정식 배포 서명 설정
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — 포함된 외부 소프트웨어 고지
+## 현재 남은 소스 정리
 
-## 현재 상태
+Electron 사용자 경로에서는 구형 Production Pack/배경시트/Reference Prompt/Readiness UI가 제거되어 있습니다. `reference-workflow-core.js`에서도 Prompt/Readiness 사용자 UI 구현은 물리적으로 삭제했습니다.
 
-FrisFrame은 현재 **Seedance Video Reference를 빠르고 정확하게 만드는 결정적 프리비즈 도구**로 정리하고 있습니다.
-
-현재 우선순위는 새 AI 기능을 앱 안에 계속 늘리는 것이 아니라 다음 항목입니다.
-
-- Reference MP4 타이밍 정확도
-- 카메라 움직임의 예측 가능성
-- 배우 Root Motion 전달 정확도
-- 저장 / 복구 안정성
-- 대형 장면의 2D/3D 편집 성능
-- MCP와 수동 편집의 동일 프로젝트 호환성
-- Windows / macOS 데스크톱 안정성
-- 보안 및 회귀 테스트 강화
-
-외부 영상 자동 분석, 인앱 생성형 이미지/영상 API, 최종 Seedance 프롬프트 생성은 FrisFrame의 핵심 범위에 포함하지 않습니다.
-
-## 라이선스
-
-MIT License. 자세한 내용은 [`LICENSE`](LICENSE)를 참고하세요.
+공용 `app.js/index.html`에는 브라우저 호환성을 위해 과거 export 버튼/함수 일부가 아직 남아 있습니다. 이 부분은 직접 `#id` 이벤트 바인딩이 얽혀 있으므로 대형 파일을 한 번에 잘라내지 않고, 이벤트 연결을 먼저 선택적/모듈형으로 분리한 다음 작은 커밋으로 HTML과 dead function을 제거하는 것이 안전합니다. 구체적인 삭제 순서는 [`MAINTENANCE.md`](MAINTENANCE.md)에 기록되어 있습니다.
