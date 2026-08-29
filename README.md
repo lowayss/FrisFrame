@@ -221,6 +221,7 @@ npm run desktop:build:win
 - [English README](README.en.md) — 영문 프로젝트 소개
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — 상세 사용 설명서
 - [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — Seedance 레퍼런스 영상 설계 원칙
+- [`REFERENCE_PROMPT_GUIDE.md`](REFERENCE_PROMPT_GUIDE.md) — Seedance / Higgsfield / Runway 레퍼런스 프롬프트 가이드
 - [`MAINTENANCE.md`](MAINTENANCE.md) — 코드 구조와 유지보수 경계
 - [`SIGNING.md`](SIGNING.md) — macOS / Windows 정식 배포 서명 설정
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — 포함된 외부 소프트웨어 고지

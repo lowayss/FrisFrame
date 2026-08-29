@@ -10,6 +10,7 @@
     const install = () => {
       api.installBatchReferenceExportUi(root);
       api.installReferenceReadinessUi(root);
+      api.installReferencePromptGuideUi(root);
     };
     if (root.document.readyState === "loading") root.addEventListener("DOMContentLoaded", install, { once: true });
     else root.setTimeout?.(install, 0);
@@ -238,6 +239,276 @@
     return true;
   }
 
+  function normalizeReferencePromptPlatform(value) {
+    const normalized = String(value || "seedance").trim().toLowerCase();
+    return ["seedance", "higgsfield", "runway", "prompt-writer"].includes(normalized) ? normalized : "seedance";
+  }
+
+  function referencePromptPlatformNote(platform = "seedance") {
+    const normalized = normalizeReferencePromptPlatform(platform);
+    if (normalized === "higgsfield") return "Higgsfield는 생성 플랫폼입니다. 이 템플릿은 튜토리얼과 가장 가까운 Higgsfield + Seedance Video-to-Video 조합을 기준으로 합니다.";
+    if (normalized === "runway") return "Runway는 모델별 레퍼런스 동작이 다릅니다. 이 템플릿은 Aleph/Edit Studio 계열처럼 입력 영상을 보존·변환하는 흐름을 기준으로 짧고 직접적인 지시를 사용합니다.";
+    if (normalized === "prompt-writer") return "튜토리얼처럼 Claude/Fable 같은 외부 도구에 FrisFrame MP4와 이미지 레퍼런스를 첨부하고, 초 단위 Seedance 프롬프트를 작성하게 하는 요청문입니다.";
+    return "Seedance Video-to-Video 기준입니다. FrisFrame MP4는 카메라·블로킹·타이밍을, 이미지/텍스트 레퍼런스는 인물·장소·스타일을 담당하도록 역할을 분리합니다.";
+  }
+
+  function referencePromptValue(value, fallback) {
+    const normalized = String(value || "").trim();
+    return normalized || fallback;
+  }
+
+  function referencePromptCutLabel(entry = {}) {
+    return `S${String(entry.sceneNumber || 0).padStart(2, "0")} C${String(entry.cutNumber || 0).padStart(2, "0")} · ${entry.title || "컷"}`;
+  }
+
+  function buildReferencePromptGuide(entry = {}, platform = "seedance", options = {}) {
+    const normalized = normalizeReferencePromptPlatform(platform);
+    const motion = entry?.blocking?.motion || {};
+    const duration = Math.max(0.1, Number(entry.duration || motion.duration || 0) || 0.1);
+    const fps = Math.max(1, Math.round(Number(entry.fps || motion.fps || 24) || 24));
+    const cutLabel = referencePromptCutLabel(entry);
+    const story = referencePromptValue(options.story, "[이 컷에서 실제로 일어나는 행동과 사건을 입력하세요]");
+    const references = referencePromptValue(options.references, "[예: @char_main = 주인공 외형, @loc_main = 최종 장소/미술 레퍼런스]");
+    const style = referencePromptValue(options.style, "[최종 영상의 시대, 장소, 조명, 렌즈 질감, 색감, 의상/미술 스타일을 입력하세요]");
+    const audio = referencePromptValue(options.audio, "[선택: 대사, 환경음, Foley, 음악 또는 SFX]");
+
+    if (normalized === "prompt-writer") {
+      return [
+        `Write a ${duration.toFixed(2)}-second Seedance video-to-video prompt based on the attached FrisFrame blocking MP4.`,
+        `The shot is ${cutLabel} at ${fps} FPS. Read the entire input video and write the final generation prompt second-by-second so it matches the authored camera path, framing, lens changes, actor root blocking, spatial relationships, and timing.`,
+        "Treat the FrisFrame MP4 as the master structure/motion reference. Treat primitive colors and shapes as blocking markers only, not final design.",
+        "Treat character/location/style images as appearance references. Keep natural secondary body motion subtle and compatible with the blocking instead of inventing a different camera or root path.",
+        "Return the prompt in these sections: SHOT, ACTIVE REFERENCES, GLOBAL STYLE, SCENE / ACTION, SECOND-BY-SECOND TIMELINE, AUDIO / SFX.",
+        "",
+        `SCENE / ACTION NOTES: ${story}`,
+        `REFERENCE MAP: ${references}`,
+        `VISUAL TARGET: ${style}`,
+        `AUDIO / SFX: ${audio}`,
+      ].join("\n");
+    }
+
+    if (normalized === "runway") {
+      return [
+        `RUNWAY REFERENCE STARTER · ${cutLabel} · ${duration.toFixed(2)}s`,
+        "",
+        "Transform the FrisFrame previs into the requested final scene while preserving the input video's camera trajectory, timing, framing, subject blocking, and spatial relationships.",
+        `Scene/action: ${story}`,
+        `Replace placeholder geometry with these final references/subjects: ${references}`,
+        `Final visual target: ${style}`,
+        `Motion/audio notes: ${audio}`,
+        "Keep the requested transformation specific and concise. Add extra motion only when it supports the authored blocking.",
+        "",
+        "Reference usage: @Video 1 = FrisFrame previs structure. Add image/video references with Runway's @ reference picker when the selected model supports them.",
+      ].join("\n");
+    }
+
+    const heading = normalized === "higgsfield"
+      ? "HIGGSFIELD · SEEDANCE VIDEO-TO-VIDEO"
+      : "SEEDANCE VIDEO-TO-VIDEO";
+    return [
+      `${heading} · ${cutLabel} · ${duration.toFixed(2)}s · ${fps} FPS`,
+      "",
+      "ACTIVE REFERENCES",
+      "@video_1 — FrisFrame previs MP4. Master for camera trajectory, framing, lens progression, camera timing, actor root blocking, spatial relationships, and beat timing. Follow this structure beat-for-beat. Primitive colors/shapes are blocking markers only; final appearance comes from the references and text below.",
+      references,
+      "",
+      "SCENE / ACTION",
+      story,
+      "",
+      "VISUAL TARGET",
+      style,
+      "",
+      "AUDIO / SFX",
+      audio,
+      "",
+      "REFERENCE PRIORITY",
+      "Keep the camera path, framing, timing, and actor root movement tied to @video_1. Use character/location/style references for identity, wardrobe, environment, lighting, materials, and final look. Natural secondary motion may be added only where it supports the authored blocking.",
+    ].join("\n");
+  }
+
+  async function copyReferencePromptText(target, text, documentObject) {
+    const payload = String(text || "");
+    if (!payload) return false;
+    if (typeof target?.copyTextToClipboard === "function") {
+      await target.copyTextToClipboard(payload);
+      return true;
+    }
+    if (target?.navigator?.clipboard?.writeText) {
+      try {
+        await target.navigator.clipboard.writeText(payload);
+        return true;
+      } catch {
+        // Fall through to the DOM copy path.
+      }
+    }
+    if (!documentObject?.createElement || typeof documentObject.execCommand !== "function") return false;
+    const textarea = documentObject.createElement("textarea");
+    textarea.value = payload;
+    textarea.setAttribute("readonly", "");
+    Object.assign(textarea.style, { position: "fixed", opacity: "0", pointerEvents: "none" });
+    documentObject.body?.appendChild(textarea);
+    textarea.select?.();
+    const copied = documentObject.execCommand("copy") === true;
+    textarea.remove?.();
+    return copied;
+  }
+
+  function installReferencePromptGuideUi(target) {
+    const documentObject = target?.document;
+    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
+    if (documentObject.querySelector("#referencePromptGuideBtn")) return true;
+    const anchor = documentObject.querySelector("#referenceReadinessBtn") || documentObject.querySelector("#batchReferenceVideoBtn") || documentObject.querySelector("#videoPanelBtn") || documentObject.querySelector("#videoBtn");
+    if (!anchor?.parentNode) return false;
+
+    const button = documentObject.createElement("button");
+    button.type = "button";
+    button.id = "referencePromptGuideBtn";
+    button.className = anchor.className;
+    button.textContent = "Reference Prompt";
+    button.title = "FrisFrame 레퍼런스 MP4와 함께 사용할 Seedance/Higgsfield/Runway 프롬프트 틀을 만듭니다. AI 호출은 하지 않습니다.";
+    anchor.insertAdjacentElement?.("afterend", button) || anchor.parentNode.appendChild(button);
+
+    const dialog = documentObject.createElement("dialog");
+    dialog.id = "referencePromptGuideDialog";
+    Object.assign(dialog.style, {
+      width: "min(860px, calc(100vw - 32px))",
+      maxHeight: "88vh",
+      border: "1px solid #3d4e58",
+      borderRadius: "14px",
+      background: "#12171b",
+      color: "#eef4ef",
+      padding: "0",
+      boxShadow: "0 24px 80px rgba(0,0,0,.55)",
+    });
+    const shell = documentObject.createElement("div");
+    Object.assign(shell.style, { padding: "20px", display: "grid", gap: "12px" });
+    const heading = documentObject.createElement("strong");
+    heading.textContent = "Reference Prompt Guide";
+    Object.assign(heading.style, { fontSize: "18px" });
+    const intro = documentObject.createElement("div");
+    intro.textContent = "FrisFrame은 프롬프트를 AI로 생성하지 않습니다. 현재 프리비즈와 함께 복사해 쓸 수 있는 플랫폼별 안내 문구를 만듭니다.";
+    Object.assign(intro.style, { color: "#aab5af", fontSize: "12px" });
+
+    const fieldStyle = { width: "100%", boxSizing: "border-box", border: "1px solid #34434c", borderRadius: "8px", background: "#0d1215", color: "#eef4ef", padding: "9px" };
+    const labelStyle = { display: "grid", gap: "5px", color: "#cbd5cf", fontSize: "12px" };
+    const makeLabel = (title, control) => {
+      const label = documentObject.createElement("label");
+      Object.assign(label.style, labelStyle);
+      const caption = documentObject.createElement("span");
+      caption.textContent = title;
+      label.append(caption, control);
+      return label;
+    };
+    const cutSelect = documentObject.createElement("select");
+    Object.assign(cutSelect.style, fieldStyle);
+    const platformSelect = documentObject.createElement("select");
+    Object.assign(platformSelect.style, fieldStyle);
+    [
+      ["seedance", "Seedance V2V"],
+      ["higgsfield", "Higgsfield · Seedance V2V"],
+      ["runway", "Runway · Reference / Aleph"],
+      ["prompt-writer", "Claude / Fable · 프롬프트 작성 요청"],
+    ].forEach(([value, label]) => {
+      const option = documentObject.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      platformSelect.appendChild(option);
+    });
+    const platformNote = documentObject.createElement("div");
+    Object.assign(platformNote.style, { color: "#91a69a", fontSize: "11px", lineHeight: "1.45" });
+
+    const makeTextarea = (placeholder, rows = 2) => {
+      const textarea = documentObject.createElement("textarea");
+      textarea.rows = rows;
+      textarea.placeholder = placeholder;
+      Object.assign(textarea.style, { ...fieldStyle, resize: "vertical", minHeight: `${rows * 24 + 18}px` });
+      return textarea;
+    };
+    const story = makeTextarea("예: 주인공이 골목을 걸어가며 전화한다. 끝에서 차가 멈추고 주인공이 고개를 든다.", 3);
+    const references = makeTextarea("예: @char_main = 주인공 외형 / @loc_main = 최종 골목 미술 / @style_1 = 조명·색감", 2);
+    const style = makeTextarea("예: 현대 도쿄 저녁, 사실적 장편영화 질감, 젖은 아스팔트, 부드러운 네온 반사", 2);
+    const audio = makeTextarea("예: SFX: 약한 도심 앰비언스, 발소리. 대사 없음.", 2);
+    const output = makeTextarea("", 14);
+    output.readOnly = true;
+    Object.assign(output.style, { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "11px", lineHeight: "1.45" });
+
+    const controls = documentObject.createElement("div");
+    Object.assign(controls.style, { display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "flex-end" });
+    const build = documentObject.createElement("button");
+    const copy = documentObject.createElement("button");
+    const close = documentObject.createElement("button");
+    [build, copy, close].forEach((entryButton) => {
+      entryButton.type = "button";
+      entryButton.className = anchor.className;
+    });
+    build.textContent = "프롬프트 만들기";
+    copy.textContent = "복사";
+    close.textContent = "닫기";
+    controls.append(build, copy, close);
+
+    shell.append(
+      heading,
+      intro,
+      makeLabel("컷", cutSelect),
+      makeLabel("대상", platformSelect),
+      platformNote,
+      makeLabel("장면 / 행동", story),
+      makeLabel("캐릭터 · 장소 · 스타일 레퍼런스 역할", references),
+      makeLabel("최종 비주얼", style),
+      makeLabel("오디오 / SFX (선택)", audio),
+      makeLabel("복사용 프롬프트", output),
+      controls,
+    );
+    dialog.appendChild(shell);
+    documentObject.body?.appendChild(dialog);
+
+    let entries = [];
+    const selectedEntry = () => entries[Number(cutSelect.value) || 0] || entries[0] || null;
+    const refreshOutput = () => {
+      platformNote.textContent = referencePromptPlatformNote(platformSelect.value);
+      const entry = selectedEntry();
+      output.value = entry ? buildReferencePromptGuide(entry, platformSelect.value, {
+        story: story.value,
+        references: references.value,
+        style: style.value,
+        audio: audio.value,
+      }) : "프로젝트에서 레퍼런스 MP4로 사용할 컷을 찾지 못했습니다.";
+    };
+    const refreshEntries = () => {
+      cutSelect.innerHTML = "";
+      let project = {};
+      try {
+        project = target.managedProjectDocument?.()?.project || {};
+      } catch {
+        project = {};
+      }
+      entries = collectReferenceBatchCuts(project);
+      entries.forEach((entry, index) => {
+        const option = documentObject.createElement("option");
+        option.value = String(index);
+        option.textContent = `${referencePromptCutLabel(entry)} · ${entry.duration.toFixed(2)}s`;
+        cutSelect.appendChild(option);
+      });
+      refreshOutput();
+    };
+
+    build.addEventListener("click", refreshOutput);
+    cutSelect.addEventListener("change", refreshOutput);
+    platformSelect.addEventListener("change", refreshOutput);
+    copy.addEventListener("click", async () => {
+      refreshOutput();
+      const copied = await copyReferencePromptText(target, output.value, documentObject);
+      if (typeof target.notifyApp === "function") target.notifyApp(copied ? "Reference Prompt를 복사했습니다." : "프롬프트를 복사하지 못했습니다. 텍스트 영역에서 직접 복사하세요.");
+    });
+    close.addEventListener("click", () => dialog.close?.());
+    button.addEventListener("click", () => {
+      refreshEntries();
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    });
+    return true;
+  }
+
   function readinessStatusText(result) {
     if (result.status === "ready") return "READY";
     if (result.status === "review") return "REVIEW";
@@ -367,9 +638,14 @@
     evaluateReferenceReadiness,
     exportReferenceBatchSafely,
     exportReferenceVideoBatch,
+    buildReferencePromptGuide,
+    copyReferencePromptText,
     installBatchReferenceExportUi,
+    installReferencePromptGuideUi,
     installReferenceReadinessUi,
+    normalizeReferencePromptPlatform,
     partitionReferenceBatchByReadiness,
+    referencePromptPlatformNote,
     readinessStatusText,
     referenceEntryKey,
     safeFileSlug,

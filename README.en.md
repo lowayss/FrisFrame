@@ -221,6 +221,7 @@ The packaged app includes its local Python server runtime and FFmpeg, so users d
 - [한국어 README](README.md) — Korean project overview
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — detailed usage guide
 - [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — Seedance reference-video design contract
+- [`REFERENCE_PROMPT_GUIDE.md`](REFERENCE_PROMPT_GUIDE.md) — Korean guide for Seedance / Higgsfield / Runway reference prompts
 - [`MAINTENANCE.md`](MAINTENANCE.md) — code ownership, runtime boundaries, and maintenance notes
 - [`SIGNING.md`](SIGNING.md) — macOS / Windows production signing setup
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — bundled third-party software notices
