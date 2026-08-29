@@ -567,6 +567,19 @@
     return next;
   }
 
+  function referenceExportFrameSchedule({ start = 0, end = 0, fps = 24, minFrameCount = 2 } = {}) {
+    const safeStart = finiteNumber(start, 0);
+    const safeEnd = Math.max(safeStart, finiteNumber(end, safeStart));
+    const safeFps = Math.max(1, Math.round(clamp(finiteNumber(fps, 24), 1, 60)));
+    const minimum = Math.max(2, Math.round(finiteNumber(minFrameCount, 2)));
+    const duration = Math.max(0.01, safeEnd - safeStart);
+    const frameCount = Math.max(minimum, Math.round(duration * safeFps));
+    const times = Array.from({ length: frameCount }, (_entry, index) => (
+      Math.min(safeEnd, safeStart + index / safeFps)
+    ));
+    return { start: safeStart, end: safeEnd, duration, fps: safeFps, frameCount, times };
+  }
+
   function poseFieldsChanged(startPose = {}, endPose = {}, fields = ["x", "y"], epsilon = 0.0001) {
     const threshold = Math.max(0, finiteNumber(epsilon, 0.0001));
     return fields.some((field) => {
@@ -805,6 +818,7 @@
     quadraticBezierArcLengthPoint,
     quadraticBezierPoint,
     referenceEntryKey,
+    referenceExportFrameSchedule,
     rescaleKeyframeTimes,
     safeFileSlug,
     samplePlanarPath,

@@ -14,6 +14,7 @@ const {
   pointDistance,
   poseFieldsChanged,
   quadraticBezierArcLengthPoint,
+  referenceExportFrameSchedule,
   rescaleKeyframeTimes,
   samplePlanarPath,
   sourceKeyframeEvaluationPlan,
@@ -205,6 +206,29 @@ assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 12).map((key) => key.ti
 assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 0).map((key) => key.time), [0, 3, 6]);
 assert.deepEqual(originalTiming.map((key) => key.time), [0, 3, 6], "rescaling must not mutate the source array");
 
+const schedule24 = referenceExportFrameSchedule({ start: 0, end: 2, fps: 24 });
+assert.equal(schedule24.frameCount, 48);
+assert.equal(schedule24.fps, 24);
+near(schedule24.times[0], 0);
+near(schedule24.times[1] - schedule24.times[0], 1 / 24, 0.000000001);
+near(schedule24.times.at(-1), 47 / 24, 0.000000001);
+assert.ok(schedule24.times.at(-1) < 2, "CFR sampling must not stretch the last evaluated frame to the range endpoint");
+near(schedule24.frameCount / schedule24.fps, 2, 0.000000001);
+for (let index = 1; index < schedule24.times.length; index += 1) {
+  near(schedule24.times[index] - schedule24.times[index - 1], 1 / 24, 0.000000001);
+}
+
+const schedule60 = referenceExportFrameSchedule({ start: 5, end: 7, fps: 60 });
+assert.equal(schedule60.frameCount, 120);
+near(schedule60.times[0], 5);
+near(schedule60.times[1] - schedule60.times[0], 1 / 60, 0.000000001);
+near(schedule60.times.at(-1), 5 + 119 / 60, 0.000000001);
+for (let index = 1; index < schedule60.times.length; index += 1) {
+  near(schedule60.times[index] - schedule60.times[index - 1], 1 / 60, 0.000000001);
+}
+const minimumSchedule = referenceExportFrameSchedule({ start: 1, end: 1.01, fps: 24 });
+assert.equal(minimumSchedule.frameCount, 2, "MP4 server compatibility requires at least two frames");
+
 const frameDocument = {
   sceneTitle: "frame-base-test",
   camera: { x: 0.1, focal: 35 },
@@ -279,4 +303,4 @@ const baseActorAtLegacyThreshold = composeBaseInterpolatedPose({
 assert.equal(baseActorAtLegacyThreshold.bodyPose, destinationBodyPose,
   "base compatibility layer keeps the old 0.999 switch while the reference guard holds until the authored destination");
 
-console.log("motion-core: frame assembly, source timing, transitions, path constraints, camera reference speed, and base pose composition passed");
+console.log("motion-core: CFR export scheduling, frame assembly, source timing, transitions, path constraints, camera reference speed, and base pose composition passed");

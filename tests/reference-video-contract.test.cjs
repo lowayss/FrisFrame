@@ -81,11 +81,16 @@ assert.ok(motion.includes("function composeBaseInterpolatedPose"),
 assert.match(timeline, /const TIME_PRECISION = 6;/,
   "timeline storage precision must remain at six decimal places");
 
-// Export intentionally includes both authored endpoints in the requested frame
-// count. If this policy changes, it needs a deliberate reference-video review.
-assert.ok(app.includes("const frameCount = Math.max(2, Math.round(exportDuration * fps));"));
-assert.ok(app.includes("const progress = frameCount <= 1 ? 0 : index / (frameCount - 1);"));
-assert.ok(app.includes("const renderTime = exportRange.start + progress * exportDuration;"));
+// CFR export samples authored state on the encoded FPS grid. The final frame
+// occupies the final presentation interval; it must not be time-stretched to
+// the exact range endpoint via frameCount - 1 interpolation.
+assert.ok(app.includes("window.FrisFrameMotionCore?.referenceExportFrameSchedule"));
+assert.ok(app.includes("const frameCount = frameSchedule.frameCount;"));
+assert.ok(app.includes("const renderTime = frameSchedule.times[index];"));
+assert.equal(app.includes("index / (frameCount - 1)"), false,
+  "CFR reference export must not stretch sample spacing to force endpoint inclusion");
+assert.ok(motion.includes("safeStart + index / safeFps"),
+  "motion-core must schedule MP4 evaluation at exact CFR frame times");
 
 // Seedance receives a broadly compatible CFR H.264 MP4 rather than a browser-
 // specific codec/container variant.
