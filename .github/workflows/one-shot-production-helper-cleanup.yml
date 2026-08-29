@@ -1,6 +1,7 @@
 name: One-shot production helper cleanup
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - refactor/mcp-first-previs-workflow
