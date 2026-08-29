@@ -21,6 +21,9 @@
   motionCore = motionCore || {};
 
   const requiredMotionCore = [
+    "buildCameraMotionPreset",
+    "cameraGroundDirection",
+    "cameraMotionPresetDefinition",
     "cameraReferenceProgress",
     "clamp",
     "cloneValue",
@@ -29,16 +32,24 @@
     "heldActorBodyPose",
     "installReferenceFrameSemantics",
     "interpolateFocalLength",
+    "orbitCameraPose",
     "smoothReferenceProgress",
+    "translateCameraPose",
   ];
   const missingMotionCore = requiredMotionCore.filter((name) => typeof motionCore?.[name] !== "function");
-  if (missingMotionCore.length) {
-    throw new Error(`FrisFrameMotionCore reference evaluator is incomplete: ${missingMotionCore.join(", ")}`);
+  if (missingMotionCore.length || !motionCore.CAMERA_MOTION_PRESETS) {
+    const missing = [...missingMotionCore];
+    if (!motionCore.CAMERA_MOTION_PRESETS) missing.push("CAMERA_MOTION_PRESETS");
+    throw new Error(`FrisFrameMotionCore reference/camera planner is incomplete: ${missing.join(", ")}`);
   }
 
   const CAMERA_FOCAL_MIN = Number(motionCore.CAMERA_FOCAL_MIN || 14);
   const CAMERA_FOCAL_MAX = Number(motionCore.CAMERA_FOCAL_MAX || 135);
+  const CAMERA_MOTION_PRESETS = motionCore.CAMERA_MOTION_PRESETS;
   const {
+    buildCameraMotionPreset,
+    cameraGroundDirection,
+    cameraMotionPresetDefinition,
     cameraReferenceProgress,
     clamp,
     cloneValue,
@@ -47,23 +58,12 @@
     heldActorBodyPose,
     installReferenceFrameSemantics,
     interpolateFocalLength,
+    orbitCameraPose,
     smoothReferenceProgress,
+    translateCameraPose,
   } = motionCore;
 
-  const CAMERA_PRESET_MIN_COORD = 0.01;
-  const CAMERA_PRESET_MAX_COORD = 0.99;
   const SEEDANCE_REFERENCE_MAX_SECONDS = 30;
-  const CAMERA_MOTION_PRESETS = Object.freeze({
-    "dolly-in": { label: "Dolly In", unit: "m", defaultAmount: 2, pathMode: "straight" },
-    "dolly-out": { label: "Dolly Out", unit: "m", defaultAmount: 2, pathMode: "straight" },
-    "truck-left": { label: "Truck Left", unit: "m", defaultAmount: 2, pathMode: "straight" },
-    "truck-right": { label: "Truck Right", unit: "m", defaultAmount: 2, pathMode: "straight" },
-    "pedestal-up": { label: "Pedestal Up", unit: "m", defaultAmount: 1, pathMode: "straight" },
-    "pedestal-down": { label: "Pedestal Down", unit: "m", defaultAmount: 1, pathMode: "straight" },
-    "arc-left": { label: "Arc Left", unit: "°", defaultAmount: 30, pathMode: "arc-left" },
-    "arc-right": { label: "Arc Right", unit: "°", defaultAmount: 30, pathMode: "arc-right" },
-    "follow-selected": { label: "Follow Actor", unit: "key", defaultAmount: 0, pathMode: "straight" },
-  });
 
   function safeContext(canvas, name) {
     try {
@@ -84,96 +84,6 @@
     if (hasWebGpu) return { engine: "webgpu", label: isMac ? "Mac GPU · WebGPU" : "GPU · WebGPU", isMac, hardwareAccelerated: true };
     if (hasWebGl) return { engine: "webgl", label: isMac ? "Mac GPU · WebGL" : "GPU · WebGL", isMac, hardwareAccelerated: true };
     return { engine: "cpu", label: "CPU fallback", isMac, hardwareAccelerated: false };
-  }
-
-  function normalizedStage(stageWidthM, stageDepthM) {
-    return {
-      width: Math.max(0.001, Math.abs(finiteNumber(stageWidthM, 36))),
-      depth: Math.max(0.001, Math.abs(finiteNumber(stageDepthM, 20.25))),
-    };
-  }
-
-  function cameraGroundDirection(panDeg) {
-    const radians = finiteNumber(panDeg, 180) * Math.PI / 180;
-    return { x: Math.cos(radians), z: Math.sin(radians) };
-  }
-
-  function translateCameraPose(camera = {}, stageWidthM, stageDepthM, worldDx = 0, worldDz = 0, { translateAim = true } = {}) {
-    const stage = normalizedStage(stageWidthM, stageDepthM);
-    const startX = finiteNumber(camera.x, 0.5);
-    const startY = finiteNumber(camera.y, 0.5);
-    const endX = clamp(startX + finiteNumber(worldDx, 0) / stage.width, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
-    const endY = clamp(startY + finiteNumber(worldDz, 0) / stage.depth, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
-    const normalizedDx = endX - startX;
-    const normalizedDy = endY - startY;
-    const end = { ...cloneValue(camera), x: endX, y: endY };
-    if (translateAim) {
-      if (Number.isFinite(Number(camera.aimX))) end.aimX = clamp(finiteNumber(camera.aimX) + normalizedDx, 0, 1);
-      if (Number.isFinite(Number(camera.aimY))) end.aimY = clamp(finiteNumber(camera.aimY) + normalizedDy, 0, 1);
-    }
-    return end;
-  }
-
-  function orbitCameraPose(camera = {}, stageWidthM, stageDepthM, angleDeg = 30) {
-    const stage = normalizedStage(stageWidthM, stageDepthM);
-    const cameraX = finiteNumber(camera.x, 0.5) * stage.width;
-    const cameraZ = finiteNumber(camera.y, 0.5) * stage.depth;
-    const direction = cameraGroundDirection(camera.panDeg);
-    let pivotX = finiteNumber(camera.aimX, NaN) * stage.width;
-    let pivotZ = finiteNumber(camera.aimY, NaN) * stage.depth;
-    if (!Number.isFinite(pivotX) || !Number.isFinite(pivotZ) || Math.hypot(cameraX - pivotX, cameraZ - pivotZ) < 0.25) {
-      pivotX = cameraX + direction.x * 4;
-      pivotZ = cameraZ + direction.z * 4;
-    }
-    const radians = finiteNumber(angleDeg, 30) * Math.PI / 180;
-    const relativeX = cameraX - pivotX;
-    const relativeZ = cameraZ - pivotZ;
-    const rotatedX = relativeX * Math.cos(radians) - relativeZ * Math.sin(radians);
-    const rotatedZ = relativeX * Math.sin(radians) + relativeZ * Math.cos(radians);
-    const endX = clamp((pivotX + rotatedX) / stage.width, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
-    const endY = clamp((pivotZ + rotatedZ) / stage.depth, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
-    const worldEndX = endX * stage.width;
-    const worldEndZ = endY * stage.depth;
-    const panDeg = ((Math.atan2(pivotZ - worldEndZ, pivotX - worldEndX) * 180 / Math.PI) % 360 + 360) % 360;
-    return { ...cloneValue(camera), x: endX, y: endY, aimX: clamp(pivotX / stage.width, 0, 1), aimY: clamp(pivotZ / stage.depth, 0, 1), panDeg };
-  }
-
-  function cameraMotionPresetDefinition(presetId) {
-    return CAMERA_MOTION_PRESETS[presetId] || CAMERA_MOTION_PRESETS["dolly-in"];
-  }
-
-  function buildCameraMotionPreset({ presetId = "dolly-in", camera = {}, stageWidthM = 36, stageDepthM = 20.25, amount, actorId = "", actorStartPose = null, actorEndPose = null, followPathMode = "straight" } = {}) {
-    const definition = cameraMotionPresetDefinition(presetId);
-    const startPose = cloneValue(camera);
-    const requestedAmount = finiteNumber(amount, definition.defaultAmount);
-    let endPose = cloneValue(startPose);
-    let pathMode = definition.pathMode;
-    if (presetId === "dolly-in" || presetId === "dolly-out") {
-      const direction = cameraGroundDirection(startPose.panDeg);
-      const signed = Math.abs(requestedAmount) * (presetId === "dolly-in" ? 1 : -1);
-      endPose = translateCameraPose(startPose, stageWidthM, stageDepthM, direction.x * signed, direction.z * signed, { translateAim: false });
-    } else if (presetId === "truck-left" || presetId === "truck-right") {
-      const direction = cameraGroundDirection(startPose.panDeg);
-      const right = { x: -direction.z, z: direction.x };
-      const signed = Math.abs(requestedAmount) * (presetId === "truck-right" ? 1 : -1);
-      endPose = translateCameraPose(startPose, stageWidthM, stageDepthM, right.x * signed, right.z * signed, { translateAim: true });
-    } else if (presetId === "pedestal-up" || presetId === "pedestal-down") {
-      const signed = Math.abs(requestedAmount) * (presetId === "pedestal-up" ? 1 : -1);
-      endPose.height = clamp(finiteNumber(startPose.height, 1.6) + signed, 0.15, 20);
-    } else if (presetId === "arc-left" || presetId === "arc-right") {
-      const angle = clamp(Math.abs(requestedAmount), 5, 90) * (presetId === "arc-left" ? 1 : -1);
-      endPose = orbitCameraPose(startPose, stageWidthM, stageDepthM, angle);
-    } else if (presetId === "follow-selected") {
-      if (!actorId || !actorStartPose || !actorEndPose) throw new Error("Follow Actor에는 기준 배우와 다음 배우 키가 필요합니다.");
-      const dx = finiteNumber(actorEndPose.x, finiteNumber(actorStartPose.x, 0.5)) - finiteNumber(actorStartPose.x, 0.5);
-      const dy = finiteNumber(actorEndPose.y, finiteNumber(actorStartPose.y, 0.5)) - finiteNumber(actorStartPose.y, 0.5);
-      const stage = normalizedStage(stageWidthM, stageDepthM);
-      endPose = translateCameraPose(startPose, stage.width, stage.depth, dx * stage.width, dy * stage.depth, { translateAim: true });
-      startPose.trackingTargetId = actorId;
-      endPose.trackingTargetId = actorId;
-      pathMode = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"].includes(followPathMode) ? followPathMode : "straight";
-    }
-    return { presetId, label: definition.label, unit: definition.unit, requestedAmount, startPose, endPose, pathMode };
   }
 
   function cameraPresetActorContext(target, frame, startTime) {
