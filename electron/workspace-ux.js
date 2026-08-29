@@ -114,6 +114,58 @@
       font-size: 9px;
       line-height: 1.35;
     }
+
+    /* Properties: show the controls used on nearly every edit first. */
+    #propertiesPanel > summary .frisframe-selection-kind {
+      margin-left: auto;
+      margin-right: 5px;
+      padding: 2px 6px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      color: #8d949d;
+      background: rgba(255,255,255,.025);
+      font-size: 9px;
+      font-weight: 800;
+    }
+    #propertiesForm.frisframe-properties-polished {
+      gap: 7px;
+    }
+    .frisframe-properties-polished > .stack-field:first-of-type {
+      margin-top: 1px;
+    }
+    .frisframe-properties-polished .frisframe-property-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      margin-top: 2px;
+    }
+    .frisframe-properties-polished .frisframe-property-actions button {
+      min-height: 30px;
+    }
+    .frisframe-properties-polished .frisframe-property-advanced,
+    .frisframe-properties-polished .frisframe-pose-disclosure {
+      margin-top: 1px;
+    }
+    .frisframe-properties-polished .frisframe-property-advanced .frisframe-secondary-body,
+    .frisframe-properties-polished .frisframe-pose-disclosure .frisframe-secondary-body {
+      padding: 7px;
+    }
+    .frisframe-properties-polished .frisframe-property-advanced .mini-details,
+    .frisframe-properties-polished .frisframe-property-advanced .property-subgroup,
+    .frisframe-properties-polished .frisframe-pose-disclosure .actor-pose-editor {
+      margin: 0 !important;
+    }
+    .frisframe-properties-polished .frisframe-property-advanced .property-subgroup + .property-subgroup {
+      margin-top: 2px !important;
+    }
+    .frisframe-properties-core-hint {
+      margin: -2px 1px 1px;
+      color: #686f78;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .frisframe-pose-disclosure[hidden] { display: none !important; }
+
     @media (prefers-reduced-motion: reduce) {
       .frisframe-secondary-disclosure > summary::before { transition: none !important; }
     }
@@ -222,4 +274,82 @@
     event.preventDefault();
     openPanelAndFocus(propPanel, propName);
   });
+
+  const propertiesPanel = document.getElementById("propertiesPanel");
+  const propertiesForm = document.getElementById("propertiesForm");
+  if (propertiesPanel && propertiesForm && !propertiesForm.classList.contains("frisframe-properties-polished")) {
+    propertiesForm.classList.add("frisframe-properties-polished");
+
+    const summary = propertiesPanel.querySelector(":scope > summary");
+    const kindBadge = document.createElement("small");
+    kindBadge.className = "frisframe-selection-kind";
+    kindBadge.textContent = "대상";
+    summary?.append(kindBadge);
+
+    const selectedName = document.getElementById("selectedName");
+    const nameField = selectedName?.closest("label");
+    const sizeField = document.getElementById("sizeValue")?.closest("label.range-row");
+    const scaleReadout = document.getElementById("physicalScaleReadout");
+    const actorElevation = document.getElementById("actorElevationField");
+    const facingField = document.getElementById("facingValue")?.closest("label.range-row");
+    const actorPoseFields = document.getElementById("actorPoseFields");
+    const propSpecificFields = document.getElementById("propSpecificFields");
+    const actorDummyField = document.getElementById("actorDummyField");
+    const actorPlacementFields = document.getElementById("actorPlacementFields");
+    const manualGroupFields = document.getElementById("manualGroupFields");
+    const actorPitchField = document.getElementById("actorPitchField");
+    const miniDetails = [...propertiesForm.querySelectorAll(":scope > details.mini-details")];
+    const duplicateBtn = document.getElementById("duplicateBtn");
+    const deleteBtn = document.getElementById("deleteBtn");
+    const actionRow = duplicateBtn?.closest(".button-row");
+
+    const coreHint = document.createElement("p");
+    coreHint.className = "frisframe-properties-core-hint";
+    coreHint.textContent = "이름 · 크기 · 높이 · 방향은 바로 조정하고, 나머지는 세부 속성에서 엽니다.";
+    if (nameField) nameField.insertAdjacentElement("afterend", coreHint);
+
+    const advanced = document.createElement("details");
+    advanced.className = "frisframe-secondary-disclosure frisframe-property-advanced";
+    advanced.innerHTML = '<summary>세부 속성 <span>형태 · 탑승 · 묶음 · 정밀 이동</span></summary><div class="frisframe-secondary-body"></div>';
+    const advancedBody = advanced.querySelector(".frisframe-secondary-body");
+    miniDetails.forEach((node) => advancedBody?.append(node));
+    [actorDummyField, propSpecificFields, actorPlacementFields, manualGroupFields, actorPitchField].forEach((node) => {
+      if (node) advancedBody?.append(node);
+    });
+    propertiesForm.append(advanced);
+    rememberDisclosure(advanced, "frisframe.ui.propertyAdvanced", false);
+
+    const poseDisclosure = document.createElement("details");
+    poseDisclosure.className = "frisframe-secondary-disclosure frisframe-pose-disclosure";
+    poseDisclosure.innerHTML = '<summary>포즈 편집 <span>관절 · 프리셋 · 포즈 키</span></summary><div class="frisframe-secondary-body"></div>';
+    if (actorPoseFields) poseDisclosure.querySelector(".frisframe-secondary-body")?.append(actorPoseFields);
+    propertiesForm.append(poseDisclosure);
+    rememberDisclosure(poseDisclosure, "frisframe.ui.poseDisclosure", false);
+
+    if (actionRow) {
+      actionRow.classList.add("frisframe-property-actions");
+      propertiesForm.append(actionRow);
+    }
+
+    // Keep the everyday controls before the disclosures even if the original DOM changes later.
+    [nameField, coreHint, sizeField, scaleReadout, actorElevation, facingField].forEach((node) => {
+      if (node) propertiesForm.insertBefore(node, advanced);
+    });
+
+    const syncPropertyContext = () => {
+      const isProp = Boolean(propSpecificFields && !propSpecificFields.hidden);
+      const isActor = Boolean(
+        (actorDummyField && !actorDummyField.hidden)
+        || (actorPoseFields && !actorPoseFields.hidden)
+        || (actorPlacementFields && !actorPlacementFields.hidden),
+      );
+      kindBadge.textContent = isActor ? "배우" : isProp ? "소품" : "대상";
+      poseDisclosure.hidden = !actorPoseFields || actorPoseFields.hidden;
+      if (poseDisclosure.hidden) poseDisclosure.open = false;
+    };
+    syncPropertyContext();
+    [actorDummyField, actorPoseFields, actorPlacementFields, propSpecificFields].forEach((node) => {
+      if (node) new MutationObserver(syncPropertyContext).observe(node, { attributes: true, attributeFilter: ["hidden"] });
+    });
+  }
 })();
