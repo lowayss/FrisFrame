@@ -125,4 +125,24 @@ function makeContext(items, selectedItem = null) {
     "large architecture surfaces should not steal a click from a nearby small prop");
 }
 
-console.log("selection-ux: adaptive 2D hit areas and overlap priority passed");
+{
+  const left = {
+    id: "left",
+    type: "prop",
+    assetType: "generic",
+    x: 0.5,
+    y: 0.5,
+    size: 1,
+    scaleX: 1,
+    scaleZ: 1,
+    facing: 0,
+    visible: true,
+  };
+  const right = { ...left, id: "right", x: 0.508 };
+  const context = makeContext([left, right], { kind: "item", id: "left" });
+  const hit = context.hitTest({ x: 503, y: 500 }, context.state);
+  assert.equal(hit.id, "left",
+    "the selected item should remain slightly sticky while the pointer is still clearly inside it");
+}
+
+console.log("selection-ux: adaptive 2D hit areas, overlap priority, and selected-target stickiness passed");
