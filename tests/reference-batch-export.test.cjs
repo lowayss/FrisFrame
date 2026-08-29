@@ -12,6 +12,28 @@ assert.equal(safeFileSlug(""), "cut");
 assert.equal(safeFileSlug("../CON"), "_CON");
 assert.equal(safeFileSlug("CON"), "_CON");
 assert.equal(safeFileSlug("bad\u0000name"), "bad-name");
+const longAsciiSlug = safeFileSlug("a".repeat(100));
+assert.equal(longAsciiSlug, "a".repeat(80), "existing ASCII 80-character cap must remain unchanged");
+const longKoreanSlug = safeFileSlug("가".repeat(80));
+assert.equal(longKoreanSlug, "가".repeat(53));
+assert.ok(Buffer.byteLength(longKoreanSlug, "utf8") <= 160);
+const longEmojiSlug = safeFileSlug("😀".repeat(80));
+assert.equal(longEmojiSlug, "😀".repeat(40));
+assert.equal(Buffer.byteLength(longEmojiSlug, "utf8"), 160);
+
+const longUnicodeFilenameProject = {
+  scenes: [{
+    number: 1,
+    cuts: [{
+      id: "unicode-long",
+      number: 1,
+      title: "가".repeat(80),
+      blocking: { motion: { duration: 1, fps: 24, keyframes: [] } },
+    }],
+  }],
+};
+const [longUnicodeFilenameEntry] = collectReferenceBatchCuts(longUnicodeFilenameProject);
+assert.ok(Buffer.byteLength(longUnicodeFilenameEntry.filename, "utf8") < 255);
 
 const duplicateFilenameProject = {
   scenes: [{
