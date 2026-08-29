@@ -94,6 +94,7 @@
   let resizeFrame = 0;
   let resizeFollowupFrame = 0;
   let activePointerId = null;
+  let selectionBeforePointer = "";
 
   const cleanSourceLabel = (value) => String(value || "")
     .replace(/\s*\((?:탑승 연동|잠김|고정)\)\s*$/, "")
@@ -118,10 +119,11 @@
     return feedback;
   };
 
-  const showSelectionFeedback = () => {
+  const showSelectionFeedback = (force = false) => {
     const label = currentSelectionLabel();
     const element = ensureFeedback();
     if (!element || !label) return;
+    if (!force && label === selectionBeforePointer) return;
     window.clearTimeout(feedbackTimer);
     element.textContent = label;
     element.classList.remove("is-visible");
@@ -129,12 +131,12 @@
     feedbackTimer = window.setTimeout(() => element.classList.remove("is-visible"), 680);
   };
 
-  const scheduleSelectionFeedback = () => {
+  const scheduleSelectionFeedback = (force = false) => {
     if (feedbackFrame) cancelAnimationFrame(feedbackFrame);
     feedbackFrame = requestAnimationFrame(() => {
       feedbackFrame = requestAnimationFrame(() => {
         feedbackFrame = 0;
-        showSelectionFeedback();
+        showSelectionFeedback(force);
       });
     });
   };
@@ -160,14 +162,18 @@
     "#timelineMarkers",
   ].join(",");
 
+  document.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest?.(selectionSurfaces)) return;
+    selectionBeforePointer = currentSelectionLabel();
+  }, true);
   document.addEventListener("pointerup", (event) => {
     if (!event.target.closest?.(selectionSurfaces)) return;
-    scheduleSelectionFeedback();
+    scheduleSelectionFeedback(false);
   }, true);
 
-  keySourceSelect?.addEventListener("change", scheduleSelectionFeedback);
+  keySourceSelect?.addEventListener("change", () => scheduleSelectionFeedback(true));
   if (threeSelectionLabel) {
-    new MutationObserver(scheduleSelectionFeedback).observe(threeSelectionLabel, {
+    new MutationObserver(() => scheduleSelectionFeedback(true)).observe(threeSelectionLabel, {
       childList: true,
       characterData: true,
       subtree: true,
@@ -204,7 +210,7 @@
      Coalesce that into one post-layout resize instead of causing several immediate redraws. */
   viewButtons?.addEventListener("click", () => {
     scheduleViewportResize();
-    scheduleSelectionFeedback();
+    scheduleSelectionFeedback(true);
   }, true);
 
   document.addEventListener("click", (event) => {
@@ -218,6 +224,6 @@
     const target = event.target;
     if (target?.matches?.("input, textarea, select, [contenteditable='true']") || target?.closest?.("dialog[open]")) return;
     scheduleViewportResize();
-    scheduleSelectionFeedback();
+    scheduleSelectionFeedback(true);
   }, true);
 })();
