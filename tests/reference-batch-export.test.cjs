@@ -9,6 +9,28 @@ const {
 
 assert.equal(safeFileSlug(' Scene 01 / Close:Up? '), "Scene-01-Close-Up");
 assert.equal(safeFileSlug(""), "cut");
+assert.equal(safeFileSlug("../CON"), "_CON");
+assert.equal(safeFileSlug("CON"), "_CON");
+assert.equal(safeFileSlug("bad\u0000name"), "bad-name");
+
+const duplicateFilenameProject = {
+  scenes: [{
+    number: 1,
+    cuts: [
+      { id: "a", number: 1, title: "Same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+      { id: "b", number: 1, title: "Same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+      { id: "c", number: 1, title: "same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+    ],
+  }],
+};
+const duplicateFilenameEntries = collectReferenceBatchCuts(duplicateFilenameProject);
+assert.deepEqual(duplicateFilenameEntries.map((entry) => entry.filename), [
+  "S01_C01_Same_reference.mp4",
+  "S01_C01_Same_2_reference.mp4",
+  "S01_C01_same_3_reference.mp4",
+]);
+assert.equal(new Set(duplicateFilenameEntries.map((entry) => entry.filename.toLowerCase())).size, 3);
+assert.ok(duplicateFilenameEntries.every((entry) => !entry.filename.includes("/")));
 
 const project = {
   title: "Reference Film",

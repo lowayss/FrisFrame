@@ -351,45 +351,58 @@
   }
 
   function safeFileSlug(value, fallback = "cut") {
-    const normalized = String(value || "")
-      .normalize("NFKC")
-      .trim()
-      .replace(/[\\/:*?"<>|]+/g, "-")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^[.-]+|[.-]+$/g, "")
-      .slice(0, 80);
-    return normalized || fallback;
-  }
-
+  const clean = (input) => String(input || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/[\u0000-\u001f\u007f]+/g, "-")
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 80);
+  const normalized = clean(value) || clean(fallback) || "cut";
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(normalized)
+    ? `_${normalized}`
+    : normalized;
+}
   function collectReferenceBatchCuts(project = {}) {
-    const entries = [];
-    (project.scenes || []).forEach((scene, sceneIndex) => {
-      (scene.cuts || []).forEach((cut, cutIndex) => {
-        const blocking = cut?.blocking;
-        const duration = finiteNumber(blocking?.motion?.duration, 0);
-        if (!blocking || duration <= 0) return;
-        const sceneNumber = Number(scene.number || sceneIndex + 1);
-        const cutNumber = Number(cut.number || cutIndex + 1);
-        const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
-        entries.push({
-          sceneId: scene.id || "",
-          cutId: cut.id || "",
-          sceneNumber,
-          cutNumber,
-          sceneHeading: scene.heading || "",
-          title: cut.title || "",
-          status: cut.status || "",
-          filename: `${base}_reference.mp4`,
-          blocking: cloneValue(blocking),
-          duration,
-          fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
-        });
+  const entries = [];
+  const usedFilenames = new Set();
+  const uniqueFilename = (base) => {
+    let suffix = 1;
+    let filename = `${base}_reference.mp4`;
+    while (usedFilenames.has(filename.toLowerCase())) {
+      suffix += 1;
+      filename = `${base}_${suffix}_reference.mp4`;
+    }
+    usedFilenames.add(filename.toLowerCase());
+    return filename;
+  };
+  (project.scenes || []).forEach((scene, sceneIndex) => {
+    (scene.cuts || []).forEach((cut, cutIndex) => {
+      const blocking = cut?.blocking;
+      const duration = finiteNumber(blocking?.motion?.duration, 0);
+      if (!blocking || duration <= 0) return;
+      const sceneNumber = Number(scene.number || sceneIndex + 1);
+      const cutNumber = Number(cut.number || cutIndex + 1);
+      const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
+      entries.push({
+        sceneId: scene.id || "",
+        cutId: cut.id || "",
+        sceneNumber,
+        cutNumber,
+        sceneHeading: scene.heading || "",
+        title: cut.title || "",
+        status: cut.status || "",
+        filename: uniqueFilename(base),
+        blocking: cloneValue(blocking),
+        duration,
+        fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
       });
     });
-    return entries;
-  }
-
+  });
+  return entries;
+}
   function addReadinessIssue(issues, severity, code, message) {
     issues.push({ severity, code, message });
   }
