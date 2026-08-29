@@ -1,11 +1,26 @@
 const assert = require("node:assert/strict");
 
+const motion = require("../motion-core.js");
+const runtime = require("../previs-runtime-core.js");
 const {
   SEEDANCE_REFERENCE_MAX_SECONDS,
   evaluateProjectReferenceReadiness,
   evaluateReferenceReadiness,
   isFrameAligned,
-} = require("../previs-runtime-core.js");
+} = runtime;
+
+assert.equal(runtime.SEEDANCE_REFERENCE_MAX_SECONDS, motion.SEEDANCE_REFERENCE_MAX_SECONDS,
+  "runtime must expose the motion-core Seedance reference limit");
+assert.equal(runtime.collectReferenceBatchCuts, motion.collectReferenceBatchCuts,
+  "runtime must reuse the motion-core batch-cut collector");
+assert.equal(runtime.isFrameAligned, motion.isFrameAligned,
+  "runtime must reuse the motion-core frame-grid evaluator");
+assert.equal(runtime.evaluateReferenceReadiness, motion.evaluateReferenceReadiness,
+  "runtime must reuse the motion-core readiness evaluator");
+assert.equal(runtime.evaluateProjectReferenceReadiness, motion.evaluateProjectReferenceReadiness,
+  "runtime must reuse the motion-core project readiness evaluator");
+assert.equal(runtime.partitionReferenceBatchByReadiness, motion.partitionReferenceBatchByReadiness,
+  "runtime must reuse the motion-core READY/REVIEW/BLOCKED partitioner");
 
 function baseBlocking(overrides = {}) {
   const actor = { id: "actor-1", type: "actor", name: "A", x: 0.45, y: 0.5, facing: 0 };
@@ -97,4 +112,4 @@ assert.equal(projectResults.length, 2);
 assert.equal(projectResults[0].readiness.status, "ready");
 assert.equal(projectResults[1].readiness.status, "review");
 
-console.log("reference-readiness: blocking, review, and non-false-positive rules passed");
+console.log("reference-readiness: core ownership, blocking, review, and non-false-positive rules passed");
