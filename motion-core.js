@@ -116,9 +116,25 @@
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
 
-  function cameraReferenceProgress(progress, transition = "smooth") {
+  function smoothReferenceEaseInProgress(progress) {
     const t = clamp(progress, 0, 1);
-    return String(transition || "smooth") === "smooth" ? smoothReferenceProgress(t) : t;
+    return 2 * t * t - t * t * t;
+  }
+
+  function smoothReferenceEaseOutProgress(progress) {
+    const t = clamp(progress, 0, 1);
+    return t + t * t - t * t * t;
+  }
+
+  function cameraReferenceProgress(progress, transition = "smooth", options = {}) {
+    const t = clamp(progress, 0, 1);
+    if (String(transition || "smooth") !== "smooth") return t;
+    const hasSmoothBefore = options?.hasSmoothBefore === true;
+    const hasSmoothAfter = options?.hasSmoothAfter === true;
+    if (hasSmoothBefore && hasSmoothAfter) return t;
+    if (hasSmoothBefore) return smoothReferenceEaseOutProgress(t);
+    if (hasSmoothAfter) return smoothReferenceEaseInProgress(t);
+    return smoothReferenceProgress(t);
   }
 
   function heldActorBodyPose(fromPose, toPose, progress) {
@@ -142,10 +158,14 @@
       progress,
       fallbackPose,
       endKeyframe = null,
+      evaluationOptions = null,
     ) {
       const inputProgress = clamp(progress, 0, 1);
+      const referenceProgressOverride = Number(evaluationOptions?.referenceProgress);
       const evaluatedProgress = sourceId === "camera"
-        ? cameraReferenceProgress(inputProgress, endKeyframe?.transition || "smooth")
+        ? (Number.isFinite(referenceProgressOverride)
+          ? clamp(referenceProgressOverride, 0, 1)
+          : cameraReferenceProgress(inputProgress, endKeyframe?.transition || "smooth"))
         : inputProgress;
       const result = original.call(
         this,
@@ -156,6 +176,7 @@
         evaluatedProgress,
         fallbackPose,
         endKeyframe,
+        evaluationOptions,
       );
       if (!result || typeof result !== "object") return result;
 
@@ -605,6 +626,7 @@
 
     let start = first;
     let end = last;
+    let segmentIndex = 0;
     for (let index = 0; index < keys.length - 1; index += 1) {
       const candidateStart = keys[index];
       const candidateEnd = keys[index + 1];
@@ -613,6 +635,7 @@
       if (currentTime >= candidateStartTime && currentTime <= candidateEndTime) {
         start = candidateStart;
         end = candidateEnd;
+        segmentIndex = index;
         break;
       }
     }
@@ -622,10 +645,31 @@
     const endTime = finiteNumber(end?.time, startTime);
     const easedProgress = transitionProgress(currentTime, startTime, endTime, transition);
     const rawProgress = clamp((currentTime - startTime) / Math.max(0.000001, endTime - startTime), 0, 1);
-    // Spatial blocking crosses ordinary keys without braking. Smooth
-    // reference easing is applied later by the camera-only reference guard.
+    // Spatial blocking crosses ordinary keys without braking. Camera reference
+    // easing is planned separately so a run of smooth camera keys does not
+    // decelerate to zero at every interior marker.
     const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
-    return { kind: "segment", start, end, transition, rawProgress, easedProgress, progress };
+    const hasSmoothBefore = transition === "smooth"
+      && segmentIndex > 0
+      && normalizeTransition(start?.transition) === "smooth";
+    const hasSmoothAfter = transition === "smooth"
+      && segmentIndex + 2 < keys.length
+      && normalizeTransition(keys[segmentIndex + 2]?.transition) === "smooth";
+    const referenceProgress = transition === "smooth"
+      ? cameraReferenceProgress(rawProgress, transition, { hasSmoothBefore, hasSmoothAfter })
+      : progress;
+    return {
+      kind: "segment",
+      start,
+      end,
+      transition,
+      rawProgress,
+      easedProgress,
+      progress,
+      referenceProgress,
+      hasSmoothBefore,
+      hasSmoothAfter,
+    };
   }
 
   function composeEvaluatedFrameBase(renderState = {}, time = 0, evaluateSource = null) {

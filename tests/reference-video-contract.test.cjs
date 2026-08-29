@@ -45,6 +45,8 @@ assert.ok(motion.includes('sourceType === "camera" && options.constantSpeed !== 
   "free-curve arc-length remapping must stay camera-only");
 assert.ok(motion.includes("cameraReferenceProgress"),
   "camera smooth timing must remain an explicit reference-video rule");
+assert.ok(motion.includes("hasSmoothBefore") && motion.includes("hasSmoothAfter"),
+  "camera smooth timing must distinguish run boundaries from interior keys");
 assert.ok(motion.includes("interpolateFocalLength"),
   "camera focal evaluation must remain continuous");
 assert.ok(motion.includes("trackingTargetId = discreteAtDestination"),
@@ -66,8 +68,10 @@ assert.ok(app.includes("window.FrisFrameMotionCore?.composeEvaluatedFrameBase"),
   "shared preview/export frame evaluation must delegate base assembly to motion-core");
 assert.ok(motion.includes("function composeEvaluatedFrameBase"),
   "motion-core must own base frame assembly");
-assert.ok(app.includes("return interpolatePoseFor(renderState, sourceId, plan.start.pose, plan.end.pose, plan.progress, fallbackPose, plan.end);"),
-  "render-state interpolation must reach the guarded pose evaluator through the core timing plan");
+assert.ok(app.includes("referenceProgress: plan.referenceProgress"),
+  "camera render-state interpolation must pass the motion-core smooth-run reference progress into the guarded evaluator");
+assert.match(app, /interpolatePoseFor\([\s\S]*?plan\.progress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
+  "render-state interpolation must reach the guarded pose evaluator through the core timing plan and camera reference options");
 assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"),
   "the app source evaluator must delegate keyframe timing to motion-core");
 assert.ok(motion.includes("function sourceKeyframeEvaluationPlan"),
