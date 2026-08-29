@@ -1,11 +1,25 @@
 const assert = require("node:assert/strict");
 
+const motionCore = require("../motion-core.js");
+const runtimeCore = require("../previs-runtime-core.js");
 const {
   CAMERA_MOTION_PRESETS,
   applyCameraMotionPreset,
   buildCameraMotionPreset,
   orbitCameraPose,
-} = require("../previs-runtime-core.js");
+} = runtimeCore;
+
+for (const name of [
+  "buildCameraMotionPreset",
+  "cameraGroundDirection",
+  "cameraMotionPresetDefinition",
+  "orbitCameraPose",
+  "translateCameraPose",
+]) {
+  assert.equal(runtimeCore[name], motionCore[name], `${name} must be owned by motion-core and re-exported by runtime`);
+}
+assert.equal(runtimeCore.CAMERA_MOTION_PRESETS, motionCore.CAMERA_MOTION_PRESETS,
+  "camera preset catalog must have one owner");
 
 function near(actual, expected, epsilon = 0.000001) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -189,4 +203,4 @@ assert.equal(commits, 1);
 assert.equal(historyPushes, 1);
 assert.ok(notices.at(-1).includes("Follow Actor"));
 
-console.log("camera-motion-presets: authored camera-key macros passed");
+console.log("camera-motion-presets: motion-owned planning and authored camera-key macros passed");
