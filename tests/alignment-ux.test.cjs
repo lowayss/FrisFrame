@@ -36,6 +36,7 @@ const context = {
       return null;
     },
     querySelector(selector) { return selector === ".canvas-wrap" ? canvasWrap : null; },
+    addEventListener() {},
   },
   window: {
     addEventListener() {},
