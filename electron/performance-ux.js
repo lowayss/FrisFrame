@@ -7,11 +7,22 @@
   const stats = {
     fastSyncs: 0,
     fastTimelineUpdates: 0,
+    fastPlayheadSyncs: 0,
+    cachedObjectListSkips: 0,
+    cachedSourceSelectSkips: 0,
     fastPoseSyncs: 0,
     coalescedPoseUi: 0,
+    fastThreeNavigationRenders: 0,
     coalescedThreeRenders: 0,
     coalescedCameraPreviews: 0,
   };
+
+  let transientWheelNavigation = false;
+
+  function activeThreeNavigation() {
+    const kind = typeof threeDrag !== "undefined" ? threeDrag?.kind : "";
+    return ["orbit", "pan", "zoom"].includes(kind) || transientWheelNavigation;
+  }
 
   function activeDirectEdit() {
     const stageDrag = typeof drag !== "undefined" && drag && !drag.pending;
@@ -33,12 +44,84 @@
     activeDirectEdit,
     activeTimelineDrag,
     activePoseDrag,
+    activeThreeNavigation,
     stats,
   };
 
   function visibleTimelineKeys() {
     const visibleIds = new Set(visibleSourceDefinitions().map((source) => source.id));
     return sortKeyframes(state.motion.keyframes).filter((keyframe) => visibleIds.has(keyframe.source));
+  }
+
+  function timelineRenderSignature() {
+    const visibleSources = visibleSourceDefinitions();
+    const sourceSignature = visibleSources.map((source) => [
+      source.id,
+      source.name,
+      source.color,
+      typeof sourceEditLocked === "function" ? sourceEditLocked(source.id) : false,
+    ]);
+    const keySignature = visibleTimelineKeys().map((keyframe) => [
+      keyframe.id,
+      keyframe.source,
+      Number(keyframe.time || 0).toFixed(4),
+      keyframe.label || "",
+      keyframe.transition || "",
+      keyframe.note || "",
+      keyframe.segment?.mode || keyframe.segment?.plan?.mode || "",
+      JSON.stringify(keyframe.pose || {}),
+    ]);
+    return JSON.stringify([
+      state.motion.timelineView,
+      Number(state.motion.duration || 0).toFixed(4),
+      state.motion.fps,
+      state.motion.activeSource,
+      [...timelineSelectedKeyIds].sort(),
+      primaryTimelineKeyId(),
+      sourceSignature,
+      keySignature,
+    ]);
+  }
+
+  function objectListSignature() {
+    return JSON.stringify([
+      selected?.kind || "",
+      selected?.id || "",
+      state.motion?.activeSource || "",
+      normalizeHiddenSources(state.motion?.hiddenSources || []),
+      state.items.map((item) => [
+        item.id,
+        item.type,
+        item.name,
+        item.color,
+        item.visible !== false,
+        item.motionEnabled !== false,
+        item.editLocked === true,
+        item.groupId || "",
+        item.mountId || "",
+        item.placementMode || "",
+        item.assetType || "",
+        item.dummyType || "",
+      ]),
+    ]);
+  }
+
+  function sourceSelectSignature() {
+    return JSON.stringify([
+      state.motion?.activeSource || "all",
+      normalizeHiddenSources(state.motion?.hiddenSources || []),
+      sourceDefinitions().map((source) => {
+        const item = state.items.find((entry) => entry.id === source.id);
+        return [
+          source.id,
+          source.name,
+          item?.type || source.type || "",
+          item?.mountId || "",
+          item?.motionEnabled !== false,
+          typeof sourceEditLocked === "function" ? sourceEditLocked(source.id) : false,
+        ];
+      }),
+    ]);
   }
 
   function tagCombinedMarkers(keyframes) {
@@ -147,6 +230,8 @@
     return true;
   }
 
+  let cachedTimelineSignature = "";
+
   if (typeof renderKeyStatus === "function") {
     const originalRenderKeyStatus = renderKeyStatus;
     renderKeyStatus = function optimizedRenderKeyStatus(updateInputs = true) {
@@ -155,13 +240,21 @@
         updatePlayheadDisplay(displayPlayhead());
         return;
       }
+      const signature = timelineRenderSignature();
+      if (!updateInputs && cachedTimelineSignature && signature === cachedTimelineSignature) {
+        updatePlayheadDisplay(displayPlayhead());
+        stats.fastPlayheadSyncs += 1;
+        return;
+      }
       const result = originalRenderKeyStatus(updateInputs);
+      cachedTimelineSignature = signature;
       const keyframes = visibleTimelineKeys();
       tagCombinedMarkers(keyframes);
       if (state.motion.timelineView === "split") tagSplitMarkers(keyframes);
       return result;
     };
     requestAnimationFrame(() => {
+      cachedTimelineSignature = timelineRenderSignature();
       const keyframes = visibleTimelineKeys();
       tagCombinedMarkers(keyframes);
       if (state.motion.timelineView === "split") tagSplitMarkers(keyframes);
@@ -174,6 +267,36 @@
       const root = document.getElementById("sourceTimelineList");
       if (root?.hidden) return;
       return originalRenderSourceTimelines(keyframes, cutTimes);
+    };
+  }
+
+  if (typeof renderObjectLists === "function") {
+    const originalRenderObjectLists = renderObjectLists;
+    let lastObjectListSignature = "";
+    renderObjectLists = function optimizedRenderObjectLists() {
+      const signature = objectListSignature();
+      if (lastObjectListSignature && signature === lastObjectListSignature) {
+        stats.cachedObjectListSkips += 1;
+        return;
+      }
+      lastObjectListSignature = signature;
+      return originalRenderObjectLists();
+    };
+  }
+
+  if (typeof renderSourceSelect === "function") {
+    const originalRenderSourceSelect = renderSourceSelect;
+    let lastSourceSelectSignature = "";
+    renderSourceSelect = function optimizedRenderSourceSelect() {
+      const signature = sourceSelectSignature();
+      if (lastSourceSelectSignature && signature === lastSourceSelectSignature) {
+        stats.cachedSourceSelectSkips += 1;
+        const select = document.getElementById("keySourceSelect");
+        if (select && select.value !== activeSourceId()) select.value = activeSourceId();
+        return;
+      }
+      lastSourceSelectSignature = signature;
+      return originalRenderSourceSelect();
     };
   }
 
@@ -301,6 +424,28 @@
         renderThreeEditControls = originals.renderThreeEditControls;
         syncProjectChrome = originals.syncProjectChrome;
       }
+    };
+  }
+
+  document.addEventListener("wheel", (event) => {
+    if (event.target?.closest?.("#threeCanvas")) {
+      transientWheelNavigation = true;
+      setTimeout(() => { transientWheelNavigation = false; }, 0);
+    }
+  }, true);
+
+  if (typeof renderThreeView === "function") {
+    const originalRenderThreeView = renderThreeView;
+    renderThreeView = function optimizedNavigationRender(renderState = state, force = false, frameOptions = {}) {
+      if (activeThreeNavigation() && threeView?.ready && (viewMode === "3d" || force)) {
+        threeView.lastState = renderState;
+        updateThreeCamera(renderState);
+        threeView.renderer.render(threeView.scene, threeView.camera);
+        if (typeof drawAnnotations === "function") drawAnnotations();
+        stats.fastThreeNavigationRenders += 1;
+        return;
+      }
+      return originalRenderThreeView(renderState, force, frameOptions);
     };
   }
 
