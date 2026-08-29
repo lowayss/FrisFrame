@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
       - name: Extract frame base composition
         run: python3 tools/refactor_frame_base.py
+      - name: Migrate shared frame tracking contract
+        run: python3 tools/patch_frame_base_contract.py
       - name: Run full project checks
         run: python3 quality_check.py
       - name: Commit frame base composition extraction
