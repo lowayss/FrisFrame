@@ -19,11 +19,14 @@ function installMcpFirstWorkflowUi() {
     const app = document.querySelector(".app");
     const canvasWrap = document.querySelector(".canvas-wrap");
     const toolbar = document.querySelector(".toolbar");
+    const leftPanel = document.querySelector(".left-panel");
+    const rightPanel = document.querySelector(".right-panel");
     if (!app) return;
+    if (leftPanel && !leftPanel.id) leftPanel.id = "frisframeLeftPanel";
+    if (rightPanel && !rightPanel.id) rightPanel.id = "frisframeRightPanel";
 
     const style = document.createElement("style");
     style.textContent = `
-      /* Camera controls: lens value and useful focal presets stay together. */
       #focalPresets.frisframe-focal-compact {
         display: flex !important;
         flex-wrap: wrap;
@@ -52,7 +55,6 @@ function installMcpFirstWorkflowUi() {
         font-weight: 800;
       }
 
-      /* Details use one quiet chevron instead of repeated '열기/접기' text. */
       .compact-details > summary::after {
         content: "›" !important;
         display: inline-grid;
@@ -87,7 +89,6 @@ function installMcpFirstWorkflowUi() {
         line-height: 1.45;
       }
 
-      /* Side panels can be collapsed without changing project data. */
       .app.frisframe-left-collapsed {
         grid-template-columns: 0 minmax(620px, 1fr) 272px;
       }
@@ -158,7 +159,6 @@ function installMcpFirstWorkflowUi() {
         color: #fff8f5 !important;
       }
 
-      /* Annotation is optional and starts hidden. */
       #annotationToolbar[hidden] { display: none !important; }
       .frisframe-annotation-toggle {
         position: absolute;
@@ -192,18 +192,11 @@ function installMcpFirstWorkflowUi() {
         display: none;
       }
 
-      /* Make the main canvas feel less boxed-in while keeping controls readable. */
-      .canvas-wrap {
-        isolation: isolate;
-      }
+      .canvas-wrap { isolation: isolate; }
       .stage-zoom-controls,
       .camera-frame-mode-btn,
-      .three-jog-container {
-        transition: opacity .14s ease;
-      }
-      .canvas-wrap:not(:hover) .stage-zoom-controls {
-        opacity: .72;
-      }
+      .three-jog-container { transition: opacity .14s ease; }
+      .canvas-wrap:not(:hover) .stage-zoom-controls { opacity: .72; }
     `;
     document.head.append(style);
 
@@ -238,11 +231,8 @@ function installMcpFirstWorkflowUi() {
       });
     };
 
-    // A local image picker cannot understand or reconstruct a reference image.
-    // Reference-image interpretation belongs to the external vision-capable MCP caller.
     document.querySelectorAll(".spatial-reference-panel").forEach((panel) => panel.remove());
 
-    // Keep lens and focal presets together.
     const focalInput = document.getElementById("focalValue");
     const focalRow = focalInput?.closest("label.range-row");
     const focalPresets = document.getElementById("focalPresets");
@@ -283,7 +273,6 @@ function installMcpFirstWorkflowUi() {
       exportActions.prepend(note);
     }
 
-    // Quiet defaults and remembered disclosure state reduce repetitive clicking.
     const detailsKey = (details, index) => {
       const id = details.id || details.querySelector(":scope > summary")?.textContent?.trim() || `section-${index}`;
       return `frisframe.ui.details.${id}`;
@@ -312,7 +301,6 @@ function installMcpFirstWorkflowUi() {
     };
     requestAnimationFrame(rememberDetailsState);
 
-    // Selecting an object should never leave its properties hidden in a collapsed panel.
     const propertiesPanel = document.getElementById("propertiesPanel");
     const propertiesForm = document.getElementById("propertiesForm");
     if (propertiesPanel && propertiesForm) {
@@ -322,7 +310,6 @@ function installMcpFirstWorkflowUi() {
       new MutationObserver(revealProperties).observe(propertiesForm, { attributes: true, attributeFilter: ["hidden"] });
     }
 
-    // Workspace side panels: remembered individually, focus mode is temporary.
     let leftHidden = safeStorage.get("frisframe.ui.leftPanelHidden") === "1";
     let rightHidden = safeStorage.get("frisframe.ui.rightPanelHidden") === "1";
     let focusMode = false;
@@ -332,8 +319,9 @@ function installMcpFirstWorkflowUi() {
       app.classList.toggle("frisframe-left-collapsed", leftHidden);
       app.classList.toggle("frisframe-right-collapsed", rightHidden);
       app.classList.toggle("frisframe-focus-mode", focusMode);
-      safeStorage.set("frisframe.ui.leftPanelHidden", leftHidden ? "1" : "0");
-      safeStorage.set("frisframe.ui.rightPanelHidden", rightHidden ? "1" : "0");
+      const persistedState = focusMode ? preFocusState : { leftHidden, rightHidden };
+      safeStorage.set("frisframe.ui.leftPanelHidden", persistedState.leftHidden ? "1" : "0");
+      safeStorage.set("frisframe.ui.rightPanelHidden", persistedState.rightHidden ? "1" : "0");
       document.querySelector(".frisframe-panel-edge-toggle.is-left")?.setAttribute("aria-expanded", String(!leftHidden && !focusMode));
       document.querySelector(".frisframe-panel-edge-toggle.is-right")?.setAttribute("aria-expanded", String(!rightHidden && !focusMode));
       const focusButton = document.querySelector(".frisframe-focus-toggle");
@@ -368,7 +356,8 @@ function installMcpFirstWorkflowUi() {
         button.innerHTML = `<span>${side === "left" ? "‹" : "›"}</span>`;
         button.title = side === "left" ? "왼쪽 도구 패널 열기/숨기기" : "오른쪽 속성 패널 열기/숨기기";
         button.setAttribute("aria-label", button.title);
-        button.setAttribute("aria-controls", side === "left" ? "left-panel" : "right-panel");
+        const controlledPanel = side === "left" ? leftPanel : rightPanel;
+        if (controlledPanel?.id) button.setAttribute("aria-controls", controlledPanel.id);
         button.addEventListener("click", () => {
           if (focusMode) {
             setFocusMode(false);
@@ -399,7 +388,6 @@ function installMcpFirstWorkflowUi() {
       toolbar.prepend(focusButton);
     }
 
-    // The vertical annotation toolbar is optional. It always starts hidden.
     const annotationToolbar = document.getElementById("annotationToolbar");
     if (annotationToolbar && canvasWrap) {
       annotationToolbar.hidden = true;
@@ -433,7 +421,6 @@ function installMcpFirstWorkflowUi() {
       });
     }
 
-    // Focus mode shortcut. Do not interfere while typing in form fields.
     window.addEventListener("keydown", (event) => {
       if (!event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.key.toLowerCase() !== "f") return;
       const target = event.target;
@@ -445,7 +432,6 @@ function installMcpFirstWorkflowUi() {
     removeRetiredExportControls();
     syncWorkspacePanels();
 
-    // Some export controls can be rendered again after workspace changes.
     const observer = new MutationObserver(() => removeRetiredExportControls());
     const exportMenu = document.getElementById("exportMenu");
     if (exportMenu) observer.observe(exportMenu, { childList: true, subtree: true });
