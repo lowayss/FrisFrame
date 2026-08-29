@@ -18,6 +18,7 @@ const {
   referenceExportFrameSchedule,
   rescaleKeyframeTimes,
   samplePlanarPath,
+  smoothRunReferenceProgress,
   sourceKeyframeEvaluationPlan,
   transitionProgress,
 } = require("../motion-core.js");
@@ -94,6 +95,19 @@ assert.equal(smoothRunMiddle.hasSmoothAfter, true);
 near(cameraReferenceProgress(0.5, "smooth", { hasSmoothBefore: true, hasSmoothAfter: true }), 0.5);
 near(cameraReferenceProgress(0.25, "smooth"), 0.125, 0.000001);
 near(cameraReferenceProgress(0.25, "linear", { hasSmoothBefore: true, hasSmoothAfter: true }), 0.25, 0.000001);
+near(smoothRunReferenceProgress(0.25, "smooth"), 0.125, 0.000001);
+near(smoothRunReferenceProgress(0.25, "linear"), 0.25, 0.000001);
+
+const actorSmoothPlan = sourceKeyframeEvaluationPlan([
+  { id: "a0", time: 0, pose: { x: 0 } },
+  { id: "a1", time: 2, transition: "smooth", pose: { x: 1 } },
+], 0.5);
+const actorLinearPlan = sourceKeyframeEvaluationPlan([
+  { id: "l0", time: 0, pose: { x: 0 } },
+  { id: "l1", time: 2, transition: "linear", pose: { x: 1 } },
+], 0.5);
+near(actorSmoothPlan.referenceProgress, 0.125, 0.000001);
+near(actorLinearPlan.referenceProgress, 0.25, 0.000001);
 
 const sourcePlanHold = sourceKeyframeEvaluationPlan(sourcePlanKeys, 3);
 assert.equal(sourcePlanHold.end.id, "k2");

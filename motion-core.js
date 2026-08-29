@@ -126,7 +126,7 @@
     return t + t * t - t * t * t;
   }
 
-  function cameraReferenceProgress(progress, transition = "smooth", options = {}) {
+  function smoothRunReferenceProgress(progress, transition = "smooth", options = {}) {
     const t = clamp(progress, 0, 1);
     if (String(transition || "smooth") !== "smooth") return t;
     const hasSmoothBefore = options?.hasSmoothBefore === true;
@@ -135,6 +135,10 @@
     if (hasSmoothBefore) return smoothReferenceEaseOutProgress(t);
     if (hasSmoothAfter) return smoothReferenceEaseInProgress(t);
     return smoothReferenceProgress(t);
+  }
+
+  function cameraReferenceProgress(progress, transition = "smooth", options = {}) {
+    return smoothRunReferenceProgress(progress, transition, options);
   }
 
   function heldActorBodyPose(fromPose, toPose, progress) {
@@ -645,9 +649,10 @@
     const endTime = finiteNumber(end?.time, startTime);
     const easedProgress = transitionProgress(currentTime, startTime, endTime, transition);
     const rawProgress = clamp((currentTime - startTime) / Math.max(0.000001, endTime - startTime), 0, 1);
-    // Spatial blocking crosses ordinary keys without braking. Camera reference
-    // easing is planned separately so a run of smooth camera keys does not
-    // decelerate to zero at every interior marker.
+    // Spatial blocking crosses ordinary keys without braking. Reference
+    // smooth-run timing is planned separately so camera movement and authored
+    // actor root motion can ease at run boundaries without stopping at every
+    // interior marker.
     const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
     const hasSmoothBefore = transition === "smooth"
       && segmentIndex > 0
@@ -656,7 +661,7 @@
       && segmentIndex + 2 < keys.length
       && normalizeTransition(keys[segmentIndex + 2]?.transition) === "smooth";
     const referenceProgress = transition === "smooth"
-      ? cameraReferenceProgress(rawProgress, transition, { hasSmoothBefore, hasSmoothAfter })
+      ? smoothRunReferenceProgress(rawProgress, transition, { hasSmoothBefore, hasSmoothAfter })
       : progress;
     return {
       kind: "segment",
@@ -944,6 +949,7 @@
     safeFileSlug,
     samplePlanarPath,
     smoothReferenceProgress,
+    smoothRunReferenceProgress,
     sourceKeyframeEvaluationPlan,
     transitionProgress,
     translateCameraPose,
