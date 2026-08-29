@@ -7,6 +7,7 @@ const preload = fs.readFileSync(path.join(root, "electron/preload.cjs"), "utf8")
 const alignment = fs.readFileSync(path.join(root, "electron/alignment-ux.js"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const referenceWorkflow = fs.readFileSync(path.join(root, "reference-workflow-core.js"), "utf8");
+const maintenance = fs.readFileSync(path.join(root, "MAINTENANCE.md"), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const guide = fs.readFileSync(path.join(root, "docs/USER_GUIDE.md"), "utf8");
 const workflow = fs.readFileSync(path.join(root, "MCP_FIRST_WORKFLOW.md"), "utf8");
@@ -47,6 +48,8 @@ for (const retiredSymbol of [
   assert.equal(referenceWorkflow.includes(retiredSymbol), false,
     `${retiredSymbol} must not return to the supported reference workflow core`);
 }
+assert.equal(fs.existsSync(path.join(root, "REFERENCE_PROMPT_GUIDE.md")), false,
+  "retired in-app Reference Prompt guide must stay deleted");
 
 // Selection/alignment polish must stay discoverable and use the freshly typed time.
 assert.match(alignment, /Alt\/Option\+클릭 · 겹친 대상 순환/,
@@ -69,7 +72,7 @@ for (const filename of [
   assert.ok(main.includes(`\"${path.basename(filename)}\"`), `${filename} must be injected by Electron`);
 }
 
-// User-facing documentation must describe the current boundary, not the retired pack/prompt workflow.
+// User-facing and maintainer docs must describe the current boundary, not the retired pack/prompt workflow.
 assert.match(guide, /외부 vision-capable MCP 클라이언트/,
   "user guide must assign image interpretation to the external MCP client");
 assert.match(guide, /runtime\/mcp\/frisframe-mcp/,
@@ -84,5 +87,11 @@ assert.match(workflow, /FrisFrame 자체는 이미지를 분석하지 않는다/
   "workflow doc must keep vision interpretation outside FrisFrame");
 assert.match(workflow, /최종 Seedance 프롬프트를 작성한다/,
   "workflow doc must keep final prompt composition in the external MCP conversation");
+assert.match(maintenance, /Reference Prompt 사용자 UI/,
+  "maintenance guide must explicitly keep Reference Prompt UI outside the product boundary");
+assert.match(maintenance, /320개 대상 \+ 8,000개 키프레임/,
+  "maintenance guide must document the large-scene regression fixture");
+assert.equal(maintenance.includes("촬영 자료 ZIP과 MP4 프리뷰"), false,
+  "maintenance checklist must not restore the retired production-pack flow");
 
-console.log("mcp-first-product-boundary: prompt/readiness UI removal, desktop UI, docs, selection polish, and AI boundary contracts passed");
+console.log("mcp-first-product-boundary: prompt/readiness removal, desktop UI, docs, maintenance, selection polish, and AI boundary contracts passed");
