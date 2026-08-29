@@ -1,0 +1,39 @@
+name: One-shot multicam export cleanup
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+      - name: Remove retired multicam export paths
+        run: python3 tools/one_shot_retire_multicam_exports.py
+      - name: Verify JavaScript syntax
+        run: node --check app.js
+      - name: Verify DOM contract
+        run: node tests/dom-contract.test.cjs
+      - name: Verify patch whitespace
+        run: git diff --check
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- app.js index.html tests/dom-contract.test.cjs; then
+            echo "No cleanup diff to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js index.html tests/dom-contract.test.cjs
+          git commit -m "Physically remove retired multicam exports"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
