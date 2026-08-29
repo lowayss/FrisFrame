@@ -85,7 +85,7 @@
     const scale = next / previous;
     return keyframes.map((keyframe) => ({
       ...keyframe,
-      time: Number(clamp(finiteNumber(keyframe?.time, 0) * scale, 0, maximum).toFixed(4)),
+      time: Number(clamp(finiteNumber(keyframe?.time, 0) * scale, 0, maximum).toFixed(6)),
     }));
   }
 
