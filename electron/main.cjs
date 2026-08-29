@@ -295,12 +295,14 @@ function createMainWindow(origin) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.webContents.on("did-finish-load", () => {
-    const uxPath = path.join(__dirname, "workspace-ux.js");
-    try {
-      const source = fs.readFileSync(uxPath, "utf8");
-      window.webContents.executeJavaScript(source, true).catch((error) => writeLog(`workspace UX injection failed: ${error.stack || error}`));
-    } catch (error) {
-      writeLog(`workspace UX file failed: ${error.stack || error}`);
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js"]) {
+      const uxPath = path.join(__dirname, filename);
+      try {
+        const source = fs.readFileSync(uxPath, "utf8");
+        window.webContents.executeJavaScript(source, true).catch((error) => writeLog(`${filename} injection failed: ${error.stack || error}`));
+      } catch (error) {
+        writeLog(`${filename} file failed: ${error.stack || error}`);
+      }
     }
   });
   window.loadURL(`${origin}/`);
