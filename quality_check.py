@@ -84,6 +84,7 @@ def main() -> None:
         "tests/camera-drafting.test.cjs",
         "tests/multi-camera-core.test.cjs",
         "tests/spatial-scale-core.test.cjs",
+        "tests/selection-ux.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
