@@ -60,6 +60,12 @@ assert.ok(app.includes("return interpolateSourceAtTimeFor(state, sourceId, time,
   "interactive preview must use the shared source evaluator");
 assert.ok(app.includes("const renderState = interpolateRenderStateAtTime(exportState, renderTime);"),
   "MP4 export must evaluate authored state at each render time");
+assert.ok(app.includes("return interpolateRenderStateAtTime(state, time);"),
+  "interactive preview must use the same render-state frame evaluator as MP4 export");
+assert.ok(app.includes("window.FrisFrameMotionCore?.composeEvaluatedFrameBase"),
+  "shared preview/export frame evaluation must delegate base assembly to motion-core");
+assert.ok(motion.includes("function composeEvaluatedFrameBase"),
+  "motion-core must own base frame assembly");
 assert.ok(app.includes("return interpolatePoseFor(renderState, sourceId, plan.start.pose, plan.end.pose, plan.progress, fallbackPose, plan.end);"),
   "render-state interpolation must reach the guarded pose evaluator through the core timing plan");
 assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"),

@@ -552,6 +552,21 @@
     return { kind: "segment", start, end, transition, rawProgress, easedProgress, progress };
   }
 
+  function composeEvaluatedFrameBase(renderState = {}, time = 0, evaluateSource = null) {
+    if (typeof evaluateSource !== "function") {
+      throw new TypeError("composeEvaluatedFrameBase requires a source evaluator");
+    }
+    const duration = Math.max(0, finiteNumber(renderState?.motion?.duration, 0));
+    const safeTime = clamp(time, 0, duration);
+    const next = cloneValue(renderState);
+    next.camera = evaluateSource("camera", safeTime, renderState?.camera || {});
+    next.items = (Array.isArray(renderState?.items) ? renderState.items : []).map((item) => (
+      evaluateSource(item.id, safeTime, item)
+    ));
+    next.motion = { ...(next.motion || {}), playhead: safeTime };
+    return next;
+  }
+
   function poseFieldsChanged(startPose = {}, endPose = {}, fields = ["x", "y"], epsilon = 0.0001) {
     const threshold = Math.max(0, finiteNumber(epsilon, 0.0001));
     return fields.some((field) => {
@@ -769,6 +784,7 @@
     clamp,
     cloneValue,
     collectReferenceBatchCuts,
+    composeEvaluatedFrameBase,
     composeBaseInterpolatedPose,
     constrainPathEndpoint,
     discreteAtDestination,
