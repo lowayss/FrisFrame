@@ -58,6 +58,7 @@ def main() -> None:
         "spatial-scale-core.js",
         "electron/preload.cjs",
         "electron/main.cjs",
+        "electron/workspace-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
