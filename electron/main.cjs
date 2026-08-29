@@ -295,7 +295,7 @@ function createMainWindow(origin) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.webContents.on("did-finish-load", () => {
-    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "performance-ux.js"]) {
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
       const uxPath = path.join(__dirname, filename);
       try {
         const source = fs.readFileSync(uxPath, "utf8");
