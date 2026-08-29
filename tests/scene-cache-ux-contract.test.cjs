@@ -8,25 +8,41 @@ const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const source = fs.readFileSync(path.join(root, "electron/scene-cache-ux.js"), "utf8");
 
 assert.match(source, /function staticItemEligible\(/,
-  "scene cache must explicitly define which items are safe to reuse");
+  "scene cache must explicitly define which props are safe to reuse as static scene objects");
 assert.match(source, /item\.type !== "prop"/,
-  "actors must remain on the dynamic 3D path");
+  "the static prop path must remain limited to props");
 assert.match(source, /sourceHasMotion\(item\.id, renderState\)/,
   "props with authored motion must never be reused as static scene objects");
 assert.match(source, /itemInManualGroup\(item\.id, renderState\)/,
   "grouped props must remain dynamic because their resolved pose can depend on a leader");
-assert.match(source, /selected\?\.kind === "item" && selected\.id === item\.id/,
-  "the actively selected item must remain dynamic so selection\/edit helpers stay current");
+assert.match(source, /function actorRigEligible\(/,
+  "moving actors must have an explicit reusable-rig eligibility contract");
+assert.match(source, /threeEditMode === "pose"[\s\S]*selected\?\.kind === "item"/,
+  "the selected actor must leave the reusable-rig path while pose handles are being edited");
+assert.match(source, /delete structural\.x;[\s\S]*delete structural\.bodyPose;/,
+  "actor position, orientation and body pose must be treated as transform-only changes rather than rig rebuilds");
+assert.match(source, /function applyActorJointTransforms\(/,
+  "cached actor rigs must update existing joint groups from the evaluated body pose");
+assert.match(source, /object\.isGroup && object\.userData\?\.jointId/,
+  "actor joint updates must target rig groups instead of rebuilding meshes");
+assert.match(source, /body\.scale\.set\(/,
+  "cached actor rigs must refresh physical actor scale without recreating geometry");
+assert.match(source, /body\.rotation\.set\(pitch, Math\.PI \/ 2 - angle, 0, "YXZ"\)/,
+  "cached actor rigs must refresh actor pitch and facing");
+assert.match(source, /group\.position\.set\(position\.x, position\.y, position\.z\)/,
+  "cached actor rigs must refresh evaluated stage position");
+assert.match(source, /arrow\.setDirection\(direction\)/,
+  "cached actor rigs must keep the 3D direction helper synchronized with facing");
 assert.match(source, /threeView\.world\.remove\(entry\.group\)/,
-  "reusable static objects must be detached before the normal world clear disposes dynamic content");
-assert.match(source, /return cached\.group;/,
-  "unchanged static objects must reuse their existing Three.js group");
+  "reusable scene objects must be detached before the normal world clear disposes dynamic content");
+assert.match(source, /stats\.actorRigReuses \+= 1/,
+  "actor reuse must be observable for performance validation");
 assert.match(source, /previewRenderDepth/,
   "editor-world caching must be isolated from the separate camera-preview scene graph");
 
 assert.ok(packageJson.build.files.includes("electron/scene-cache-ux.js"),
-  "desktop package must include the static scene cache layer");
+  "desktop package must include the scene cache layer");
 assert.match(main, /"scene-cache-ux\.js"[\s\S]*"preview-cache-ux\.js"[\s\S]*"performance-ux\.js"/,
-  "static scene caching must load before preview caching and render coalescing");
+  "scene caching must load before preview caching and render coalescing");
 
-console.log("scene-cache-ux-contract: static/dynamic 3D scene cache contracts passed");
+console.log("scene-cache-ux-contract: static prop cache and moving actor-rig reuse contracts passed");
