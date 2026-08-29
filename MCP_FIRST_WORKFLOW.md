@@ -68,9 +68,24 @@ MCP 대화가 이 자료를 바탕으로 최종 Seedance 프롬프트를 작성�
 - 필요한 경우 작은 연필 버튼 또는 `Shift+A`로 주석 바를 열고 다시 숨길 수 있다.
 - 핵심 프리비즈 조작과 무관한 보조 UI가 작업 화면을 계속 가리지 않도록 한다.
 
-## MCP 설계 원칙
+## MCP 실행 방식
 
-MCP 연결은 **`python3 mcp_previs_server.py`**를 엔트리포인트로 사용한다. 이 엔트리포인트가 무대 배치, 직접 키프레임, 고수준 모션 매크로를 하나의 명확한 명령 표면으로 제공한다.
+소스에서 직접 실행할 때는 다음 엔트리포인트를 사용한다.
+
+```bash
+python3 mcp_previs_server.py
+```
+
+데스크톱 설치본에는 Python 없이 실행할 수 있는 별도 **stdio MCP 실행파일**이 함께 들어간다.
+
+- macOS: `FrisFrame.app/Contents/Resources/runtime/mcp/frisframe-mcp`
+- Windows: `FrisFrame 설치 폴더/resources/runtime/mcp/frisframe-mcp.exe`
+
+외부 MCP 클라이언트에는 이 실행파일을 stdio 서버 command로 등록한다. 설치본 MCP는 Electron 앱의 플랫폼별 `userData/data/frisframe.db`를 찾아 같은 관리 프로젝트를 읽고 수정한다. `PREVIS_DB_PATH` 환경변수를 명시하면 다른 DB를 사용할 수도 있다.
+
+패키지 검증에서는 이 MCP 실행파일의 존재 여부만 보는 것이 아니라 **임시 DB를 사용해 실제 프로세스를 smoke-start하고 stdin EOF에서 정상 종료되는 것까지 검사**한다.
+
+## MCP 설계 원칙
 
 `mcp_previs_server.py`는 AI API를 호출하지 않는다. MCP 클라이언트가 결정한 결과를 FrisFrame 상태로 정확히 기록하는 역할만 한다.
 
