@@ -3,6 +3,9 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.FrisFrameMotionCore = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function createMotionCore() {
+  const CAMERA_FOCAL_MIN = 14;
+  const CAMERA_FOCAL_MAX = 135;
+
   function finiteNumber(value, fallback = 0) {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) return numeric;
@@ -14,6 +17,105 @@
     const lower = finiteNumber(min, 0);
     const upper = finiteNumber(max, lower);
     return Math.max(lower, Math.min(upper, finiteNumber(value, lower)));
+  }
+
+  function cloneValue(value) {
+    if (value === null || value === undefined || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(cloneValue);
+    const result = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      result[key] = cloneValue(entry);
+    });
+    return result;
+  }
+
+  function discreteAtDestination(fromValue, toValue, progress) {
+    return clamp(progress, 0, 1) >= 1 ? toValue : fromValue;
+  }
+
+  function interpolateFocalLength(fromFocal, toFocal, progress, minimum = CAMERA_FOCAL_MIN, maximum = CAMERA_FOCAL_MAX) {
+    const t = clamp(progress, 0, 1);
+    const from = finiteNumber(fromFocal, 0);
+    return clamp(from + (finiteNumber(toFocal, from) - from) * t, minimum, maximum);
+  }
+
+  function smoothReferenceProgress(progress) {
+    const t = clamp(progress, 0, 1);
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function cameraReferenceProgress(progress, transition = "smooth") {
+    const t = clamp(progress, 0, 1);
+    return String(transition || "smooth") === "smooth" ? smoothReferenceProgress(t) : t;
+  }
+
+  function heldActorBodyPose(fromPose, toPose, progress) {
+    return cloneValue(discreteAtDestination(fromPose, toPose, progress));
+  }
+
+  function fallbackMergedPose(startPose = {}, fallbackPose = {}) {
+    return { ...fallbackPose, ...startPose };
+  }
+
+  function installReferenceFrameSemantics(target) {
+    if (!target || typeof target.interpolatePoseFor !== "function") return false;
+    if (target.interpolatePoseFor.__frisFrameReferenceSemantics === true) return true;
+
+    const original = target.interpolatePoseFor;
+    const patched = function patchedInterpolatePoseFor(
+      renderState,
+      sourceId,
+      startPose,
+      endPose,
+      progress,
+      fallbackPose,
+      endKeyframe = null,
+    ) {
+      const inputProgress = clamp(progress, 0, 1);
+      const evaluatedProgress = sourceId === "camera"
+        ? cameraReferenceProgress(inputProgress, endKeyframe?.transition || "smooth")
+        : inputProgress;
+      const result = original.call(
+        this,
+        renderState,
+        sourceId,
+        startPose,
+        endPose,
+        evaluatedProgress,
+        fallbackPose,
+        endKeyframe,
+      );
+      if (!result || typeof result !== "object") return result;
+
+      const mergePose = typeof target.mergePoseWithFallbackFor === "function"
+        ? (pose) => target.mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose)
+        : (pose) => fallbackMergedPose(pose, fallbackPose);
+      const from = mergePose(startPose);
+      const to = mergePose(endPose);
+
+      if (sourceId === "camera") {
+        result.focal = interpolateFocalLength(from.focal, to.focal, evaluatedProgress);
+        const trackingTargetId = discreteAtDestination(
+          from.trackingTargetId || "",
+          to.trackingTargetId || "",
+          inputProgress,
+        );
+        result.trackingTargetId = typeof target.sanitizeTrackingTargetId === "function"
+          ? target.sanitizeTrackingTargetId(trackingTargetId, renderState)
+          : trackingTargetId;
+        return result;
+      }
+
+      const itemType = from.type || to.type || result.type;
+      if (itemType === "actor") {
+        result.bodyPose = heldActorBodyPose(from.bodyPose, to.bodyPose, inputProgress);
+      }
+      return result;
+    };
+    Object.defineProperty(patched, "__frisFrameReferenceSemantics", { value: true });
+    Object.defineProperty(patched, "__frisFrameOriginal", { value: original });
+    target.interpolatePoseFor = patched;
+    return true;
   }
 
   function normalizeTransition(value) {
@@ -242,11 +344,20 @@
   }
 
   return {
+    CAMERA_FOCAL_MAX,
+    CAMERA_FOCAL_MIN,
     activeMotionSegment,
     cameraDirectionVector,
+    cameraReferenceProgress,
     circularArcPoint,
+    clamp,
+    cloneValue,
     constrainPathEndpoint,
+    discreteAtDestination,
     finiteNumber,
+    heldActorBodyPose,
+    installReferenceFrameSemantics,
+    interpolateFocalLength,
     motionSegments,
     normalizePathMode,
     normalizeTransition,
@@ -256,6 +367,7 @@
     quadraticBezierPoint,
     rescaleKeyframeTimes,
     samplePlanarPath,
+    smoothReferenceProgress,
     transitionProgress,
   };
 });
