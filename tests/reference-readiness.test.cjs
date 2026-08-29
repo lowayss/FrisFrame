@@ -7,6 +7,7 @@ const {
   evaluateProjectReferenceReadiness,
   evaluateReferenceReadiness,
   isFrameAligned,
+  referenceTailDiscreteEvents,
 } = motion;
 
 assert.equal(workflow.SEEDANCE_REFERENCE_MAX_SECONDS, motion.SEEDANCE_REFERENCE_MAX_SECONDS,
@@ -102,6 +103,63 @@ invalidRange.motion.exportRange = { start: 4, end: 2 };
 const invalidRangeResult = evaluateReferenceReadiness(invalidRange);
 assert.equal(invalidRangeResult.status, "blocked");
 assert.ok(invalidRangeResult.issues.some((issue) => issue.code === "export-range-invalid"));
+
+const smoothEnd = baseBlocking();
+smoothEnd.motion.keyframes.push({
+  id: "cam-end-smooth",
+  source: "camera",
+  time: 5,
+  transition: "smooth",
+  pose: { x: 0.6, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-1" },
+});
+const smoothEndResult = evaluateReferenceReadiness(smoothEnd);
+assert.equal(smoothEndResult.status, "ready", "ordinary smooth endpoint keys must not become false-positive reviews");
+assert.equal(smoothEndResult.stats.tailDiscreteEventCount, 0);
+
+const holdEnd = baseBlocking();
+holdEnd.motion.keyframes.push({
+  id: "actor-end-hold",
+  source: "actor-1",
+  time: 5,
+  transition: "hold",
+  pose: { x: 0.6, y: 0.5, facing: 0 },
+});
+const holdEndResult = evaluateReferenceReadiness(holdEnd);
+assert.equal(holdEndResult.status, "review");
+assert.ok(holdEndResult.issues.some((issue) => issue.code === "tail-discrete-event-unsampled"));
+assert.equal(holdEndResult.stats.tailDiscreteEventCount, 1);
+
+const poseEnd = baseBlocking();
+poseEnd.items[0].bodyPose = { leftArm: { x: 0 } };
+poseEnd.motion.keyframes[2].pose.bodyPose = { leftArm: { x: 0 } };
+poseEnd.motion.keyframes.push({
+  id: "actor-end-pose",
+  source: "actor-1",
+  time: 5,
+  transition: "smooth",
+  pose: { x: 0.55, y: 0.5, facing: 0, bodyPose: { leftArm: { x: -40 } } },
+});
+const poseEndResult = evaluateReferenceReadiness(poseEnd);
+assert.equal(poseEndResult.status, "review");
+assert.ok(poseEndResult.issues.some((issue) => issue.code === "tail-discrete-event-unsampled"));
+
+const trackingEnd = baseBlocking();
+trackingEnd.items.push({ id: "actor-2", type: "actor", name: "B", x: 0.6, y: 0.5, facing: 180 });
+trackingEnd.motion.keyframes.push({
+  id: "cam-end-tracking",
+  source: "camera",
+  time: 5,
+  transition: "smooth",
+  pose: { x: 0.7, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-2" },
+});
+const trackingEndResult = evaluateReferenceReadiness(trackingEnd);
+assert.equal(trackingEndResult.status, "review");
+assert.ok(trackingEndResult.issues.some((issue) => issue.code === "tail-discrete-event-unsampled"));
+
+const tailPlan = referenceTailDiscreteEvents(trackingEnd, { start: 0, end: 5 }, 24);
+assert.ok(Math.abs(tailPlan.lastSampleTime - 119 / 24) < 0.000001);
+assert.equal(tailPlan.events.length, 1);
+assert.ok(tailPlan.events[0].reasons.includes("tracking"));
 
 const projectResults = evaluateProjectReferenceReadiness({
   scenes: [{ number: 1, cuts: [{ number: 1, title: "Ready", blocking: baseBlocking() }, { number: 2, title: "Review", blocking: longShot }] }],
