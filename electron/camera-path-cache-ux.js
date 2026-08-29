@@ -30,11 +30,22 @@
     ];
   }
 
+  function motionPathSourceSignature(renderState = state) {
+    const items = (renderState.items || [])
+      .map((item) => [item.id, item.type, item.color || "", item.visible !== false])
+      .sort((first, second) => String(first[0]).localeCompare(String(second[0])));
+    const cameras = (renderState.cameras || [])
+      .map((profile) => [profile.id || "", profile.color || ""])
+      .sort((first, second) => String(first[0]).localeCompare(String(second[0])));
+    return [items, cameras];
+  }
+
   function motionPathSignature(renderState = state) {
     return JSON.stringify([
       renderState.aspect || "16:9",
       renderState.motion?.keyframes || [],
       renderState.groups || [],
+      motionPathSourceSignature(renderState),
       typeof selectedKeyIdForRender === "function" ? selectedKeyIdForRender(renderState) : renderState.motion?.selectedKeyId || "",
       currentSelectionSignature(),
     ]);
@@ -145,7 +156,7 @@
     const face = cone.children[0];
     if (!face?.geometry?.setFromPoints) return false;
     face.geometry.setFromPoints([origin, p1, p2]);
-    face.geometry.setIndex([0, 1, 2]);
+    if (!face.geometry.index) face.geometry.setIndex([0, 1, 2]);
     face.geometry.computeVertexNormals();
     face.geometry.computeBoundingSphere?.();
     setLinePoints(cone.children[1], [origin, p1]);
@@ -221,6 +232,7 @@
   }
 
   window.FrisFrameCameraPathCacheUxTest = {
+    motionPathSourceSignature,
     motionPathSignature,
     cameraRigSignature,
     cameraRigStructureSignature,
