@@ -7617,12 +7617,6 @@ function renderCameraRigControls() {
   if (count) count.textContent = `${profiles.length}/4대`;
   const add = $("#addCameraBtn");
   if (add) add.disabled = profiles.length >= 4;
-  const multiVideoReady = profiles.length > 1;
-  [$("#multiCamVideoBtn"), $("#multiCamVideoPanelBtn")].forEach((button) => {
-    if (!button) return;
-    button.disabled = !multiVideoReady || mediaExportBusy;
-    button.title = multiVideoReady ? "카메라별 화면을 분할한 H.264 프리뷰 영상" : "카메라를 2대 이상 추가하면 사용할 수 있습니다";
-  });
   refreshLucideIcons();
 }
 
@@ -11322,11 +11316,6 @@ $("#projectRenameDialog").addEventListener("close", () => {
 });
 $("#videoBtn").addEventListener("click", exportVideo);
 $("#videoPanelBtn").addEventListener("click", exportVideo);
-$("#multiCamVideoBtn").addEventListener("click", exportMultiCameraVideo);
-$("#multiCamVideoPanelBtn").addEventListener("click", exportMultiCameraVideo);
-$("#multiCamPreviewBtn").addEventListener("click", exportMultiCameraPreview);
-$("#multiCamPreviewPanelBtn").addEventListener("click", exportMultiCameraPreview);
-$("#multiCamPreviewPanelBtnSecondary").addEventListener("click", exportMultiCameraPreview);
 $("#addCameraBtn").addEventListener("click", addCameraProfile);
 $("#cameraFrameModeBtn").addEventListener("click", () => {
   cameraPreviewMode = cameraPreviewMode === "single" ? "multi" : "single";
@@ -13594,86 +13583,6 @@ function buildBackgroundSheetReadme(manifest) {
   ].join("\n");
 }
 
-async function exportMultiCameraPreview() {
-  if (!beginMediaExport()) return;
-  syncActiveCutDocument(false);
-  syncActiveCameraProfile();
-  const exportState = clone(state);
-  const time = clamp(Number(displayPlayhead() || 0), 0, exportState.motion.duration);
-  const profiles = multiCameraCore.normalizeProfiles(
-    exportState.cameras,
-    exportState.camera,
-    exportState.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
-    exportState.cameraSetup,
-  ).slice(0, 4);
-  try {
-    notifyApp(`${profiles.length}대 멀티캠 프리뷰를 준비하고 있습니다.`);
-    const items = [];
-    for (const profile of profiles) {
-      const profileState = cameraDocumentForProfile(exportState, profile.id);
-      const blob = await renderCameraFrameBlobAtTime(time, profileState, exportSize(profileState));
-      items.push({ blob, caption: `${profile.name} · ${time.toFixed(1)}초` });
-    }
-    const sheet = await renderMultiCameraContactSheet(items, exportState, time);
-    presentExport(
-      sheet,
-      `${slug(exportState.sceneTitle)}_multicam_${formatFrameTime(time)}.png`,
-      "멀티카메라 프리뷰 PNG",
-      {
-        type: "images",
-        summary: `${profiles.length}대 카메라 · ${time.toFixed(1)}초 · 각 화면의 이미지 복사 가능`,
-        items,
-        notes: [
-          "저장 버튼은 전체 멀티캠 시트를 저장합니다.",
-          "개별 카메라 이미지는 각 화면의 이미지 복사 버튼으로 클립보드에 넣을 수 있습니다.",
-        ],
-      },
-    );
-  } catch (error) {
-    console.error("multi-camera preview failed", error);
-    presentExportError(error?.message || "멀티캠 프리뷰를 준비하지 못했습니다.");
-  } finally {
-    endMediaExport();
-  }
-}
-
-async function renderMultiCameraContactSheet(items, renderState, time) {
-  const columns = items.length <= 1 ? 1 : 2;
-  const rows = Math.ceil(items.length / columns);
-  const tileWidth = 960;
-  const tileHeight = Math.round(tileWidth / (aspectMap[renderState.aspect] || 16 / 9));
-  const labelHeight = 58;
-  const gap = 24;
-  const margin = 44;
-  const sheet = document.createElement("canvas");
-  sheet.width = margin * 2 + columns * tileWidth + (columns - 1) * gap;
-  sheet.height = margin * 2 + rows * (tileHeight + labelHeight) + (rows - 1) * gap;
-  const context = sheet.getContext("2d");
-  context.fillStyle = "#0b0e12";
-  context.fillRect(0, 0, sheet.width, sheet.height);
-  context.fillStyle = "#f1f5ef";
-  context.font = '800 28px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  context.fillText(`${renderState.sceneTitle || "FrisFrame"} · 멀티카메라`, margin, 32);
-  context.fillStyle = "#8e9aa1";
-  context.font = '600 16px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  context.fillText(`${time.toFixed(1)}초 · ${items.length}대`, margin, 58);
-  for (let index = 0; index < items.length; index += 1) {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const x = margin + column * (tileWidth + gap);
-    const y = margin + row * (tileHeight + labelHeight + gap) + 24;
-    const image = await imageFromBlob(items[index].blob);
-    context.drawImage(image, x, y, tileWidth, tileHeight);
-    context.strokeStyle = "#3d4e58";
-    context.lineWidth = 2;
-    context.strokeRect(x, y, tileWidth, tileHeight);
-    context.fillStyle = "#c7d6d2";
-    context.font = '700 18px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-    context.fillText(items[index].caption, x, y + tileHeight + 34);
-  }
-  return canvasToBlob(sheet, "image/png");
-}
-
 async function exportSelectedCutFrame() {
   const cut = currentCut();
   const scene = currentScene();
@@ -14754,30 +14663,6 @@ async function exportVideo() {
   return exportVideoForDocument(clone(state), { progressOwner: "#videoBtn" });
 }
 
-async function exportMultiCameraVideo() {
-  syncActiveCutDocument(false);
-  syncActiveCameraProfile();
-  const exportState = clone(state);
-  const profiles = multiCameraCore.normalizeProfiles(
-    exportState.cameras,
-    exportState.camera,
-    exportState.motion.keyframes.filter((keyframe) => keyframe.source === "camera"),
-    exportState.cameraSetup,
-  ).slice(0, 4);
-  if (profiles.length < 2) {
-    notifyApp("멀티캠 영상을 만들려면 카메라를 2대 이상 추가하세요.");
-    return;
-  }
-  return exportVideoForDocument(exportState, {
-    progressOwner: "#multiCamVideoBtn",
-    multiCamera: true,
-    cameraCount: profiles.length,
-    filename: `${slug(exportState.sceneTitle)}_multicam_previs.mp4`,
-    exportLabel: "멀티카메라 프리비즈 H.264 MP4",
-    cutLabel: `${profiles.length}대 멀티캠 · 카메라 순서대로 분할 표시`,
-  });
-}
-
 async function exportVideoForDocument(documentState, options = {}) {
   const exportState = clone(documentState || state);
   const fps = clamp(Math.round(Number(exportState.motion.fps || 24)), 12, 60);
@@ -14936,11 +14821,6 @@ function renderMediaExportBusy() {
     "#framePanelBtn": "현재 프레임",
     "#framePairBtn": "시작·끝 프레임",
     "#framePairPanelBtn": "시작·끝",
-    "#multiCamPreviewBtn": "멀티캠 프리뷰",
-    "#multiCamPreviewPanelBtn": "멀티캠 보기",
-    "#multiCamPreviewPanelBtnSecondary": "멀티캠",
-    "#multiCamVideoBtn": "멀티캠 영상",
-    "#multiCamVideoPanelBtn": "멀티캠 영상",
     "#selectedCutFrameBtn": "이 컷 이미지",
     "#selectedCutVideoBtn": "이 컷 영상",
     "#videoBtn": "프리비즈 영상",
@@ -14950,7 +14830,7 @@ function renderMediaExportBusy() {
     const button = $(selector);
     if (!button) return;
     button.disabled = mediaExportBusy;
-    const isVideoButton = ["#videoBtn", "#videoPanelBtn", "#multiCamVideoBtn", "#multiCamVideoPanelBtn", "#selectedCutVideoBtn"].includes(selector);
+    const isVideoButton = ["#videoBtn", "#videoPanelBtn", "#selectedCutVideoBtn"].includes(selector);
     const text = mediaExportBusy && isVideoButton && selector === mediaExportOwner
       ? mediaExportProgress || "준비 중"
       : label;

@@ -49,9 +49,21 @@ assert.equal(app.includes("index / (frameCount - 1)"), false, "MP4 evaluation mu
 assert.match(app, /exportRangeResetBtn[\s\S]*?state\.motion\.exportRange = \{ start: 0, end: state\.motion\.duration \}/, "MP4 export needs a one-click full-range reset");
 assert.match(app, /const \{\s*collisionEpsilon: timelineCollisionEpsilon,[\s\S]*?\} = timelineCore;/, "timeline collision helpers must come from the timeline core");
 assert.ok(app.includes("const PROJECT_SCHEMA_VERSION = 11;"), "continuity and cut snapshots require project schema v11");
-assert.ok(app.includes("function exportMultiCameraPreview("), "multi-camera preview needs a preview-first export action");
-assert.ok(app.includes("function exportMultiCameraVideo("), "multi-camera needs a preview-first MP4 export action");
-assert.ok(ids.has("multiCamVideoBtn") && ids.has("multiCamVideoPanelBtn"), "multi-camera video needs toolbar and panel actions");
+for (const retiredId of [
+  "multiCamPreviewBtn",
+  "multiCamPreviewPanelBtn",
+  "multiCamPreviewPanelBtnSecondary",
+  "multiCamVideoBtn",
+  "multiCamVideoPanelBtn",
+]) {
+  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+}
+assert.equal(app.includes("function exportMultiCameraPreview("), false,
+  "retired multi-camera contact-sheet export must stay removed");
+assert.equal(app.includes("function renderMultiCameraContactSheet("), false,
+  "retired multi-camera contact-sheet renderer must stay removed");
+assert.equal(app.includes("function exportMultiCameraVideo("), false,
+  "retired multi-camera video export must stay removed");
 assert.ok(app.includes("function exportSelectedCutFrame("), "selected cut needs a still-frame export action");
 assert.ok(app.includes("function exportSelectedCutVideo("), "selected cut needs an MP4 export action");
 assert.equal(app.includes("maxConcurrency = 6"), false, "MP4 frame uploads must not fan out concurrently");
