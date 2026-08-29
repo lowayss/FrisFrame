@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -39,6 +40,78 @@ assert.match(source, /stats\.actorRigReuses \+= 1/,
   "actor reuse must be observable for performance validation");
 assert.match(source, /previewRenderDepth/,
   "editor-world caching must be isolated from the separate camera-preview scene graph");
+
+const sandbox = {
+  console,
+  document: { documentElement: { dataset: {} } },
+  window: { addEventListener() {} },
+  state: {
+    aspect: "16:9",
+    showNames: true,
+    motion: { keyframes: [] },
+    groups: [],
+    items: [],
+  },
+  selected: null,
+  threeEditMode: "move",
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox, { filename: "scene-cache-ux.js" });
+const cacheApi = sandbox.window.FrisFrameSceneCacheUxTest;
+assert.ok(cacheApi, "scene cache must expose its deterministic cache policy for regression tests");
+
+const actor = {
+  id: "actor-1",
+  type: "actor",
+  name: "Actor 1",
+  color: "#55c7bb",
+  visible: true,
+  size: 1,
+  scaleX: 1,
+  scaleY: 1,
+  scaleZ: 1,
+  x: 0.25,
+  y: 0.4,
+  facing: 10,
+  pitch: 0,
+  verticalOffset: 0,
+  mountedHeight: 0,
+  bodyPose: { chest: { x: 0, y: 0, z: 0 } },
+};
+const dynamicVariant = {
+  ...actor,
+  x: 0.75,
+  y: 0.72,
+  facing: 190,
+  pitch: 14,
+  verticalOffset: 0.3,
+  mountedHeight: 0.8,
+  bodyPose: { chest: { x: 20, y: -15, z: 8 } },
+};
+assert.equal(
+  cacheApi.actorRigSignature(actor, sandbox.state),
+  cacheApi.actorRigSignature(dynamicVariant, sandbox.state),
+  "position, facing, pitch, elevation and pose changes must stay on the reusable actor-rig path",
+);
+assert.notEqual(
+  cacheApi.actorRigSignature(actor, sandbox.state),
+  cacheApi.actorRigSignature({ ...actor, color: "#ff6262" }, sandbox.state),
+  "material/color changes must invalidate actor rig geometry/material reuse",
+);
+assert.notEqual(
+  cacheApi.actorRigSignature(actor, sandbox.state),
+  cacheApi.actorRigSignature({ ...actor, size: 1.25 }, sandbox.state),
+  "actor physical-structure changes must invalidate the cached rig",
+);
+assert.equal(cacheApi.actorRigEligible(actor), true,
+  "ordinary moving actors must be eligible for rig reuse");
+sandbox.selected = { kind: "item", id: actor.id };
+sandbox.threeEditMode = "pose";
+assert.equal(cacheApi.actorRigEligible(actor), false,
+  "the selected actor must bypass rig caching while pose handles are active");
+sandbox.threeEditMode = "move";
+assert.equal(cacheApi.actorRigEligible(actor), true,
+  "the selected actor may reuse its rig again outside pose-edit mode");
 
 assert.ok(packageJson.build.files.includes("electron/scene-cache-ux.js"),
   "desktop package must include the scene cache layer");
