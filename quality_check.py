@@ -29,6 +29,7 @@ def check_python_syntax() -> None:
         ROOT / "server.py",
         ROOT / "mcp_server.py",
         ROOT / "mcp_previs_server.py",
+        ROOT / "mcp_desktop_entry.py",
         ROOT / "add_license.py",
     ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -102,6 +103,7 @@ def main() -> None:
         "tests/helper-raycast-ux-contract.test.cjs",
         "tests/preview-cache-ux-contract.test.cjs",
         "tests/performance-ux-contract.test.cjs",
+        "tests/mcp-desktop-runtime-contract.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
