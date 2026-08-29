@@ -55,6 +55,7 @@ def main() -> None:
 
     for filename in (
         "tests/motion-core.test.cjs",
+        "tests/reference-video-contract.test.cjs",
         "tests/scene-blocking-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
