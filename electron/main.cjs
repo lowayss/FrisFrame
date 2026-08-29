@@ -244,6 +244,15 @@ function buildApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function rendererUrlMatchesOrigin(value, allowedOrigin) {
+  if (!allowedOrigin) return false;
+  try {
+    return new URL(value).origin === allowedOrigin;
+  } catch {
+    return false;
+  }
+}
+
 function createMainWindow(origin) {
   const window = new BrowserWindow({
     width: 1540,
@@ -268,9 +277,11 @@ function createMainWindow(origin) {
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`${origin}/`)) event.preventDefault();
-  });
+  const preventExternalNavigation = (event, url) => {
+    if (!rendererUrlMatchesOrigin(url, origin)) event.preventDefault();
+  };
+  window.webContents.on("will-navigate", preventExternalNavigation);
+  window.webContents.on("will-redirect", preventExternalNavigation);
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.loadURL(`${origin}/`);
@@ -302,7 +313,9 @@ else {
     logFile = path.join(app.getPath("userData"), "logs", "main.log");
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     buildApplicationMenu();
+    session.defaultSession.setPermissionCheckHandler(() => false);
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+    session.defaultSession.setDevicePermissionHandler?.(() => false);
     try {
       const origin = await startLocalServer();
       createMainWindow(origin);
