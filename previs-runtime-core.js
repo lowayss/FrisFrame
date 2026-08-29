@@ -27,12 +27,19 @@
     "cameraReferenceProgress",
     "clamp",
     "cloneValue",
+    "collectReferenceBatchCuts",
     "discreteAtDestination",
+    "evaluateProjectReferenceReadiness",
+    "evaluateReferenceReadiness",
     "finiteNumber",
     "heldActorBodyPose",
     "installReferenceFrameSemantics",
     "interpolateFocalLength",
+    "isFrameAligned",
     "orbitCameraPose",
+    "partitionReferenceBatchByReadiness",
+    "referenceEntryKey",
+    "safeFileSlug",
     "smoothReferenceProgress",
     "translateCameraPose",
   ];
@@ -40,12 +47,13 @@
   if (missingMotionCore.length || !motionCore.CAMERA_MOTION_PRESETS) {
     const missing = [...missingMotionCore];
     if (!motionCore.CAMERA_MOTION_PRESETS) missing.push("CAMERA_MOTION_PRESETS");
-    throw new Error(`FrisFrameMotionCore reference/camera planner is incomplete: ${missing.join(", ")}`);
+    throw new Error(`FrisFrameMotionCore reference planner is incomplete: ${missing.join(", ")}`);
   }
 
   const CAMERA_FOCAL_MIN = Number(motionCore.CAMERA_FOCAL_MIN || 14);
   const CAMERA_FOCAL_MAX = Number(motionCore.CAMERA_FOCAL_MAX || 135);
   const CAMERA_MOTION_PRESETS = motionCore.CAMERA_MOTION_PRESETS;
+  const SEEDANCE_REFERENCE_MAX_SECONDS = Number(motionCore.SEEDANCE_REFERENCE_MAX_SECONDS || 30);
   const {
     buildCameraMotionPreset,
     cameraGroundDirection,
@@ -53,17 +61,22 @@
     cameraReferenceProgress,
     clamp,
     cloneValue,
+    collectReferenceBatchCuts,
     discreteAtDestination,
+    evaluateProjectReferenceReadiness,
+    evaluateReferenceReadiness,
     finiteNumber,
     heldActorBodyPose,
     installReferenceFrameSemantics,
     interpolateFocalLength,
+    isFrameAligned,
     orbitCameraPose,
+    partitionReferenceBatchByReadiness,
+    referenceEntryKey,
+    safeFileSlug,
     smoothReferenceProgress,
     translateCameraPose,
   } = motionCore;
-
-  const SEEDANCE_REFERENCE_MAX_SECONDS = 30;
 
   function safeContext(canvas, name) {
     try {
@@ -267,150 +280,6 @@
     });
     syncPresetInputs();
     return true;
-  }
-
-  function safeFileSlug(value, fallback = "cut") {
-    const normalized = String(value || "").normalize("NFKC").trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^[.-]+|[.-]+$/g, "").slice(0, 80);
-    return normalized || fallback;
-  }
-
-  function collectReferenceBatchCuts(project = {}) {
-    const entries = [];
-    (project.scenes || []).forEach((scene, sceneIndex) => {
-      (scene.cuts || []).forEach((cut, cutIndex) => {
-        const blocking = cut?.blocking;
-        const duration = finiteNumber(blocking?.motion?.duration, 0);
-        if (!blocking || duration <= 0) return;
-        const sceneNumber = Number(scene.number || sceneIndex + 1);
-        const cutNumber = Number(cut.number || cutIndex + 1);
-        const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
-        entries.push({ sceneId: scene.id || "", cutId: cut.id || "", sceneNumber, cutNumber, sceneHeading: scene.heading || "", title: cut.title || "", status: cut.status || "", filename: `${base}_reference.mp4`, blocking: cloneValue(blocking), duration, fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60) });
-      });
-    });
-    return entries;
-  }
-
-  function addReadinessIssue(issues, severity, code, message) {
-    issues.push({ severity, code, message });
-  }
-
-  function isFrameAligned(time, fps, toleranceSeconds = 0.001) {
-    const safeFps = Math.max(1, finiteNumber(fps, 24));
-    const safeTime = finiteNumber(time, 0);
-    const frame = Math.round(safeTime * safeFps);
-    return Math.abs(safeTime - frame / safeFps) <= Math.max(0.000001, toleranceSeconds);
-  }
-
-  function evaluateReferenceReadiness(blocking = {}, metadata = {}) {
-    const issues = [];
-    const motion = blocking?.motion || {};
-    const duration = finiteNumber(motion.duration, 0);
-    const fps = finiteNumber(motion.fps, 24);
-    const keyframes = Array.isArray(motion.keyframes) ? motion.keyframes : [];
-    const items = Array.isArray(blocking.items) ? blocking.items : [];
-    const actors = items.filter((item) => item?.type === "actor");
-    const itemIds = new Set(items.map((item) => item?.id).filter(Boolean));
-    const camera = blocking.camera || {};
-
-    if (!(duration > 0)) addReadinessIssue(issues, "error", "duration-invalid", "컷 길이가 0초이거나 올바르지 않습니다.");
-    else if (duration > SEEDANCE_REFERENCE_MAX_SECONDS) addReadinessIssue(issues, "warning", "duration-long", `컷 길이가 ${SEEDANCE_REFERENCE_MAX_SECONDS}초를 넘습니다. Seedance 입력용으로 구간 분할을 검토하세요.`);
-    if (!Number.isFinite(Number(fps)) || fps < 12 || fps > 60) addReadinessIssue(issues, "error", "fps-invalid", "FPS는 12–60 범위여야 합니다.");
-
-    const exportRange = motion.exportRange || { start: 0, end: duration };
-    const rangeStart = finiteNumber(exportRange.start, 0);
-    const rangeEnd = finiteNumber(exportRange.end, duration);
-    if (rangeStart < 0 || rangeEnd > duration + 0.0005 || rangeEnd <= rangeStart) {
-      addReadinessIssue(issues, "error", "export-range-invalid", "MP4 출력 구간이 컷 길이 안에서 올바르게 설정되지 않았습니다.");
-    } else if (rangeEnd - rangeStart > SEEDANCE_REFERENCE_MAX_SECONDS) {
-      addReadinessIssue(issues, "warning", "export-range-long", `실제 MP4 출력 구간이 ${SEEDANCE_REFERENCE_MAX_SECONDS}초를 넘습니다.`);
-    }
-
-    const cameraFields = ["x", "y", "height", "panDeg", "tiltDeg", "focal"];
-    const invalidCameraFields = cameraFields.filter((field) => !Number.isFinite(Number(camera[field])));
-    if (invalidCameraFields.length) addReadinessIssue(issues, "error", "camera-invalid", `카메라 값이 올바르지 않습니다: ${invalidCameraFields.join(", ")}`);
-    const focal = Number(camera.focal);
-    if (Number.isFinite(focal) && (focal < CAMERA_FOCAL_MIN || focal > CAMERA_FOCAL_MAX)) addReadinessIssue(issues, "error", "lens-out-of-range", `렌즈가 지원 범위(${CAMERA_FOCAL_MIN}–${CAMERA_FOCAL_MAX}mm)를 벗어났습니다.`);
-
-    function trackingExists(trackingTargetId) {
-      return !trackingTargetId || actors.some((actor) => actor.id === trackingTargetId);
-    }
-    if (!trackingExists(camera.trackingTargetId)) addReadinessIssue(issues, "error", "tracking-missing", "카메라 Tracking 대상이 현재 컷의 배우 목록에 없습니다.");
-
-    let offFrameGrid = 0;
-    let invalidPoseCount = 0;
-    const seenSourceTimes = [];
-    keyframes.forEach((keyframe) => {
-      const time = Number(keyframe?.time);
-      if (!Number.isFinite(time) || time < -0.0005 || time > duration + 0.0005) {
-        addReadinessIssue(issues, "error", "key-time-out-of-range", `${keyframe?.label || keyframe?.id || "키"} 시간이 컷 길이 밖에 있습니다.`);
-        return;
-      }
-      if (!isFrameAligned(time, fps)) offFrameGrid += 1;
-      const source = keyframe?.source || "";
-      if (source !== "camera" && !itemIds.has(source)) addReadinessIssue(issues, "error", "key-source-missing", `${keyframe?.label || keyframe?.id || "키"}의 대상이 현재 컷에 없습니다.`);
-      const duplicate = seenSourceTimes.some((entry) => entry.source === source && Math.abs(entry.time - time) <= 0.0000005);
-      if (duplicate) addReadinessIssue(issues, "error", "duplicate-key-time", `${source || "대상"}에 같은 시점의 키가 중복되어 있습니다.`);
-      else seenSourceTimes.push({ source, time });
-      const pose = keyframe?.pose || {};
-      const numericFields = source === "camera" ? ["x", "y", "height", "panDeg", "tiltDeg", "focal"] : ["x", "y", "facing"];
-      if (numericFields.some((field) => pose[field] !== undefined && !Number.isFinite(Number(pose[field])))) invalidPoseCount += 1;
-      if (source === "camera" && !trackingExists(pose.trackingTargetId)) addReadinessIssue(issues, "error", "tracking-key-missing", `${keyframe?.label || keyframe?.id || "카메라 키"}의 Tracking 대상이 없습니다.`);
-    });
-    if (invalidPoseCount) addReadinessIssue(issues, "error", "key-pose-invalid", `숫자 값이 깨진 키가 ${invalidPoseCount}개 있습니다.`);
-    if (offFrameGrid) addReadinessIssue(issues, "warning", "keys-off-frame-grid", `${offFrameGrid}개 키가 ${Math.round(fps)}FPS 프레임 틱에서 벗어나 있습니다.`);
-
-    const errorCount = issues.filter((issue) => issue.severity === "error").length;
-    const warningCount = issues.filter((issue) => issue.severity === "warning").length;
-    const score = clamp(100 - errorCount * 25 - warningCount * 8, 0, 100);
-    const status = errorCount ? "blocked" : warningCount ? "review" : "ready";
-    return {
-      status,
-      score,
-      errorCount,
-      warningCount,
-      issues,
-      stats: { duration, fps, keyCount: keyframes.length, actorCount: actors.length, cameraKeyCount: keyframes.filter((keyframe) => keyframe.source === "camera").length },
-      metadata: { sceneNumber: metadata.sceneNumber || 0, cutNumber: metadata.cutNumber || 0, title: metadata.title || "" },
-    };
-  }
-
-  function evaluateProjectReferenceReadiness(project = {}) {
-    return collectReferenceBatchCuts(project).map((entry) => ({ ...entry, readiness: evaluateReferenceReadiness(entry.blocking, entry) }));
-  }
-
-  function referenceEntryKey(entry = {}) {
-    if (entry.sceneId || entry.cutId) return `${entry.sceneId || ""}::${entry.cutId || ""}`;
-    return `n:${Number(entry.sceneNumber || 0)}:${Number(entry.cutNumber || 0)}`;
-  }
-
-  function cutReferenceKey(scene = {}, cut = {}, sceneIndex = 0, cutIndex = 0) {
-    if (scene.id || cut.id) return `${scene.id || ""}::${cut.id || ""}`;
-    return `n:${Number(scene.number || sceneIndex + 1)}:${Number(cut.number || cutIndex + 1)}`;
-  }
-
-  function partitionReferenceBatchByReadiness(project = {}) {
-    const results = evaluateProjectReferenceReadiness(project) || [];
-    const allowed = results.filter((entry) => entry?.readiness?.status !== "blocked");
-    const blocked = results.filter((entry) => entry?.readiness?.status === "blocked");
-    const allowedKeys = new Set(allowed.map(referenceEntryKey));
-    const filteredProject = cloneValue(project);
-    filteredProject.scenes = (filteredProject.scenes || []).map((scene, sceneIndex) => ({
-      ...scene,
-      cuts: (scene.cuts || []).filter((cut, cutIndex) => allowedKeys.has(cutReferenceKey(scene, cut, sceneIndex, cutIndex))),
-    }));
-    const skippedBlocked = blocked.map((entry) => ({
-      sceneId: entry.sceneId || "",
-      cutId: entry.cutId || "",
-      sceneNumber: Number(entry.sceneNumber || 0),
-      cutNumber: Number(entry.cutNumber || 0),
-      title: entry.title || "",
-      readiness: {
-        status: "blocked",
-        score: Number(entry.readiness?.score || 0),
-        issues: cloneValue(entry.readiness?.issues || []),
-      },
-    }));
-    return { results, allowed, blocked, filteredProject, skippedBlocked };
   }
 
   async function collectSingleReferenceVideo(target, entry) {
