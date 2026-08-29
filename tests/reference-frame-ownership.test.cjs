@@ -3,6 +3,10 @@ const assert = require("node:assert/strict");
 const motionCore = require("../motion-core.js");
 const runtimeCore = require("../previs-runtime-core.js");
 
+function near(actual, expected, epsilon = 0.000001) {
+  assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
+}
+
 for (const name of [
   "cameraReferenceProgress",
   "cloneValue",
@@ -71,4 +75,154 @@ const actorAlmost = fakeWindow.interpolatePoseFor(
 );
 assert.deepEqual(actorAlmost.bodyPose, neutralPose, "actor pose must remain authored/held until destination");
 
-console.log("reference-frame-ownership: motion-core owns the shared preview/export evaluator semantics");
+// Numerical fixture for the full authored-frame semantics used by both preview
+// and MP4 export. App-level contract tests ensure both surfaces enter the same
+// render-state evaluator; this fixture locks the resulting numeric semantics.
+const fixtureWindow = {
+  interpolatePoseFor(_renderState, sourceId, startPose, endPose, t, fallbackPose) {
+    const fromPose = { ...fallbackPose, ...startPose };
+    const toPose = { ...fallbackPose, ...endPose };
+    const lerp = (a, b) => Number(a || 0) + (Number(b ?? a ?? 0) - Number(a || 0)) * t;
+    const fromHeight = sourceId === "camera"
+      ? Number(fromPose.height || 0)
+      : Number(fromPose.type === "prop" ? fromPose.mountedHeight || 0 : fromPose.verticalOffset || 0);
+    const toHeight = sourceId === "camera"
+      ? Number(toPose.height ?? fromHeight)
+      : Number(toPose.type === "prop" ? toPose.mountedHeight ?? fromHeight : toPose.verticalOffset ?? fromHeight);
+    return motionCore.composeBaseInterpolatedPose({
+      sourceId,
+      from: fromPose,
+      to: toPose,
+      progress: t,
+      spatial: {
+        x: lerp(fromPose.x, toPose.x),
+        y: lerp(fromPose.y, toPose.y),
+        height: fromHeight + (toHeight - fromHeight) * t,
+      },
+      transformed: sourceId === "camera" ? null : {
+        ...fromPose,
+        size: lerp(fromPose.size ?? 1, toPose.size ?? fromPose.size ?? 1),
+        scaleX: lerp(fromPose.scaleX ?? 1, toPose.scaleX ?? fromPose.scaleX ?? 1),
+        scaleY: lerp(fromPose.scaleY ?? 1, toPose.scaleY ?? fromPose.scaleY ?? 1),
+        scaleZ: lerp(fromPose.scaleZ ?? 1, toPose.scaleZ ?? fromPose.scaleZ ?? 1),
+      },
+    });
+  },
+  mergePoseWithFallbackFor(_renderState, _sourceId, pose, fallbackPose) {
+    return { ...fallbackPose, ...pose };
+  },
+  sanitizeTrackingTargetId(value) {
+    return value;
+  },
+};
+assert.equal(motionCore.installReferenceFrameSemantics(fixtureWindow), true);
+
+const fixtureDocument = {
+  camera: {
+    x: 0.1,
+    y: 0.2,
+    height: 1,
+    panDeg: 350,
+    tiltDeg: -10,
+    focal: 24,
+    focusDistanceM: 3,
+    trackingTargetId: "actor-a",
+  },
+  items: [{
+    id: "actor-a",
+    type: "actor",
+    x: 0.2,
+    y: 0.5,
+    verticalOffset: 0,
+    pitch: 0,
+    facing: 0,
+    bodyPose: neutralPose,
+    size: 1,
+    scaleX: 1,
+    scaleY: 1,
+    scaleZ: 1,
+    visible: true,
+  }],
+  motion: {
+    duration: 2,
+    playhead: 0,
+    keyframes: [
+      { source: "camera", time: 0, pose: { x: 0.1, y: 0.2, height: 1, panDeg: 350, tiltDeg: -10, focal: 24, focusDistanceM: 3, trackingTargetId: "actor-a" } },
+      { source: "camera", time: 2, transition: "smooth", pose: { x: 0.9, y: 0.6, height: 2, panDeg: 10, tiltDeg: 10, focal: 70, focusDistanceM: 7, trackingTargetId: "actor-b" } },
+      { source: "actor-a", time: 0, pose: { type: "actor", x: 0.2, y: 0.5, verticalOffset: 0, pitch: 0, facing: 0, bodyPose: neutralPose } },
+      { source: "actor-a", time: 2, transition: "smooth", pose: { type: "actor", x: 0.6, y: 0.7, verticalOffset: 1, pitch: 20, facing: 90, bodyPose: raisedPose } },
+    ],
+  },
+};
+
+function fixtureSourceEvaluator(renderState, sourceId, time, fallbackPose) {
+  const keys = (renderState.motion?.keyframes || [])
+    .filter((keyframe) => keyframe.source === sourceId)
+    .sort((a, b) => Number(a.time) - Number(b.time));
+  const plan = motionCore.sourceKeyframeEvaluationPlan(keys, time);
+  if (plan.kind === "fallback") return motionCore.cloneValue(fallbackPose);
+  if (plan.kind === "key") return { ...fallbackPose, ...motionCore.cloneValue(plan.keyframe.pose || {}) };
+  return fixtureWindow.interpolatePoseFor(
+    renderState,
+    sourceId,
+    plan.start.pose,
+    plan.end.pose,
+    plan.progress,
+    fallbackPose,
+    plan.end,
+  );
+}
+
+function fixtureFrame(time) {
+  return motionCore.composeEvaluatedFrameBase(
+    fixtureDocument,
+    time,
+    (sourceId, safeTime, fallbackPose) => fixtureSourceEvaluator(fixtureDocument, sourceId, safeTime, fallbackPose),
+  );
+}
+
+for (const sampleTime of [0, 0.5, 1, 1.5, 2]) {
+  const previewFrame = fixtureFrame(sampleTime);
+  const exportFrame = fixtureFrame(sampleTime);
+  assert.deepEqual(exportFrame, previewFrame, `preview/export frame semantics must match at ${sampleTime}s`);
+}
+
+const quarterFrame = fixtureFrame(0.5);
+near(quarterFrame.motion.playhead, 0.5);
+near(quarterFrame.camera.x, 0.2);
+near(quarterFrame.camera.y, 0.25);
+near(quarterFrame.camera.height, 1.125);
+near(quarterFrame.camera.panDeg, 352.5);
+near(quarterFrame.camera.tiltDeg, -7.5);
+near(quarterFrame.camera.focal, 29.75);
+assert.equal(Number.isInteger(quarterFrame.camera.focal), false, "24→70 mm zoom must retain sub-mm evaluation precision");
+assert.equal(quarterFrame.camera.trackingTargetId, "actor-a");
+near(quarterFrame.items[0].x, 0.3);
+near(quarterFrame.items[0].y, 0.55);
+near(quarterFrame.items[0].verticalOffset, 0.25);
+near(quarterFrame.items[0].facing, 22.5);
+assert.deepEqual(quarterFrame.items[0].bodyPose, neutralPose, "actor pose must stay held during root motion");
+
+const preArrivalFrame = fixtureFrame(1.999999);
+assert.equal(preArrivalFrame.camera.trackingTargetId, "actor-a", "tracking must not switch before the destination key");
+assert.deepEqual(preArrivalFrame.items[0].bodyPose, neutralPose, "actor pose must not switch before the destination key");
+const destinationFrame = fixtureFrame(2);
+assert.equal(destinationFrame.camera.trackingTargetId, "actor-b", "tracking must switch at the destination key");
+assert.deepEqual(destinationFrame.items[0].bodyPose, raisedPose, "authored actor pose must switch at the destination key");
+near(destinationFrame.camera.focal, 70);
+near(destinationFrame.items[0].facing, 90);
+
+const exactFrameTime = Number((7 / 24).toFixed(6));
+const timingPlan = motionCore.sourceKeyframeEvaluationPlan([
+  { id: "frame-0", time: 0 },
+  { id: "frame-7", time: exactFrameTime, transition: "linear" },
+], exactFrameTime);
+assert.equal(timingPlan.kind, "key");
+assert.equal(timingPlan.keyframe.time, 0.291667, "24 FPS keyframe time must retain six-decimal precision");
+const retimedFixture = motionCore.rescaleKeyframeTimes([
+  { id: "frame-0", time: 0 },
+  { id: "frame-7", time: exactFrameTime },
+], 1, 2);
+assert.equal(retimedFixture[1].time, 0.583334, "keyframe retiming must retain frame-time precision");
+
+console.log("reference-frame-ownership: shared preview/export semantics and numerical fixture passed");
