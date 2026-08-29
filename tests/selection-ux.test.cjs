@@ -12,7 +12,10 @@ function makeContext(items, selectedItem = null) {
   };
   const context = {
     console,
-    document: { documentElement: { dataset: {} } },
+    document: {
+      documentElement: { dataset: {} },
+      getElementById() { return null; },
+    },
     window: { THREE: null },
     state: renderState,
     evaluatedViewState: renderState,
