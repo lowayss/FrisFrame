@@ -64,6 +64,7 @@ def main() -> None:
         "electron/selection-ux.js",
         "electron/alignment-ux.js",
         "electron/history-safety-ux.js",
+        "electron/preview-cache-ux.js",
         "electron/performance-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
@@ -90,6 +91,7 @@ def main() -> None:
         "tests/selection-ux.test.cjs",
         "tests/alignment-ux.test.cjs",
         "tests/history-safety-contract.test.cjs",
+        "tests/preview-cache-ux-contract.test.cjs",
         "tests/performance-ux-contract.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
