@@ -61,6 +61,7 @@
 
   let renderFrame = 0;
   let pendingRenderMode = "2d";
+  let targetCache = null;
 
   function itemIsArchitecture(item) {
     if (!item || item.type !== "prop") return false;
@@ -107,11 +108,24 @@
     return { x, y };
   }
 
+  function cachedAlignmentTargets(activeId, mode, renderState = state) {
+    const size = stageWorldSize(renderState);
+    const signature = `${mode}:${activeId}:${renderState.items.length}:${size.width}:${size.depth}`;
+    if (targetCache?.signature === signature) return targetCache.targets;
+    const targets = alignmentTargets(activeId, renderState);
+    targetCache = { signature, targets };
+    return targets;
+  }
+
+  function clearTargetCache() {
+    targetCache = null;
+  }
+
   function snapItem(activeId, mode, event) {
     if (event.altKey) return null;
     const item = state.items.find((entry) => entry.id === activeId);
     if (!item) return null;
-    const targets = alignmentTargets(activeId, state);
+    const targets = cachedAlignmentTargets(activeId, mode, state);
     const size = stageWorldSize(state);
     const thresholdMeters = Math.max(0.08, Math.min(0.18, Math.min(size.width, size.depth) * 0.015));
     const thresholdX = mode === "2d"
@@ -199,7 +213,9 @@
     renderFrame = requestAnimationFrame(() => {
       renderFrame = 0;
       applyCameraTracking(state);
-      syncUi(false);
+      // The core direct-manipulation handler already synchronizes controls.
+      // Alignment only changes the final snapped X/Y, so avoid a second full UI
+      // sync and repaint the working viewport directly.
       if (pendingRenderMode === "3d" && threeView?.ready) renderThreeView(state, true);
       else draw();
     });
@@ -207,7 +223,10 @@
 
   stageCanvas.addEventListener("pointermove", (event) => {
     if (typeof drag === "undefined" || !drag || drag.pending || drag.pointerId !== event.pointerId || drag.selection?.kind !== "item") {
-      if (!event.buttons) clearGuides();
+      if (!event.buttons) {
+        clearGuides();
+        clearTargetCache();
+      }
       return;
     }
     const activeId = drag.editItemId || drag.selection.id;
@@ -229,7 +248,10 @@
       || threeDrag.pointerId !== event.pointerId
       || threeDrag.editor?.kind !== "item"
       || threeEditMode !== "move") {
-      if (!event.buttons) clearGuides();
+      if (!event.buttons) {
+        clearGuides();
+        clearTargetCache();
+      }
       return;
     }
     const activeId = threeDrag.editItemId || threeDrag.editor.id;
@@ -243,13 +265,18 @@
     scheduleRender("3d");
   });
 
+  function endAlignmentInteraction() {
+    clearGuides();
+    clearTargetCache();
+  }
+
   [stageCanvas, threeCanvas].forEach((target) => {
-    target.addEventListener("pointerup", clearGuides);
-    target.addEventListener("pointercancel", clearGuides);
+    target.addEventListener("pointerup", endAlignmentInteraction);
+    target.addEventListener("pointercancel", endAlignmentInteraction);
     target.addEventListener("pointerleave", (event) => {
-      if (!event.buttons) clearGuides();
+      if (!event.buttons) endAlignmentInteraction();
     });
   });
-  document.addEventListener("frisframe:drag-cancelled", clearGuides);
-  window.addEventListener("blur", clearGuides);
+  document.addEventListener("frisframe:drag-cancelled", endAlignmentInteraction);
+  window.addEventListener("blur", endAlignmentInteraction);
 })();
