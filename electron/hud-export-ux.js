@@ -158,6 +158,65 @@
       line-height: 1.4;
     }
 
+    /* Repeated editing loop: fewer pointer trips around the timeline. */
+    .frisframe-key-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: 2px;
+      padding-left: 5px;
+      border-left: 1px solid rgba(255,255,255,.07);
+    }
+    .frisframe-key-nav button {
+      min-width: 30px !important;
+      height: 28px;
+      min-height: 28px !important;
+      padding: 0 7px !important;
+      color: #aeb5be;
+      font-size: 10px !important;
+      font-weight: 800;
+    }
+    .frisframe-key-nav kbd {
+      margin-left: 4px;
+      color: #6f7780;
+      font-size: 8px;
+      font-weight: 700;
+    }
+    .frisframe-time-stepper {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) 26px;
+      gap: 3px;
+      align-items: center;
+      width: 100%;
+    }
+    .frisframe-time-stepper > button {
+      width: 26px;
+      min-width: 26px !important;
+      height: 28px;
+      min-height: 28px !important;
+      padding: 0 !important;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 6px;
+      background: rgba(255,255,255,.025);
+      color: #8f98a2;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .frisframe-time-stepper > button:hover,
+    .frisframe-time-stepper > button:focus-visible {
+      color: #d8dee6;
+      border-color: rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+    }
+    .frisframe-time-stepper #keyTimeInput {
+      width: 100%;
+      min-width: 0;
+    }
+    #viewButtons [data-view]::after {
+      content: "";
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .frisframe-export-range-details > summary::before,
       .three-wrap .three-jog-container {
@@ -218,4 +277,138 @@
     note.textContent = "기준 프레임은 생성형 이미지 구조 참고용, MP4는 Seedance Video Reference용입니다.";
     details.insertAdjacentElement("afterend", note);
   }
+
+  const keyTimeInput = document.getElementById("keyTimeInput");
+  const keyTimeField = keyTimeInput?.closest("label.compact-field");
+  if (keyTimeInput && keyTimeField && !keyTimeField.querySelector(".frisframe-time-stepper")) {
+    const stepper = document.createElement("div");
+    stepper.className = "frisframe-time-stepper";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.textContent = "−";
+    back.title = "0.1초 뒤로 · Shift 클릭은 1초";
+    back.setAttribute("aria-label", "현재 시간을 뒤로 이동");
+    const forward = document.createElement("button");
+    forward.type = "button";
+    forward.textContent = "+";
+    forward.title = "0.1초 앞으로 · Shift 클릭은 1초";
+    forward.setAttribute("aria-label", "현재 시간을 앞으로 이동");
+    keyTimeInput.replaceWith(stepper);
+    stepper.append(back, keyTimeInput, forward);
+
+    const nudgeTime = (direction, event) => {
+      const increment = event.shiftKey ? 1 : 0.1;
+      const minimum = Number.isFinite(Number(keyTimeInput.min)) ? Number(keyTimeInput.min) : 0;
+      const maximum = Number.isFinite(Number(keyTimeInput.max)) ? Number(keyTimeInput.max) : 60;
+      const current = Number.isFinite(Number(keyTimeInput.value)) ? Number(keyTimeInput.value) : 0;
+      const next = Math.min(maximum, Math.max(minimum, current + increment * direction));
+      keyTimeInput.value = String(Number(next.toFixed(2)));
+      keyTimeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    back.addEventListener("click", (event) => nudgeTime(-1, event));
+    forward.addEventListener("click", (event) => nudgeTime(1, event));
+  }
+
+  const timelineMain = document.querySelector(".timeline-main");
+  const rewindButton = document.getElementById("rewindBtn");
+  const keySourceSelect = document.getElementById("keySourceSelect");
+
+  const markerTime = (marker) => {
+    const raw = String(marker?.dataset?.time || "").replace(/[^0-9.+-]/g, "");
+    const value = Number.parseFloat(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+
+  const normalizedSourceLabel = () => String(keySourceSelect?.selectedOptions?.[0]?.textContent || "")
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .trim();
+
+  const markersForActiveSource = () => {
+    if (!keySourceSelect || keySourceSelect.value === "all") {
+      const combined = [...document.querySelectorAll("#timelineMarkers .timeline-marker")];
+      return combined.length ? combined : [...document.querySelectorAll("#sourceTimelineList .timeline-marker")];
+    }
+    const label = normalizedSourceLabel();
+    const lanes = [...document.querySelectorAll("#sourceTimelineList .source-lane")];
+    const lane = lanes.find((entry) => {
+      const text = entry.querySelector(".source-lane-label")?.textContent?.trim() || "";
+      return text === label || text.startsWith(label);
+    });
+    const scoped = lane ? [...lane.querySelectorAll(".timeline-marker")] : [];
+    return scoped.length ? scoped : [...document.querySelectorAll("#timelineMarkers .timeline-marker")];
+  };
+
+  const jumpAdjacentKey = (direction) => {
+    const current = Number.isFinite(Number(keyTimeInput?.value)) ? Number(keyTimeInput.value) : 0;
+    const markers = markersForActiveSource()
+      .map((marker) => ({ marker, time: markerTime(marker) }))
+      .filter((entry) => entry.time !== null)
+      .sort((a, b) => a.time - b.time);
+    if (!markers.length) return;
+    const epsilon = 0.0005;
+    const candidate = direction < 0
+      ? markers.filter((entry) => entry.time < current - epsilon).at(-1)
+      : markers.find((entry) => entry.time > current + epsilon);
+    const target = candidate || (direction < 0 ? markers[0] : markers.at(-1));
+    target?.marker?.click();
+  };
+
+  if (timelineMain && rewindButton && !timelineMain.querySelector(".frisframe-key-nav")) {
+    const nav = document.createElement("div");
+    nav.className = "frisframe-key-nav";
+    nav.setAttribute("aria-label", "키프레임 빠른 이동");
+    const previous = document.createElement("button");
+    previous.type = "button";
+    previous.className = "text-btn";
+    previous.innerHTML = '<span>‹ 키</span><kbd>[</kbd>';
+    previous.title = "현재 대상의 이전 키로 이동 ([)";
+    const next = document.createElement("button");
+    next.type = "button";
+    next.className = "text-btn";
+    next.innerHTML = '<span>키 ›</span><kbd>]</kbd>';
+    next.title = "현재 대상의 다음 키로 이동 (])";
+    previous.addEventListener("click", () => jumpAdjacentKey(-1));
+    next.addEventListener("click", () => jumpAdjacentKey(1));
+    nav.append(previous, next);
+    timelineMain.insertBefore(nav, rewindButton);
+  }
+
+  const viewButtons = [...document.querySelectorAll("#viewButtons button[data-view]")];
+  const storyboardScreen = document.getElementById("storyboardScreen");
+  viewButtons.forEach((button) => {
+    button.addEventListener("click", () => safeStorage.set("frisframe.ui.lastBlockingView", button.dataset.view || "2d"));
+    const shortcut = button.dataset.view === "2d" ? "⌘2" : "⌘3 · V 전환";
+    button.title = `${button.dataset.view.toUpperCase()} 보기 (${shortcut})`;
+  });
+
+  const rememberedView = safeStorage.get("frisframe.ui.lastBlockingView");
+  if ((rememberedView === "2d" || rememberedView === "3d") && storyboardScreen?.hidden !== false) {
+    const target = viewButtons.find((button) => button.dataset.view === rememberedView);
+    const active = viewButtons.find((button) => button.classList.contains("is-active"));
+    if (target && active !== target) requestAnimationFrame(() => target.click());
+  }
+
+  const isTypingContext = (target) => Boolean(target?.closest?.("input, textarea, select, [contenteditable='true'], dialog[open]"));
+  document.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTypingContext(event.target)) return;
+    if (event.key === "[") {
+      event.preventDefault();
+      jumpAdjacentKey(-1);
+      return;
+    }
+    if (event.key === "]") {
+      event.preventDefault();
+      jumpAdjacentKey(1);
+      return;
+    }
+    if (event.key.toLowerCase() === "v") {
+      if (storyboardScreen?.hidden === false) return;
+      const active = viewButtons.find((button) => button.classList.contains("is-active"));
+      const targetView = active?.dataset.view === "3d" ? "2d" : "3d";
+      const target = viewButtons.find((button) => button.dataset.view === targetView);
+      if (!target) return;
+      event.preventDefault();
+      target.click();
+    }
+  });
 })();
