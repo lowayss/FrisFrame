@@ -128,7 +128,8 @@ assert.match(app, /function switchActiveCamera\(profileId\)[\s\S]*?syncActiveCam
 assert.doesNotMatch(app, /if \(hit\.kind === "camera"[\s\S]{0,220}switchActiveCamera\(hit\.profileId\);[\s\S]{0,220}return;/, "grabbing an inactive camera must select and drag it in one gesture");
 assert.match(app, /\.sort\(\(a, b\) => a\.distance - b\.distance \|\| Number\(b\.entry\.active\) - Number\(a\.entry\.active\)\)/, "overlapping camera rigs must select the closest visible icon before the active rig");
 assert.doesNotMatch(app, /autoSaveDraggedPose/, "scene dragging must never auto-update timeline keyframes");
-assert.match(app, /const progress = transition === "smooth" \|\| transition === "linear" \? rawProgress : easedProgress;/, "continuous motion must not brake at ordinary keyframe boundaries");
+assert.match(motion, /const progress = transition === "smooth" \|\| transition === "linear" \? rawProgress : easedProgress;/, "motion-core source planning must not brake continuous motion at ordinary keyframe boundaries");
+assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"), "app source evaluation must delegate keyframe timing to motion-core");
 assert.equal(app.includes("proceduralLocomotion"), false, "preview playback must not synthesize walking or running");
 assert.ok(app.includes("keyframe.posePreset"), "MCP pose presets must remain attached to authored keyframes");
 assert.ok(app.includes("bodyPose: presetBodyPose(posePreset)"), "MCP pose presets must resolve through the existing pose core");
