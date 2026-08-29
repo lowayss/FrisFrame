@@ -1,0 +1,38 @@
+name: One-shot tail discrete readiness
+
+on:
+  push:
+    branches:
+      - fix/reference-tail-discrete-readiness-20260829
+    paths:
+      - .github/workflows/add-reference-tail-discrete-readiness.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/reference-tail-discrete-readiness-20260829
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add tail discrete readiness guard
+        run: python3 tools/add_reference_tail_discrete_readiness.py
+      - name: Run full project checks
+        run: python3 quality_check.py
+      - name: Commit tail discrete readiness guard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add motion-core.js tests/reference-readiness.test.cjs
+          git diff --cached --check
+          git commit -m "Warn on unsampled tail discrete events"
+          git push origin HEAD:fix/reference-tail-discrete-readiness-20260829
