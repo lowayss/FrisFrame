@@ -56,6 +56,8 @@ def main() -> None:
         "camera-drafting-core.js",
         "multi-camera-core.js",
         "spatial-scale-core.js",
+        "electron/preload.cjs",
+        "electron/main.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
