@@ -349,22 +349,51 @@
       pathMode,
     };
   }
+  function utf8CodePointByteLength(character) {
+    const codePoint = String(character || "").codePointAt(0);
+    if (!Number.isFinite(codePoint)) return 0;
+    if (codePoint <= 0x7f) return 1;
+    if (codePoint <= 0x7ff) return 2;
+    if (codePoint <= 0xffff) return 3;
+    return 4;
+  }
+
+  function truncateFilenameText(value, maxCharacters = 80, maxBytes = 160) {
+    const characterLimit = Math.max(0, Math.floor(finiteNumber(maxCharacters, 80)));
+    const byteLimit = Math.max(0, Math.floor(finiteNumber(maxBytes, 160)));
+    let characters = 0;
+    let bytes = 0;
+    let output = "";
+    for (const character of String(value || "")) {
+      if (characters >= characterLimit) break;
+      const size = utf8CodePointByteLength(character);
+      if (bytes + size > byteLimit) break;
+      output += character;
+      characters += 1;
+      bytes += size;
+    }
+    return output;
+  }
 
   function safeFileSlug(value, fallback = "cut") {
-  const clean = (input) => String(input || "")
-    .normalize("NFKC")
-    .trim()
-    .replace(/[\u0000-\u001f\u007f]+/g, "-")
-    .replace(/[\\/:*?"<>|]+/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[.-]+|[.-]+$/g, "")
-    .slice(0, 80);
-  const normalized = clean(value) || clean(fallback) || "cut";
-  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(normalized)
-    ? `_${normalized}`
-    : normalized;
-}
+    const clean = (input) => {
+      const sanitized = String(input || "")
+        .normalize("NFKC")
+        .trim()
+        .replace(/[\u0000-\u001f\u007f]+/g, "-")
+        .replace(/[\\/:*?"<>|]+/g, "-")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^[.-]+|[.-]+$/g, "");
+      return truncateFilenameText(sanitized, 80, 160);
+    };
+    const normalized = clean(value) || clean(fallback) || "cut";
+    return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(normalized)
+      ? `_${normalized}`
+      : normalized;
+  }
+
+
   function collectReferenceBatchCuts(project = {}) {
   const entries = [];
   const usedFilenames = new Set();
