@@ -514,6 +514,44 @@
     return raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
   }
 
+  function sourceKeyframeEvaluationPlan(keyframes = [], time = 0) {
+    const keys = Array.isArray(keyframes) ? keyframes : [];
+    if (!keys.length) return { kind: "fallback" };
+    const currentTime = finiteNumber(time, 0);
+    const first = keys[0];
+    if (keys.length === 1 || currentTime <= finiteNumber(first?.time, 0)) {
+      return { kind: "key", keyframe: first };
+    }
+    const last = keys[keys.length - 1];
+    if (currentTime >= finiteNumber(last?.time, currentTime)) {
+      return { kind: "key", keyframe: last };
+    }
+
+    let start = first;
+    let end = last;
+    for (let index = 0; index < keys.length - 1; index += 1) {
+      const candidateStart = keys[index];
+      const candidateEnd = keys[index + 1];
+      const candidateStartTime = finiteNumber(candidateStart?.time, 0);
+      const candidateEndTime = finiteNumber(candidateEnd?.time, candidateStartTime);
+      if (currentTime >= candidateStartTime && currentTime <= candidateEndTime) {
+        start = candidateStart;
+        end = candidateEnd;
+        break;
+      }
+    }
+
+    const transition = normalizeTransition(end?.transition);
+    const startTime = finiteNumber(start?.time, 0);
+    const endTime = finiteNumber(end?.time, startTime);
+    const easedProgress = transitionProgress(currentTime, startTime, endTime, transition);
+    const rawProgress = clamp((currentTime - startTime) / Math.max(0.000001, endTime - startTime), 0, 1);
+    // Spatial blocking crosses ordinary keys without braking. Smooth
+    // reference easing is applied later by the camera-only reference guard.
+    const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
+    return { kind: "segment", start, end, transition, rawProgress, easedProgress, progress };
+  }
+
   function poseFieldsChanged(startPose = {}, endPose = {}, fields = ["x", "y"], epsilon = 0.0001) {
     const threshold = Math.max(0, finiteNumber(epsilon, 0.0001));
     return fields.some((field) => {
@@ -755,6 +793,7 @@
     safeFileSlug,
     samplePlanarPath,
     smoothReferenceProgress,
+    sourceKeyframeEvaluationPlan,
     transitionProgress,
     translateCameraPose,
   };
