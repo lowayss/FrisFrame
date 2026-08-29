@@ -23,8 +23,8 @@ assert.match(source, /delete structural\.x;[\s\S]*delete structural\.bodyPose;/,
   "actor position, orientation and body pose must be treated as transform-only changes rather than rig rebuilds");
 assert.match(source, /function applyActorJointTransforms\(/,
   "cached actor rigs must update existing joint groups from the evaluated body pose");
-assert.match(source, /object\.isGroup && object\.userData\?\.jointId/,
-  "actor joint updates must target rig groups instead of rebuilding meshes");
+assert.match(source, /!object\.isGroup \|\| !object\.userData\?\.jointId/,
+  "actor joint updates must reject meshes and target only rig joint groups");
 assert.match(source, /body\.scale\.set\(/,
   "cached actor rigs must refresh physical actor scale without recreating geometry");
 assert.match(source, /body\.rotation\.set\(pitch, Math\.PI \/ 2 - angle, 0, "YXZ"\)/,
