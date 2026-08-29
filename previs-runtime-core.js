@@ -16,8 +16,9 @@
     if (root.document.readyState === "loading") root.addEventListener("DOMContentLoaded", install, { once: true });
     else root.setTimeout?.(install, 0);
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function createPrevisRuntimeCore(motionCore = {}) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createPrevisRuntimeCore(motionCore) {
   "use strict";
+  motionCore = motionCore || {};
 
   const requiredMotionCore = [
     "cameraReferenceProgress",
