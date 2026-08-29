@@ -36,6 +36,8 @@ assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "license
 assert.equal(packageJson.build.mac.icon, "build/icon.icns");
 assert.ok(packageJson.build.files.includes("electron/clipboard.cjs"));
 assert.ok(packageJson.build.files.includes("electron/file-save.cjs"));
+assert.ok(packageJson.build.files.includes("electron/selection-ux.js"));
+assert.match(main, /"selection-ux\.js"/);
 assert.equal(packageJson.scripts["desktop:build:mac"], "npm run desktop:prepare && electron-builder --mac dmg zip --arm64");
 assert.equal(packageJson.scripts["desktop:build:win"], "npm run desktop:prepare && electron-builder --win nsis --x64");
 assert.ok(packageJson.build.win.target.includes("nsis"));
