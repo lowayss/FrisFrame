@@ -65,6 +65,7 @@ def main() -> None:
         "electron/alignment-ux.js",
         "electron/history-safety-ux.js",
         "electron/scene-cache-ux.js",
+        "electron/camera-path-cache-ux.js",
         "electron/preview-cache-ux.js",
         "electron/performance-ux.js",
     ):
@@ -93,6 +94,7 @@ def main() -> None:
         "tests/alignment-ux.test.cjs",
         "tests/history-safety-contract.test.cjs",
         "tests/scene-cache-ux-contract.test.cjs",
+        "tests/camera-path-cache-ux-contract.test.cjs",
         "tests/preview-cache-ux-contract.test.cjs",
         "tests/performance-ux-contract.test.cjs",
         "tests/dom-contract.test.cjs",
