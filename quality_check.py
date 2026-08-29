@@ -62,6 +62,7 @@ def main() -> None:
         "electron/hud-export-ux.js",
         "electron/interaction-ux.js",
         "electron/selection-ux.js",
+        "electron/alignment-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
@@ -85,6 +86,7 @@ def main() -> None:
         "tests/multi-camera-core.test.cjs",
         "tests/spatial-scale-core.test.cjs",
         "tests/selection-ux.test.cjs",
+        "tests/alignment-ux.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
