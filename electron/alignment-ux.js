@@ -250,5 +250,6 @@
       if (!event.buttons) clearGuides();
     });
   });
+  document.addEventListener("frisframe:drag-cancelled", clearGuides);
   window.addEventListener("blur", clearGuides);
 })();
