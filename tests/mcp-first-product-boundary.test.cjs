@@ -4,6 +4,8 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const preload = fs.readFileSync(path.join(root, "electron/preload.cjs"), "utf8");
+const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const alignment = fs.readFileSync(path.join(root, "electron/alignment-ux.js"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const referenceWorkflow = fs.readFileSync(path.join(root, "reference-workflow-core.js"), "utf8");
@@ -20,20 +22,48 @@ assert.match(preload, /saveFile:\s*\(payload\)/,
 assert.equal(/generateImage\s*:|generateVideo\s*:|seedancePrompt\s*:|aiPrompt\s*:/.test(preload), false,
   "desktop bridge must not expose generative-AI or final-prompt APIs");
 
-// Legacy output surfaces may remain in shared app.js/index.html until their bindings are
-// safely split, but the Electron product must actively remove them from the user workflow.
+// Retired output/reference surfaces are physically absent from the shared browser source.
+// Electron must not carry a second hide/remove compatibility layer for them.
 for (const retiredId of [
   "blockingPlanBtn",
+  "blockingPlanPanelBtn",
   "backgroundSheetBtn",
+  "backgroundSheetPanelBtn",
   "productionPackBtn",
+  "productionPackPanelBtn",
   "multiCamPreviewBtn",
+  "multiCamPreviewPanelBtn",
+  "multiCamPreviewPanelBtnSecondary",
   "multiCamVideoBtn",
+  "multiCamVideoPanelBtn",
+  "spatialReferenceImageInput",
+  "clearSpatialReferenceBtn",
 ]) {
-  assert.ok(preload.includes(`\"${retiredId}\"`),
-    `desktop workflow must retire ${retiredId}`);
+  assert.equal(html.includes(`id="${retiredId}"`), false,
+    `${retiredId} must stay physically removed from shared HTML`);
 }
-assert.match(preload, /document\.querySelectorAll\("\.spatial-reference-panel"\)[\s\S]*\.remove\(\)/,
-  "desktop workflow must remove the in-app spatial/background reference panel");
+for (const retiredFunction of [
+  "exportBlockingPlanImage",
+  "exportBackgroundSheetReference",
+  "exportProductionPack",
+  "exportMultiCameraPreview",
+  "exportMultiCameraVideo",
+  "buildSeedancePrompt",
+  "buildAiGenerationBrief",
+  "importSpatialReferenceImage",
+  "clearSpatialReference",
+]) {
+  assert.equal(app.includes(`function ${retiredFunction}(`), false,
+    `${retiredFunction} must stay physically removed from shared app source`);
+}
+assert.equal(html.includes("spatial-reference-panel"), false,
+  "in-app spatial/background reference panel must stay physically removed");
+assert.equal(preload.includes("retiredExportIds"), false,
+  "Electron preload must not maintain a retired-export ID shim");
+assert.equal(preload.includes("removeRetiredExportControls"), false,
+  "Electron preload must not hide source-level legacy export controls");
+assert.equal(preload.includes(".spatial-reference-panel"), false,
+  "Electron preload must not remove an already-deleted spatial reference panel");
 
 // Reference workflow core now owns only batch MP4 export + internal safety policy.
 assert.match(referenceWorkflow, /installBatchReferenceExportUi/,

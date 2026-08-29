@@ -259,8 +259,8 @@ npm run desktop:verify
 - 로컬 DB나 백업 파일을 저장소에 추적하지 않도록 CI가 검사합니다.
 - Electron은 `contextIsolation`, `sandbox`, `webSecurity`를 유지하고 Node API를 렌더러에 직접 노출하지 않습니다.
 
-## 현재 남은 소스 정리
+## 제품 경계 정리 상태
 
-Electron 사용자 경로에서는 구형 Production Pack/배경시트/Reference Prompt/Readiness UI가 제거되어 있습니다. `reference-workflow-core.js`에서도 Prompt/Readiness 사용자 UI 구현은 물리적으로 삭제했습니다.
+구형 Production Pack, 배경시트, 별도 멀티캠 export, Reference Prompt/Readiness 사용자 UI와 인앱 세트·배경 이미지 입력 경로는 공용 `index.html/app.js`에서 물리적으로 제거했습니다. Electron `preload.cjs`도 더 이상 이런 요소를 찾아 숨기거나 삭제하지 않습니다. 브라우저와 데스크톱은 같은 가시적 제품 경계를 공유합니다.
 
-공용 `app.js/index.html`에는 브라우저 호환성을 위해 과거 export 버튼/함수 일부가 아직 남아 있습니다. 이 부분은 직접 `#id` 이벤트 바인딩이 얽혀 있으므로 대형 파일을 한 번에 잘라내지 않고, 이벤트 연결을 먼저 선택적/모듈형으로 분리한 다음 작은 커밋으로 HTML과 dead function을 제거하는 것이 안전합니다. 구체적인 삭제 순서는 [`MAINTENANCE.md`](MAINTENANCE.md)에 기록되어 있습니다.
+멀티카메라 **편집**은 계속 지원합니다. 제거한 것은 별도 멀티캠 프리뷰/영상 export 표면이며, 최종 출력은 현재/첫·끝 기준 프레임, 프리비즈 MP4, 필요 시 여러 컷 MP4 ZIP에 집중합니다. 내부 Reference Readiness 계산은 사용자 단계가 아니라 MP4 안전 정책과 BLOCKED 컷 guard로만 남습니다.

@@ -328,30 +328,6 @@ function installMcpFirstWorkflowUi() {
       });
     };
 
-    const retiredExportIds = [
-      "blockingPlanBtn",
-      "backgroundSheetBtn",
-      "productionPackBtn",
-      "multiCamPreviewBtn",
-      "multiCamVideoBtn",
-      "blockingPlanPanelBtn",
-      "backgroundSheetPanelBtn",
-      "productionPackPanelBtn",
-      "multiCamPreviewPanelBtnSecondary",
-      "multiCamVideoPanelBtn",
-    ];
-    const retiredExportPattern = /Reference\s*(Readiness|Prompt)|배경시트|촬영\s*자료|멀티캠|2D\s*블로킹/i;
-
-    const removeRetiredExportControls = () => {
-      retiredExportIds.forEach((id) => document.getElementById(id)?.remove());
-      document.querySelectorAll("#exportMenu button, .export-panel-actions button").forEach((button) => {
-        const label = (button.textContent || "").trim();
-        if (retiredExportPattern.test(label)) button.remove();
-      });
-    };
-
-    document.querySelectorAll(".spatial-reference-panel").forEach((panel) => panel.remove());
-
     const focalInput = document.getElementById("focalValue");
     const focalRow = focalInput?.closest("label.range-row");
     const focalPresets = document.getElementById("focalPresets");
@@ -614,13 +590,7 @@ function installMcpFirstWorkflowUi() {
       }
     });
 
-    removeRetiredExportControls();
     syncWorkspacePanels();
-
-    const observer = new MutationObserver(() => removeRetiredExportControls());
-    const exportMenu = document.getElementById("exportMenu");
-    if (exportMenu) observer.observe(exportMenu, { childList: true, subtree: true });
-    if (exportActions) observer.observe(exportActions, { childList: true, subtree: true });
   }, { once: true });
 }
 
