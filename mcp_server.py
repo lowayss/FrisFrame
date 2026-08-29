@@ -42,6 +42,14 @@ MCP_PROP_TYPES = {
     "bathtub", "train-seat", "stairs", "slope", "sofa", "dining-table", "chair",
     "bed", "cabinet", "refrigerator", "television", "stove", "washing-machine",
 }
+MCP_POSE_PRESETS = {
+    "neutral", "attention", "armsCrossed", "handsBack", "handsPocket",
+    "sit", "crossLegs", "leanSit", "lieDown", "faceDown",
+    "crouch", "guard", "punch", "kick", "push",
+    "wave", "point", "think", "surprise", "sad", "cheer", "bow", "shrug", "stop", "clap",
+}
+MCP_PATH_MODES = {"straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"}
+MCP_TRANSITIONS = {"smooth", "linear", "hold", "cut"}
 
 # Helper function to find the database path
 def get_db_path():
@@ -405,6 +413,7 @@ def make_default_state():
         "groups": [],
         "motion": {
             "duration": 15,
+            "exportRange": {"start": 0, "end": 15},
             "fps": 24,
             "playhead": 0,
             "activeSource": actor_id,
@@ -970,6 +979,230 @@ def _new_command_item(command, index, blocking=None):
     return item
 
 
+def _motion_source(blocking, source_id):
+    source_id = str(source_id or "").strip()
+    if source_id == "camera":
+        return blocking.get("camera"), "camera"
+    item = next((entry for entry in blocking.get("items", []) if entry.get("id") == source_id), None)
+    if not item:
+        raise ValueError(f"동작을 적용할 대상을 찾을 수 없습니다: {source_id}")
+    if item.get("motionEnabled") is False:
+        raise ValueError(f"동작이 잠긴 대상입니다: {source_id}")
+    return item, "actor" if item.get("type") == "actor" else "prop"
+
+
+def _motion_segment(path_mode, source_type):
+    mode = str(path_mode or "straight").lower()
+    if mode not in MCP_PATH_MODES:
+        raise ValueError(f"지원하지 않는 동선 경로입니다: {mode}")
+    if source_type != "camera" and mode in {"drone", "jib-up", "jib-down"}:
+        mode = "straight"
+    segment = {"plan": {"kind": "line"}, "elevation": {"kind": "linear"}, "rig": "generic"}
+    if mode == "horizontal":
+        segment["plan"]["kind"] = "axis-x"
+    elif mode == "vertical":
+        segment["plan"]["kind"] = "axis-y"
+    elif mode in {"arc-left", "arc-right"}:
+        segment["plan"] = {"kind": "arc", "bulge": 0.32 if mode == "arc-left" else -0.32}
+    elif mode == "free-curve":
+        segment["plan"] = {"kind": "bezier", "control": None}
+    elif mode == "drone":
+        segment["rig"] = "drone"
+    elif mode in {"jib-up", "jib-down"}:
+        segment["elevation"] = {"kind": "jib-arc", "bulge": 0.32 if mode == "jib-up" else -0.32}
+        segment["rig"] = "jib"
+    return segment
+
+
+def _sanitize_motion_body_pose(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("body_pose는 관절별 객체여야 합니다.")
+    result = {}
+    for joint_id, joint in list(value.items())[:32]:
+        if not isinstance(joint, dict):
+            raise ValueError(f"body_pose.{joint_id}가 객체가 아닙니다.")
+        result[str(joint_id)[:48]] = {
+            axis: clamp_number(joint.get(axis, 0), -180, 180, f"body_pose.{joint_id}.{axis}")
+            for axis in ("x", "y", "z")
+            if axis in joint
+        }
+    return result
+
+
+def _motion_pose_at_time(blocking, source_id, time):
+    source, source_type = _motion_source(blocking, source_id)
+    motion = blocking.setdefault("motion", {})
+    keyframes = [
+        keyframe for keyframe in motion.setdefault("keyframes", [])
+        if keyframe.get("source") == source_id and float(keyframe.get("time", 0)) <= time
+    ]
+    if keyframes:
+        keyframes.sort(key=lambda keyframe: float(keyframe.get("time", 0)))
+        return dict(keyframes[-1].get("pose") or source), source_type
+    return dict(source), source_type
+
+
+def _build_motion_keyframe(blocking, command, index, existing=None):
+    source_id = str(command.get("source_id", command.get("source", "")) or "").strip()
+    if not source_id:
+        raise ValueError(f"operations[{index}].source_id가 필요합니다.")
+    try:
+        time_value = float(command.get("time"))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"operations[{index}].time은 숫자여야 합니다.") from error
+    if not math.isfinite(time_value) or time_value < 0 or time_value > MAX_TIMELINE_DURATION:
+        raise ValueError(f"operations[{index}].time이 허용 범위를 벗어났습니다.")
+    base_pose, source_type = _motion_pose_at_time(blocking, source_id, time_value)
+    pose_input = command.get("pose")
+    if pose_input is not None:
+        if not isinstance(pose_input, dict):
+            raise ValueError(f"operations[{index}].pose는 객체여야 합니다.")
+        base_pose.update(pose_input)
+    aliases = {
+        "x": "x", "y": "y", "facing": "facing", "pitch": "pitch",
+        "height": "height", "vertical_offset": "verticalOffset", "mounted_height": "mountedHeight",
+        "scale_x": "scaleX", "scale_y": "scaleY", "scale_z": "scaleZ",
+        "pan_deg": "panDeg", "tilt_deg": "tiltDeg", "focal": "focal", "focus_distance_m": "focusDistanceM",
+    }
+    for source_key, target_key in aliases.items():
+        if source_key in command:
+            base_pose[target_key] = command[source_key]
+    if "world_x_m" in command or "world_z_m" in command:
+        stage_width, stage_depth = _stage_dimensions(blocking)
+        if "world_x_m" in command:
+            base_pose["x"] = clamp_number(0.5 + _optional_world_number(command["world_x_m"], "world_x_m") / stage_width, STAGE_COORD_MIN, STAGE_COORD_MAX, "world_x_m")
+        if "world_z_m" in command:
+            base_pose["y"] = clamp_number(0.5 + _optional_world_number(command["world_z_m"], "world_z_m") / stage_depth, STAGE_COORD_MIN, STAGE_COORD_MAX, "world_z_m")
+    body_pose = _sanitize_motion_body_pose(command.get("body_pose"))
+    if body_pose is not None:
+        merged_body_pose = dict(base_pose.get("bodyPose") or {})
+        merged_body_pose.update(body_pose)
+        base_pose["bodyPose"] = merged_body_pose
+    if source_type == "camera":
+        if "height" in base_pose:
+            base_pose["height"] = clamp_number(base_pose["height"], CAMERA_HEIGHT_MIN, CAMERA_HEIGHT_MAX, "height")
+        if "panDeg" in base_pose:
+            base_pose["panDeg"] = clamp_number(base_pose["panDeg"], -360000, 360000, "pan_deg") % 360
+        if "tiltDeg" in base_pose:
+            base_pose["tiltDeg"] = clamp_number(base_pose["tiltDeg"], CAMERA_TILT_MIN, CAMERA_TILT_MAX, "tilt_deg")
+        if "focal" in base_pose:
+            base_pose["focal"] = int(clamp_number(base_pose["focal"], CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX, "focal"))
+    else:
+        for field in ("verticalOffset", "mountedHeight"):
+            if field in base_pose:
+                base_pose[field] = clamp_number(base_pose[field], -1, 5, field)
+    if "x" in base_pose:
+        base_pose["x"] = clamp_number(base_pose["x"], STAGE_COORD_MIN, STAGE_COORD_MAX, "x")
+    if "y" in base_pose:
+        base_pose["y"] = clamp_number(base_pose["y"], STAGE_COORD_MIN, STAGE_COORD_MAX, "y")
+    if "facing" in base_pose:
+        base_pose["facing"] = clamp_number(base_pose["facing"], -360000, 360000, "facing") % 360
+    transition = str(command.get("transition", existing.get("transition", "smooth") if existing else "smooth")).lower()
+    if transition not in MCP_TRANSITIONS:
+        raise ValueError(f"지원하지 않는 전환 방식입니다: {transition}")
+    pose_preset = str(command.get("pose_preset", existing.get("posePreset", "") if existing else "") or "")
+    if pose_preset and (source_type != "actor" or pose_preset not in MCP_POSE_PRESETS):
+        raise ValueError(f"지원하지 않는 배우 포즈 프리셋입니다: {pose_preset}")
+    previous_path_mode = existing.get("pathMode") if existing else None
+    path_mode = str(command.get("path_mode", previous_path_mode or "straight") or "straight").lower()
+    result = {
+        "id": str(existing.get("id") if existing else command.get("id") or uuid.uuid4().hex[:8]),
+        "source": source_id,
+        "label": str(command.get("label", existing.get("label", f"키 {index + 1}") if existing else f"키 {index + 1}") or f"키 {index + 1}").strip()[:80],
+        "note": str(command.get("note", existing.get("note", "") if existing else "") or "").strip()[:80],
+        "time": round(time_value, 4),
+        "transition": transition,
+        "pathMode": path_mode,
+        "segment": _motion_segment(path_mode, source_type),
+        "pose": base_pose,
+    }
+    if pose_preset:
+        result["posePreset"] = pose_preset
+    return result
+
+
+def handle_apply_motion_commands(project_id, arguments):
+    operations = arguments.get("operations", [])
+    if not isinstance(operations, list) or not operations:
+        raise ValueError("동작 operations 배열을 하나 이상 넣어 주세요.")
+    if len(operations) > 200:
+        raise ValueError("한 번에 적용할 수 있는 동작 명령은 200개까지입니다.")
+
+    def mutation(project_obj):
+        scene_idx, cut_idx, cut = _scene_cut(project_obj, arguments)
+        blocking = cut["blocking"]
+        motion = blocking.setdefault("motion", {})
+        motion.setdefault("keyframes", [])
+        changed = []
+        for index, command in enumerate(operations):
+            if not isinstance(command, dict):
+                raise ValueError(f"operations[{index}]가 객체가 아닙니다.")
+            operation = str(command.get("op", "")).lower()
+            if operation in {"add_keyframe", "set_pose_key", "set_motion_key"}:
+                keyframe = _build_motion_keyframe(blocking, command, index)
+                if any(entry.get("id") == keyframe["id"] for entry in motion["keyframes"]):
+                    raise ValueError(f"동작 키 ID가 이미 존재합니다: {keyframe['id']}")
+                motion["keyframes"].append(keyframe)
+                changed.append({"op": "add_keyframe", "id": keyframe["id"], "source": keyframe["source"], "time": keyframe["time"]})
+            elif operation in {"update_keyframe", "update_pose_key"}:
+                key_id = str(command.get("id") or "")
+                existing = next((entry for entry in motion["keyframes"] if entry.get("id") == key_id), None)
+                if not existing:
+                    raise ValueError(f"수정할 동작 키를 찾을 수 없습니다: {key_id}")
+                updated = _build_motion_keyframe(blocking, {**existing, **command}, index, existing=existing)
+                existing.clear()
+                existing.update(updated)
+                changed.append({"op": "update_keyframe", "id": key_id, "source": existing["source"], "time": existing["time"]})
+            elif operation == "remove_keyframe":
+                key_id = str(command.get("id") or "")
+                before = len(motion["keyframes"])
+                motion["keyframes"] = [entry for entry in motion["keyframes"] if entry.get("id") != key_id]
+                if len(motion["keyframes"]) == before:
+                    raise ValueError(f"삭제할 동작 키를 찾을 수 없습니다: {key_id}")
+                if motion.get("selectedKeyId") == key_id:
+                    motion["selectedKeyId"] = None
+                changed.append({"op": operation, "id": key_id})
+            elif operation == "clear_source_keys":
+                source_id = str(command.get("source_id", command.get("source", "")) or "")
+                _motion_source(blocking, source_id)
+                before = len(motion["keyframes"])
+                motion["keyframes"] = [entry for entry in motion["keyframes"] if entry.get("source") != source_id]
+                changed.append({"op": operation, "source": source_id, "removed": before - len(motion["keyframes"])})
+            elif operation == "set_duration":
+                duration = clamp_number(command.get("duration"), 1, MAX_TIMELINE_DURATION, "duration")
+                motion["duration"] = duration
+                motion["playhead"] = min(clamp_number(motion.get("playhead", 0), 0, MAX_TIMELINE_DURATION, "playhead"), duration)
+                for keyframe in motion["keyframes"]:
+                    keyframe["time"] = round(clamp_number(keyframe.get("time", 0), 0, duration, "keyframe.time"), 4)
+                export_range = motion.get("exportRange") if isinstance(motion.get("exportRange"), dict) else {}
+                start = min(clamp_number(export_range.get("start", 0), 0, duration, "exportRange.start"), duration)
+                end = min(clamp_number(export_range.get("end", duration), 0, duration, "exportRange.end"), duration)
+                motion["exportRange"] = {"start": start, "end": end if end > start else duration}
+                changed.append({"op": operation, "duration": duration})
+            elif operation == "set_export_range":
+                duration = clamp_number(motion.get("duration", 15), 1, MAX_TIMELINE_DURATION, "duration")
+                start = clamp_number(command.get("start", 0), 0, duration, "export_range.start")
+                end = clamp_number(command.get("end", duration), 0, duration, "export_range.end")
+                if end <= start:
+                    raise ValueError("export_range.end는 start보다 커야 합니다.")
+                motion["exportRange"] = {"start": round(start, 4), "end": round(end, 4)}
+                changed.append({"op": operation, "start": start, "end": end})
+            else:
+                raise ValueError(f"지원하지 않는 동작 명령입니다: {operation}")
+        motion["keyframes"] = sorted(motion["keyframes"], key=lambda entry: (float(entry.get("time", 0)), str(entry.get("source", "")), str(entry.get("id", ""))))
+        cut["updatedAt"] = utc_now()
+        return json.dumps({
+            "scene_index": scene_idx,
+            "cut_index": cut_idx,
+            "changed": changed,
+            "message": f"MCP 동작 명령 {len(changed)}개를 적용했습니다. 키프레임에 지정한 포즈·변위만 재생합니다.",
+        }, ensure_ascii=False)
+
+    return mutate_project(project_id, arguments.get("revision"), mutation)
+
+
 def handle_apply_scene_commands(project_id, arguments):
     operations = arguments.get("operations", [])
     spatial_guide = arguments.get("spatial_guide")
@@ -1211,7 +1444,7 @@ def process_mcp_message(msg_str):
             },
             {
                 "name": "apply_scene_commands",
-                "description": "비전 모델이 레퍼런스 이미지에서 추출한 공간 계획과 장면 명령을 현재 컷에 적용합니다. 외형을 복사하는 대신 세트·인물·소품의 덩어리, 미터 기준 비례, 월드 위치, 깊이층, 카메라 관계를 저장하고 FrisFrame 열린 화면이 변경 revision을 감지해 갱신합니다.",
+                "description": "레퍼런스 이미지에서 확정한 세트·인물·소품의 덩어리, 미터 기준 비례, 월드 위치, 깊이층과 카메라 관계를 현재 컷에 적용합니다. 외형이나 자연어 동작은 처리하지 않습니다.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1237,6 +1470,38 @@ def process_mcp_message(msg_str):
                         }
                     },
                     "required": ["project_id", "revision"]
+                }
+            },
+            {
+                "name": "apply_motion_commands",
+                "description": "자연어 프롬프트를 저장하지 않고, MCP가 확정한 시간별 위치·방향·높이·카메라·포즈 키프레임을 현재 컷에 적용합니다. 타임라인은 이 키프레임 사이만 보간하며 걷기·뛰기 팔다리 동작을 자동 생성하지 않습니다.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project_id": {"type": "string", "description": "프로젝트 ID"},
+                        "revision": {"type": "integer", "minimum": 1, "description": "get_project에서 확인한 현재 revision"},
+                        "scene_index": {"type": "integer", "minimum": 0, "description": "씬 인덱스 (0-based)"},
+                        "cut_index": {"type": "integer", "minimum": 0, "description": "컷 인덱스 (0-based)"},
+                        "operations": {
+                            "type": "array",
+                            "maxItems": 200,
+                            "description": "add_keyframe/set_pose_key, update_keyframe, remove_keyframe, clear_source_keys, set_duration, set_export_range 명령 배열. source_id는 camera 또는 대상 ID입니다.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "op": {"type": "string"},
+                                    "source_id": {"type": "string"},
+                                    "id": {"type": "string"},
+                                    "time": {"type": "number", "minimum": 0, "maximum": 60},
+                                    "transition": {"type": "string", "enum": ["smooth", "linear", "hold", "cut"]},
+                                    "path_mode": {"type": "string", "enum": ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"]},
+                                    "pose_preset": {"type": "string", "enum": sorted(MCP_POSE_PRESETS)},
+                                    "body_pose": {"type": "object"}
+                                }
+                            }
+                        }
+                    },
+                    "required": ["project_id", "revision", "operations"]
                 }
             }
         ]
@@ -1277,6 +1542,8 @@ def process_mcp_message(msg_str):
                 result_text = handle_add_actor(args.get("project_id"), args)
             elif tool_name == "apply_scene_commands":
                 result_text = handle_apply_scene_commands(args.get("project_id"), args)
+            elif tool_name == "apply_motion_commands":
+                result_text = handle_apply_motion_commands(args.get("project_id"), args)
             else:
                 raise ValueError(f"Tool '{tool_name}' is not recognized.")
         except Exception as e:

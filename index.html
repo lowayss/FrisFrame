@@ -601,24 +601,6 @@
           <div id="sourceTimelineList" class="source-timeline-list" aria-label="대상별 타임라인"></div>
           <div class="timeline-hint" id="timelineHint">키 0 · 15초 · 24 FPS</div>
           <div id="keyStatus" class="status-line">키프레임 없음</div>
-          <details id="promptBlockPanel" class="prompt-block-panel" aria-label="모션 프롬프트 블록">
-            <summary class="prompt-block-panel-head">
-              <div>
-                <span class="section-kicker">COZYCLAY PROMPT BLOCKS</span>
-                <strong>모션 프롬프트 블록</strong>
-              </div>
-              <span class="prompt-block-meta">AI 동작 구간</span>
-            </summary>
-            <div class="prompt-block-panel-content">
-              <div class="prompt-block-add-row">
-                <select id="promptBlockSourceSelect" aria-label="프롬프트 블록 대상"></select>
-                <button id="addPromptBlockBtn" type="button" class="primary-btn">블록 추가</button>
-              </div>
-              <p id="promptBlockHelp" class="prompt-block-help">배우별 모션을 시간 구간으로 나눕니다. 이동·속도와 문장에 명시한 포즈만 반영하고, 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다.</p>
-              <div id="promptBlockTimeline" class="prompt-block-timeline" aria-label="프롬프트 블록 타임라인"></div>
-              <div id="promptBlockList" class="prompt-block-list"></div>
-            </div>
-          </details>
         </section>
       </main>
 
@@ -1292,8 +1274,6 @@
     <script src="./vendor/lucide.min.js?v=0.468.0"></script>
     <script src="./motion-core.js?v=20260713-01"></script>
     <script src="./scene-blocking-core.js?v=20260815-01"></script>
-    <script src="./prompt-block-core.js?v=20260828-02"></script>
-    <script src="./prompt-motion-core.js?v=20260829-02"></script>
     <script src="./previs-runtime-core.js?v=20260828-01"></script>
     <script src="./timeline-core.js?v=20260716-01"></script>
     <script src="./project-recovery-core.js?v=20260713-01"></script>

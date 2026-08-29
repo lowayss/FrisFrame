@@ -108,7 +108,7 @@ assert.ok(app.includes("function advancePlayheadAfterKeyframe("), "explicit key 
 assert.ok(app.includes("ensureDurationCovers(nextTime)"), "keyframe follow-up time must remain three seconds ahead at the timeline edge");
 assert.match(app, /function advancePlayheadAfterKeyframe\([\s\S]*?state\.motion\.playhead = nextTime;[\s\S]*?updatePlayheadDisplay\(nextTime\);/, "key actions must visibly advance the playhead");
 assert.match(app, /renderSourceTimelines\(keyframes, cutTimes\);[\s\S]*?updatePlayheadDisplay\(displayPlayhead\(\)\);/, "split timeline lanes must receive the current playhead after they are rebuilt");
-assert.match(app, /function materializeEvaluatedViewForEditing\([\s\S]*?const baseFrame = interpolateStateAtTime\(evaluatedViewState\.motion\.playhead, \{ applyPromptMotion: false \}\);[\s\S]*?else if \(sourceId === "camera"\) \{[\s\S]*?state\.camera = clone\(baseFrame\.camera\);[\s\S]*?state\.items = clone\(visibleFrame\.items\);/, "camera editing must restore the camera without baking prompt motion into actor state");
+assert.match(app, /function materializeEvaluatedViewForEditing\([\s\S]*?const baseFrame = interpolateStateAtTime\(evaluatedViewState\.motion\.playhead\);[\s\S]*?else if \(sourceId === "camera"\) \{[\s\S]*?state\.camera = clone\(baseFrame\.camera\);[\s\S]*?state\.items = clone\(visibleFrame\.items\);/, "camera editing must restore the camera without baking actor motion into authored state");
 assert.match(app, /const DIRECT_MANIPULATION_THRESHOLD_PX = 5/, "stage selection and direct manipulation need a click threshold");
 assert.match(app, /if \(drag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "2D click selection must not materialize evaluated poses");
 assert.match(app, /if \(threeDrag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "3D click selection must not materialize evaluated poses");
@@ -128,9 +128,8 @@ assert.match(app, /\.sort\(\(a, b\) => a\.distance - b\.distance \|\| Number\(b\
 assert.doesNotMatch(app, /autoSaveDraggedPose/, "scene dragging must never auto-update timeline keyframes");
 assert.match(app, /const progress = transition === "smooth" \|\| transition === "linear" \? rawProgress : easedProgress;/, "continuous motion must not brake at ordinary keyframe boundaries");
 assert.equal(app.includes("proceduralLocomotion"), false, "preview playback must not synthesize walking or running");
-assert.equal(app.includes("promptGaitBodyPose"), false, "prompt blocks must not synthesize a gait pose");
-assert.ok(app.includes("motion.posePreset"), "explicit pose language in prompt blocks must affect preview pose");
-assert.match(app, /currentBodyPose = interpolateBodyPose\(currentBodyPose, targetPose, motion\.poseMix\)/, "prompt pose changes must blend through the existing pose core");
+assert.ok(app.includes("keyframe.posePreset"), "MCP pose presets must remain attached to authored keyframes");
+assert.ok(app.includes("bodyPose: presetBodyPose(posePreset)"), "MCP pose presets must resolve through the existing pose core");
 assert.match(app, /bodyPose: keyedBodyPose/, "actor playback must use only authored pose keys");
 assert.match(app, /facing: lerpAngle\(from\.facing, to\.facing, t\)/, "actor rotation must interpolate only keyed facing values");
 assert.match(app, /function rememberLiveSourceEdit\(sourceId\)[\s\S]*?liveSourceEdits\.set\(sourceId, \{ time, pose: currentPose \}\)/, "scene edits must remain independent even when a key exists at the playhead");
@@ -160,6 +159,8 @@ assert.ok(app.includes('path: "media/background_hero.png"') && app.includes('pat
 assert.ok(app.includes('filter((item) => item.type !== "actor")'), "background-sheet reference must filter actor dummies from stage views");
 assert.equal(app.includes("function downloadUrl("), false, "exports must not bypass the preview dialog");
 assert.equal(app.includes("function downloadBlob("), false, "blob exports must not bypass the preview dialog");
+assert.equal(ids.has("promptBlockPanel"), false, "retired prompt block UI must not be present");
+assert.equal(html.includes("prompt-block-core.js"), false, "retired prompt block runtime must not be loaded");
 
 assert.equal(html.includes("video-analysis-core.js"), false);
 assert.equal(app.includes("referenceMedia"), false);

@@ -42,8 +42,6 @@ STATIC_FILES = {
     "/storyboard-core.js",
     "/motion-core.js",
     "/scene-blocking-core.js",
-    "/prompt-block-core.js",
-    "/prompt-motion-core.js",
     "/previs-runtime-core.js",
     "/timeline-core.js",
     "/project-recovery-core.js",

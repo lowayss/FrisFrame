@@ -20,266 +20,6 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* CozyClay-style time-coded prompt blocks */
-.prompt-block-panel {
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid rgba(122, 219, 205, 0.2);
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgba(35, 54, 61, 0.72), rgba(20, 28, 34, 0.84));
-}
-
-.prompt-block-panel-head,
-.prompt-block-row-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.prompt-block-panel-head {
-  justify-content: space-between;
-  margin-bottom: 10px;
-  list-style: none;
-  cursor: pointer;
-}
-
-.prompt-block-panel-head::-webkit-details-marker {
-  display: none;
-}
-
-.prompt-block-panel-head::after {
-  content: "＋";
-  color: #7dd6c6;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.prompt-block-panel[open] .prompt-block-panel-head::after {
-  content: "－";
-}
-
-.prompt-block-panel-content {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.prompt-block-panel-head > div {
-  display: grid;
-  gap: 2px;
-}
-
-.prompt-block-meta {
-  padding: 4px 7px;
-  border: 1px solid rgba(126, 200, 255, 0.32);
-  border-radius: 999px;
-  color: #b8e4ff;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.prompt-block-add-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-}
-
-.prompt-block-add-row select,
-.prompt-block-field input,
-.prompt-block-row textarea {
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.prompt-block-help {
-  margin: 8px 0 0;
-  color: #91a6ad;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.prompt-block-timeline {
-  margin-top: 10px;
-  padding: 8px 0 3px;
-}
-
-.prompt-block-lane {
-  display: grid;
-  grid-template-columns: minmax(64px, 84px) minmax(0, 1fr);
-  gap: 7px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.prompt-block-lane:first-child {
-  margin-top: 0;
-}
-
-.prompt-block-lane-label {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--lane-color, #7dd6c6);
-  font-size: 10px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prompt-block-track {
-  position: relative;
-  height: 38px;
-  border: 1px solid rgba(145, 166, 173, 0.22);
-  border-radius: 7px;
-  background: repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 10%);
-  overflow: hidden;
-}
-
-.prompt-block-playhead {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: #ff806d;
-  pointer-events: none;
-}
-
-.prompt-block-chip {
-  position: absolute;
-  top: 5px;
-  min-width: 24px;
-  height: 27px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--block-color) 72%, white 10%);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--block-color) 38%, #152126 62%);
-  color: #f3fff9;
-  text-align: left;
-  cursor: grab;
-  overflow: hidden;
-}
-
-.prompt-block-chip:active {
-  cursor: grabbing;
-}
-
-.prompt-block-chip-label {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-}
-
-.prompt-block-chip small {
-  display: block;
-  color: rgba(242, 255, 250, 0.7);
-  font-size: 9px;
-  line-height: 1;
-}
-
-.prompt-block-handle {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  bottom: 0;
-  width: 7px;
-  cursor: ew-resize;
-}
-
-.prompt-block-handle-start { left: 0; }
-.prompt-block-handle-end { right: 0; }
-
-.prompt-block-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.prompt-block-empty {
-  padding: 10px;
-  border: 1px dashed rgba(145, 166, 173, 0.26);
-  border-radius: 8px;
-  color: #82949b;
-  font-size: 11px;
-}
-
-.prompt-block-row {
-  padding: 9px;
-  border: 1px solid rgba(145, 166, 173, 0.16);
-  border-radius: 9px;
-  background: rgba(12, 19, 23, 0.42);
-}
-
-.prompt-block-row-head strong {
-  color: #dff7ef;
-  font-size: 12px;
-}
-
-.prompt-block-row-head > span {
-  flex: 1;
-  color: #7dd6c6;
-  font-size: 11px;
-}
-
-.prompt-block-remove {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  padding: 0;
-  color: #b2c1c5;
-}
-
-.prompt-block-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.prompt-block-field {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px;
-  align-items: center;
-}
-
-.prompt-block-field > span {
-  grid-column: 1 / -1;
-  color: #82949b;
-  font-size: 10px;
-}
-
-.prompt-block-row textarea {
-  display: block;
-  min-height: 44px;
-  margin-top: 8px;
-  resize: vertical;
-}
-
-.prompt-block-motion-status {
-  display: block;
-  margin-top: 6px;
-  color: #80d7c6;
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.prompt-block-motion-status.is-unmapped {
-  color: #d0a68f;
-}
-
-@media (max-width: 760px) {
-  .prompt-block-add-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .prompt-block-add-row button {
-    grid-column: 1 / -1;
-  }
-}
-
 * {
   box-sizing: border-box;
 }
@@ -8955,7 +8695,7 @@ input[type="checkbox"] {
   }
 }
 
-/* Final layout guard for the optional CozyClay prompt-block inspector. */
+/* Final desktop layout guard. */
 @media (min-width: 901px) {
   :root {
     --ff-timeline-height: 342px;
@@ -8987,8 +8727,7 @@ input[type="checkbox"] {
   .timeline-track,
   .source-timeline-list,
   .timeline-hint,
-  .status-line,
-  .prompt-block-panel {
+  .status-line {
     flex: 0 0 auto;
   }
 
@@ -8998,21 +8737,6 @@ input[type="checkbox"] {
     overflow-y: auto;
   }
 
-  .prompt-block-panel {
-    max-height: 190px;
-    margin-top: 5px;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .prompt-block-panel[open] {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .prompt-block-panel[open] .prompt-block-panel-content {
-    overflow-y: auto;
-  }
 }
 
 @media (max-width: 900px) {
@@ -9022,15 +8746,6 @@ input[type="checkbox"] {
     overflow-y: auto;
   }
 
-  .prompt-block-panel {
-    max-height: 190px;
-    overflow-y: auto;
-  }
-
-  .prompt-block-panel[open] {
-    display: flex;
-    flex-direction: column;
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -9051,54 +8766,6 @@ input[type="checkbox"] {
     min-height: 0;
     max-height: var(--ff-timeline-height);
     overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .timeline:not(:has(#promptBlockPanel[open])) #promptBlockPanel {
-    min-height: 0;
-    margin-top: 2px;
-    padding: 0 2px;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head {
-    min-height: 30px;
-    margin: 0;
-    padding: 0 5px;
-    border-top: 1px solid #283038;
-  }
-
-  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head .section-kicker {
-    display: none;
-  }
-
-  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head strong {
-    color: #8f9ba3;
-    font-size: 11px;
-    font-weight: 680;
-  }
-
-  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-meta {
-    padding: 3px 6px;
-    border-color: #344148;
-    color: #819096;
-    font-size: 9px;
-  }
-
-  .timeline:has(#promptBlockPanel[open]) {
-    height: 410px;
-    max-height: 410px;
-  }
-
-  .timeline:has(#promptBlockPanel[open]) .prompt-block-panel {
-    max-height: 230px;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .timeline:has(#promptBlockPanel[open]) .prompt-block-panel-content {
     overflow-y: auto;
   }
 
@@ -9151,10 +8818,6 @@ input[type="checkbox"] {
     --ff-timeline-height: 288px;
   }
 
-  .timeline:has(#promptBlockPanel[open]) {
-    height: 424px;
-    max-height: 424px;
-  }
 }
 
 /* User-controlled MP4 output range. Keep this separate from the full

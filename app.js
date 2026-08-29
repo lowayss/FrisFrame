@@ -280,10 +280,6 @@ const motionCore = window.FrisFrameMotionCore;
 if (!motionCore) throw new Error("동선 계산 엔진을 불러오지 못했습니다.");
 const sceneBlockingCore = window.FrisFrameSceneBlockingCore;
 if (!sceneBlockingCore) throw new Error("세트 오브젝트 엔진을 불러오지 못했습니다.");
-const promptBlockCore = window.FrisFramePromptBlockCore;
-if (!promptBlockCore) throw new Error("프롬프트 블록 엔진을 불러오지 못했습니다.");
-const promptMotionCore = window.FrisFramePromptMotionCore;
-if (!promptMotionCore) throw new Error("프롬프트 동작 엔진을 불러오지 못했습니다.");
 const previsRuntimeCore = window.FrisFramePrevisRuntimeCore;
 if (!previsRuntimeCore) throw new Error("프리비즈 렌더 런타임 엔진을 불러오지 못했습니다.");
 const timelineCore = window.FrisFrameTimelineCore;
@@ -316,18 +312,6 @@ const {
   samplePlanarPath,
   transitionProgress,
 } = motionCore;
-  const {
-    addPromptBlock: insertPromptBlock,
-    movePromptBlock,
-  normalizePromptBlocks,
-  removePromptBlock,
-  resizePromptBlock,
-  updatePromptBlock,
-  } = promptBlockCore;
-const {
-  analyzePromptMotion,
-  evaluatePromptMotion,
-} = promptMotionCore;
 const {
   collisionEpsilon: timelineCollisionEpsilon,
   expandSynchronizedCutSelection,
@@ -618,7 +602,6 @@ const defaultState = () => {
     hiddenSources: [],
     cameraRail: { enabled: true, smoothing: "centripetal" },
     keyframes: [],
-    promptBlocks: [],
   },
   });
 };
@@ -669,8 +652,6 @@ let keyBadgeDrag = null;
 let curveHandleDrag = null;
 let pathSnapGuide = null;
 let timelineDrag = null;
-let promptBlockDrag = null;
-let suppressPromptBlockClick = false;
 let suppressTimelineMarkerClick = false;
 let timelineSelectedKeyIds = new Set();
 let timelinePrimaryKeyId = null;
@@ -1217,11 +1198,6 @@ function remapBlockingIds(blockingInput) {
       mountId: keyframe.pose.mountId ? itemIds.get(keyframe.pose.mountId) || "" : "",
     } : keyframe.pose,
   }));
-  blocking.motion.promptBlocks = (blocking.motion?.promptBlocks || []).map((block) => ({
-    ...block,
-    id: uid(),
-    source: itemIds.get(block.source) || block.source,
-  }));
   blocking.cameras = (blocking.cameras || []).map((profile) => ({
     ...profile,
     keyframes: (profile.keyframes || []).map((keyframe) => ({
@@ -1508,7 +1484,7 @@ function sanitizeState() {
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources);
   state.motion.timelineView = state.motion.timelineView === "split" ? "split" : "combined";
   state.motion.cameraRail = sanitizeCameraRail(state.motion.cameraRail);
-  state.motion.promptBlocks = normalizePromptBlocks(state.motion.promptBlocks, state.motion.duration);
+  delete state.motion.promptBlocks;
   delete state.motion.blocks;
   const activeProfileKeyframes = multiCameraCore.cameraKeyframes(activeCameraProfile?.keyframes);
   state.motion.keyframes = normalizeKeyframes(state.motion.keyframes)
@@ -2163,6 +2139,12 @@ function normalizeKeyframes(keyframes) {
 
 function normalizeSourceKeyframe(keyframe, index = 0) {
   if (!sourceExists(keyframe.source)) return null;
+  const posePreset = keyframe.source !== "camera" && Object.prototype.hasOwnProperty.call(POSE_PRESET_LABELS, keyframe.posePreset)
+    ? keyframe.posePreset
+    : "";
+  const poseInput = posePreset
+    ? { ...(keyframe.pose || keyframe), bodyPose: presetBodyPose(posePreset) }
+    : (keyframe.pose || keyframe);
   return {
     id: keyframe.id || uid(),
     source: keyframe.source,
@@ -2171,7 +2153,8 @@ function normalizeSourceKeyframe(keyframe, index = 0) {
     time: clamp(finiteNumber(keyframe.time, 0), 0, state.motion.duration),
     transition: normalizeTransition(keyframe.transition),
     segment: sanitizeMotionSegment(keyframe.segment || keyframe.path, keyframe.source),
-    pose: sanitizeSourcePose(keyframe.source, keyframe.pose || keyframe),
+    posePreset,
+    pose: sanitizeSourcePose(keyframe.source, poseInput),
   };
 }
 
@@ -5289,7 +5272,7 @@ function beginThreeDrag(event) {
     }
     // Capture the frame that is actually on screen before any editor state is
     // created. `state` is the authored document; it can differ from the
-    // evaluated playhead frame between keys or while prompt motion is previewed.
+    // evaluated playhead frame between keys.
     const visibleState = currentInteractionFrame();
     evaluatedViewState = visibleState;
     const editItemId = editor.kind === "item" ? transformLeaderIdForItem(editor.id, state) : null;
@@ -7524,7 +7507,6 @@ function syncUi(updateInputs = true) {
   renderTrackingTargetSelect(updateInputs);
   renderProperties(updateInputs);
   renderSourceSelect();
-  renderPromptBlockControls(updateInputs);
   renderKeyStatus(updateInputs);
   renderThreeEditControls();
   syncProjectChrome();
@@ -10041,322 +10023,6 @@ function renderSourceSelect() {
   select.value = currentValue;
 }
 
-function promptBlockSourceDefinitions(renderState = state) {
-  return visibleSourceDefinitions(renderState).filter((source) => source.type === "actor");
-}
-
-function promptBlockDeltaAtClientX(clientX, drag) {
-  return ((clientX - drag.startX) / Math.max(1, drag.trackRect.width)) * state.motion.duration;
-}
-
-function renderPromptBlockTimeline() {
-  const root = $("#promptBlockTimeline");
-  if (!root) return;
-  root.innerHTML = "";
-  const blocks = normalizePromptBlocks(state.motion.promptBlocks, state.motion.duration);
-  const visibleSources = promptBlockSourceDefinitions();
-  const sourceIds = [...new Set([
-    ...visibleSources.map((source) => source.id),
-    ...blocks.map((block) => block.source),
-  ].filter(Boolean))];
-  sourceIds.forEach((sourceId, laneIndex) => {
-    const source = sourceDefinition(sourceId) || { id: sourceId, name: sourceId, color: "#7dd6c6" };
-    const lane = document.createElement("div");
-    lane.className = "prompt-block-lane";
-    const laneLabel = document.createElement("span");
-    laneLabel.className = "prompt-block-lane-label";
-    laneLabel.style.setProperty("--lane-color", source.color || "#7dd6c6");
-    laneLabel.textContent = source.name;
-
-    const track = document.createElement("div");
-    track.className = "prompt-block-track";
-    track.dataset.sourceId = sourceId;
-    if (laneIndex === 0) track.id = "promptBlockTrack";
-    const playhead = document.createElement("div");
-    playhead.className = "prompt-block-playhead";
-    playhead.style.left = `${clamp((displayPlayhead() / Math.max(0.001, state.motion.duration)) * 100, 0, 100)}%`;
-    track.append(playhead);
-    blocks.filter((block) => block.source === sourceId).forEach((block, index) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "prompt-block-chip";
-      chip.dataset.blockId = block.id;
-      chip.style.left = `${(block.start / state.motion.duration) * 100}%`;
-      chip.style.width = `${Math.max(2, ((block.end - block.start) / state.motion.duration) * 100)}%`;
-      chip.style.setProperty("--block-color", source.color || "#7dd6c6");
-      chip.title = `${source.name} · ${block.start.toFixed(1)}–${block.end.toFixed(1)}초`;
-      const startHandle = document.createElement("span");
-      startHandle.className = "prompt-block-handle prompt-block-handle-start";
-      startHandle.dataset.promptBlockEdge = "start";
-      const label = document.createElement("span");
-      label.className = "prompt-block-chip-label";
-      label.textContent = block.text || `블록 ${blocks.indexOf(block) + 1 || index + 1} — 문장을 입력하세요`;
-      const range = document.createElement("small");
-      range.textContent = `${block.start.toFixed(1)}–${block.end.toFixed(1)}s`;
-      const endHandle = document.createElement("span");
-      endHandle.className = "prompt-block-handle prompt-block-handle-end";
-      endHandle.dataset.promptBlockEdge = "end";
-      chip.append(startHandle, label, range, endHandle);
-      chip.addEventListener("pointerdown", (event) => {
-        const edge = event.target.closest("[data-prompt-block-edge]")?.dataset.promptBlockEdge || "move";
-        beginPromptBlockDrag(event, block.id, edge);
-      });
-      chip.addEventListener("click", (event) => {
-        if (suppressPromptBlockClick || promptBlockDrag?.moved) {
-          suppressPromptBlockClick = false;
-          return;
-        }
-        event.stopPropagation();
-        state.motion.playhead = block.start;
-        updatePlayheadDisplay(block.start);
-        syncUi(false);
-        draw(interpolateStateAtTime(block.start));
-      });
-      track.append(chip);
-    });
-    lane.append(laneLabel, track);
-    root.append(lane);
-  });
-}
-
-function renderPromptBlockControls(updateInputs = true) {
-  const sourceSelect = $("#promptBlockSourceSelect");
-  const list = $("#promptBlockList");
-  const addButton = $("#addPromptBlockBtn");
-  if (!sourceSelect || !list || !addButton) return;
-
-  const sources = promptBlockSourceDefinitions();
-  const previousSource = sourceSelect.value;
-  sourceSelect.innerHTML = "";
-  sources.forEach((source) => {
-    const option = document.createElement("option");
-    option.value = source.id;
-    option.textContent = source.name;
-    sourceSelect.append(option);
-  });
-  const selectedItemId = selectedItem()?.type === "actor" ? selectedItem().id : "";
-  const preferredSource = [previousSource, selectedItemId, activeSourceId(), sources[0]?.id]
-    .find((sourceId) => sources.some((source) => source.id === sourceId));
-  sourceSelect.value = preferredSource || "";
-  addButton.disabled = !preferredSource;
-  $("#promptBlockHelp").textContent = preferredSource
-    ? "현재 재생헤드에 배우 모션 블록을 추가합니다. 이동·속도와 문장에 명시한 포즈만 반영하고, 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다."
-    : "먼저 배우를 무대에 추가하세요. 프롬프트 블록은 배우 동작 생성용 구간입니다.";
-
-  const blocks = normalizePromptBlocks(state.motion.promptBlocks, state.motion.duration);
-  state.motion.promptBlocks = blocks;
-  list.innerHTML = "";
-  if (!blocks.length) {
-    const empty = document.createElement("div");
-    empty.className = "prompt-block-empty";
-    empty.textContent = "아직 프롬프트 블록이 없습니다. 재생헤드에서 ‘블록 추가’를 누르세요.";
-    list.append(empty);
-  } else {
-    blocks.forEach((block, index) => {
-      const source = sourceDefinition(block.source);
-      const row = document.createElement("article");
-      row.className = "prompt-block-row";
-      row.dataset.blockId = block.id;
-
-      const head = document.createElement("div");
-      head.className = "prompt-block-row-head";
-      const title = document.createElement("strong");
-      title.textContent = `블록 ${index + 1}`;
-      const target = document.createElement("span");
-      target.textContent = `@${source?.name || block.source}`;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "icon-btn prompt-block-remove";
-      remove.dataset.promptBlockAction = "delete";
-      remove.dataset.blockId = block.id;
-      remove.setAttribute("aria-label", `프롬프트 블록 ${index + 1} 삭제`);
-      remove.title = "프롬프트 블록 삭제";
-      remove.textContent = "×";
-      head.append(title, target, remove);
-
-      const fields = document.createElement("div");
-      fields.className = "prompt-block-fields";
-      [
-        ["start", "시작", 0, state.motion.duration],
-        ["end", "끝", 0, state.motion.duration],
-      ].forEach(([field, label, min, max]) => {
-        const fieldLabel = document.createElement("label");
-        fieldLabel.className = "prompt-block-field";
-        const labelText = document.createElement("span");
-        labelText.textContent = label;
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = String(min);
-        input.max = String(max);
-        input.step = "0.1";
-        input.value = Number(block[field]).toFixed(1);
-        input.dataset.blockId = block.id;
-        input.dataset.promptBlockField = field;
-        input.setAttribute("aria-label", `${block.id} ${label}`);
-        fieldLabel.append(labelText, input);
-        fields.append(fieldLabel);
-      });
-
-      const textarea = document.createElement("textarea");
-      textarea.rows = 2;
-      textarea.maxLength = 500;
-      textarea.placeholder = "예: 천천히 일어나서 창가 쪽으로 세 걸음 걷는다";
-      textarea.value = block.text;
-      textarea.dataset.blockId = block.id;
-      textarea.dataset.promptBlockField = "text";
-      textarea.setAttribute("aria-label", `프롬프트 블록 ${index + 1} 문장`);
-      const motionStatus = document.createElement("small");
-      motionStatus.className = "prompt-block-motion-status";
-      const analysis = analyzePromptMotion(block.text);
-      motionStatus.classList.toggle("is-unmapped", !analysis.matched);
-      motionStatus.textContent = block.text
-        ? analysis.matched
-          ? `로컬 프리뷰: ${analysis.summary}`
-          : "로컬 변위에 연결된 동작 없음 · MCP 동작 계획 필요"
-        : "문장을 입력하면 이동·속도와 명시한 포즈를 해석합니다. 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다.";
-      row.append(head, fields, textarea, motionStatus);
-      list.append(row);
-    });
-  }
-  renderPromptBlockTimeline();
-}
-
-function addPromptBlock() {
-  const source = $("#promptBlockSourceSelect")?.value || "";
-  if (!source) {
-    notifyApp("먼저 프롬프트 블록을 적용할 배우를 추가하세요.");
-    return;
-  }
-  if (sourceEditLocked(source)) {
-    notifyApp(`${sourceLabel(source)} 편집이 잠겨 있습니다.`);
-    return;
-  }
-  const start = clamp(Number(displayPlayhead() || state.motion.playhead), 0, state.motion.duration);
-  const before = state.motion.promptBlocks.length;
-  const next = insertPromptBlock(state.motion.promptBlocks, {
-    id: uid(),
-    source,
-    start,
-    text: "",
-  }, state.motion.duration);
-  if (next.length === before) {
-    notifyApp("이 시간에는 겹치지 않는 프롬프트 블록을 추가할 수 없습니다.");
-    return;
-  }
-  state.motion.promptBlocks = next;
-  selected = { kind: "item", id: source };
-  setActiveSource(source);
-  commit();
-  notifyApp(`${sourceLabel(source)}에 프롬프트 블록을 추가했습니다. 문장을 입력하세요.`);
-}
-
-function updatePromptBlockFromInput(event) {
-  const input = event.target.closest("[data-block-id][data-prompt-block-field]");
-  if (!input) return;
-  const block = state.motion.promptBlocks.find((entry) => entry.id === input.dataset.blockId);
-  if (!block || sourceEditLocked(block.source)) return;
-  const field = input.dataset.promptBlockField;
-  let next = state.motion.promptBlocks;
-  if (field === "text") {
-    next = updatePromptBlock(next, block.id, { text: input.value }, state.motion.duration);
-  } else {
-    const value = Number(input.value);
-    if (!Number.isFinite(value)) return;
-    next = resizePromptBlock(next, block.id, field, value, state.motion.duration);
-  }
-  if (JSON.stringify(next) === JSON.stringify(state.motion.promptBlocks)) return;
-  state.motion.promptBlocks = next;
-  commit();
-}
-
-$("#addPromptBlockBtn")?.addEventListener("click", addPromptBlock);
-$("#promptBlockList")?.addEventListener("change", updatePromptBlockFromInput);
-$("#promptBlockList")?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-prompt-block-action=delete]");
-  if (!button) return;
-  const block = state.motion.promptBlocks.find((entry) => entry.id === button.dataset.blockId);
-  if (!block) return;
-  state.motion.promptBlocks = removePromptBlock(state.motion.promptBlocks, block.id, state.motion.duration);
-  commit();
-  notifyApp("프롬프트 블록을 삭제했습니다.");
-});
-
-function beginPromptBlockDrag(event, blockId, edge = "move") {
-  if (promptBlockDrag || (event.button != null && event.button !== 0)) return;
-  suppressPromptBlockClick = false;
-  const block = state.motion.promptBlocks.find((entry) => entry.id === blockId);
-  const track = event.currentTarget.closest(".prompt-block-track");
-  if (!block || !track || sourceEditLocked(block.source)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const rect = track.getBoundingClientRect();
-  promptBlockDrag = {
-    blockId,
-    edge,
-    pointerId: event.pointerId ?? "mouse",
-    startX: event.clientX,
-    startBlock: { ...block },
-    startState: clone(state),
-    trackRect: { left: rect.left, width: Math.max(1, rect.width) },
-    moved: false,
-  };
-  event.currentTarget.setPointerCapture?.(event.pointerId);
-}
-
-function updatePromptBlockDrag(clientX) {
-  if (!promptBlockDrag) return;
-  const drag = promptBlockDrag;
-  const delta = promptBlockDeltaAtClientX(clientX, drag);
-  const requested = drag.edge === "move"
-    ? drag.startBlock.start + delta
-    : drag.edge === "start"
-      ? drag.startBlock.start + delta
-      : drag.startBlock.end + delta;
-  const next = drag.edge === "move"
-    ? movePromptBlock(state.motion.promptBlocks, drag.blockId, requested, state.motion.duration)
-    : resizePromptBlock(state.motion.promptBlocks, drag.blockId, drag.edge, requested, state.motion.duration);
-  if (JSON.stringify(next) === JSON.stringify(state.motion.promptBlocks)) return;
-  promptBlockDrag.moved = true;
-  state.motion.promptBlocks = next;
-  renderPromptBlockTimeline();
-}
-
-function finishPromptBlockDrag() {
-  if (!promptBlockDrag) return;
-  const moved = promptBlockDrag.moved;
-  promptBlockDrag = null;
-  suppressPromptBlockClick = moved;
-  if (moved) commit();
-  else syncUi(false);
-}
-
-function cancelPromptBlockDrag() {
-  if (!promptBlockDrag) return;
-  state = promptBlockDrag.startState;
-  promptBlockDrag = null;
-  suppressPromptBlockClick = false;
-  sanitizeState();
-  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
-  syncUi();
-  draw(evaluatedViewState);
-}
-
-document.addEventListener("pointermove", (event) => {
-  if (!promptBlockDrag || event.pointerId !== promptBlockDrag.pointerId) return;
-  event.preventDefault();
-  updatePromptBlockDrag(event.clientX);
-});
-document.addEventListener("pointerup", (event) => {
-  if (!promptBlockDrag || event.pointerId !== promptBlockDrag.pointerId) return;
-  event.preventDefault();
-  finishPromptBlockDrag();
-});
-document.addEventListener("pointercancel", (event) => {
-  if (!promptBlockDrag || event.pointerId !== promptBlockDrag.pointerId) return;
-  event.preventDefault();
-  cancelPromptBlockDrag();
-});
-
 function renderSourceTimelines(keyframes, cutTimes = shotCutTimes(keyframes)) {
   const root = $("#sourceTimelineList");
   root.innerHTML = "";
@@ -11404,8 +11070,6 @@ function removeItemById(itemId) {
   if (group) dissolveManualGroup(group.id, state);
   state.items = state.items.filter((entry) => entry.id !== itemId);
   state.motion.keyframes = state.motion.keyframes.filter((keyframe) => keyframe.source !== itemId);
-  state.motion.promptBlocks = normalizePromptBlocks(state.motion.promptBlocks)
-    .filter((block) => block.source !== itemId);
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources)
     .filter((sourceId) => sourceId !== itemId);
   if (state.motion.activeSource === itemId) state.motion.activeSource = "all";
@@ -12263,7 +11927,7 @@ function restoreUncommittedState(startState) {
 function materializeEvaluatedViewForEditing(sourceId = selectedSourceId() || activeSourceId()) {
   if (!evaluatedViewState) return;
   const visibleFrame = clone(evaluatedViewState);
-  const baseFrame = interpolateStateAtTime(evaluatedViewState.motion.playhead, { applyPromptMotion: false });
+  const baseFrame = interpolateStateAtTime(evaluatedViewState.motion.playhead);
   state.motion.playhead = evaluatedViewState.motion.playhead;
   if (sourceId === "all") {
     state.camera = clone(visibleFrame.camera);
@@ -12295,7 +11959,7 @@ function currentInteractionFrame() {
 function prepareCameraDragPreview(dragState) {
   const visibleFrame = clone(currentInteractionFrame());
   // A camera drag edits only the camera pose. Keep authored item state intact
-  // so keyed or prompt-driven actor motion is not baked into the document or
+  // so keyed actor motion is not baked into the document or
   // applied a second time on the next interpolation.
   state.camera = clone(visibleFrame.camera);
   dragState.renderState = visibleFrame;
@@ -12306,66 +11970,12 @@ function interpolateState(t) {
   return interpolateStateAtTime(clamp(t, 0, 1) * state.motion.duration);
 }
 
-// Prompt motion is deliberately translation-only. The authored body pose is
-// preserved so a downstream video model receives speed and path information
-// without being invited to invent a gait cycle or limb choreography.
-function applyPromptMotion(renderState, time) {
-  const blocks = normalizePromptBlocks(renderState.motion?.promptBlocks, renderState.motion?.duration);
-  if (!blocks.length) return renderState;
-  const stageSize = stageWorldSize(renderState);
-  const width = Math.max(0.001, Number(stageSize.width) || 36);
-  const depth = Math.max(0.001, Number(stageSize.depth) || 20);
-  const safeTime = Number(time) || 0;
-  renderState.items = renderState.items.map((item) => {
-    if (item.type !== "actor" || !isIndependentMotionSource(item, renderState)) return item;
-    const sourceBlocks = blocks
-      .filter((block) => block.source === item.id && safeTime >= block.start)
-      .sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
-    if (!sourceBlocks.length) return item;
-    const baseFacing = Number(item.facing || 0);
-    let currentFacing = baseFacing;
-    let xOffset = 0;
-    let yOffset = 0;
-    let heightOffset = 0;
-    let currentBodyPose = sanitizeBodyPose(item.bodyPose);
-    let promptPoseApplied = false;
-    sourceBlocks.forEach((block) => {
-      const duration = Math.max(0.001, block.end - block.start);
-      const elapsed = clamp(safeTime - block.start, 0, duration);
-      const motion = evaluatePromptMotion(block.text, elapsed, duration, currentFacing);
-      xOffset += motion.xMeters / width;
-      yOffset += motion.yMeters / depth;
-      heightOffset += motion.verticalMeters;
-      currentFacing += motion.facingDelta;
-      if (motion.posePreset) {
-        const targetPose = presetBodyPose(motion.posePreset);
-        // Explicit pose language is the only thing allowed to alter limbs in
-        // prompt playback. Blend toward the named pose over the block so
-        // phrases such as "일어나서" or "팔짱을 끼고" have visible timing,
-        // while ordinary walking/running remains pose-locked.
-        currentBodyPose = interpolateBodyPose(currentBodyPose, targetPose, motion.poseMix);
-        promptPoseApplied = true;
-      }
-    });
-    return {
-      ...item,
-      x: clamp(Number(item.x || 0.5) + xOffset, 0.02, 0.98),
-      y: clamp(Number(item.y || 0.5) + yOffset, 0.02, 0.98),
-      facing: normalizePanDeg(currentFacing),
-      verticalOffset: clamp(Number(item.verticalOffset || 0) + heightOffset, -1, 5),
-      bodyPose: promptPoseApplied ? currentBodyPose : item.bodyPose,
-    };
-  });
-  return renderState;
-}
-
-function interpolateStateAtTime(time, options = {}) {
+function interpolateStateAtTime(time) {
   const safeTime = clamp(time, 0, state.motion.duration);
   const next = clone(state);
   next.camera = interpolateSourceAtTime("camera", safeTime, state.camera);
   next.items = state.items.map((item) => interpolateSourceAtTime(item.id, safeTime, item));
   next.motion.playhead = safeTime;
-  if (options.applyPromptMotion !== false) applyPromptMotion(next, safeTime);
   return applyLiveSourceEdits(applyActiveCameraTracking(next, state), safeTime);
 }
 
@@ -12577,11 +12187,6 @@ function framingSampleTimes(renderState = state) {
   const times = new Set([0, duration]);
   const keyframes = sortKeyframes(renderState.motion?.keyframes || []);
   keyframes.forEach((keyframe) => times.add(Number(keyframe.time.toFixed(2))));
-  normalizePromptBlocks(renderState.motion?.promptBlocks, duration).forEach((block) => {
-    times.add(Number(block.start.toFixed(2)));
-    times.add(Number(block.end.toFixed(2)));
-    times.add(Number(((block.start + block.end) / 2).toFixed(2)));
-  });
   sourceDefinitions(renderState).forEach((source) => {
     const keys = keyframes.filter((keyframe) => keyframe.source === source.id);
     for (let index = 1; index < keys.length; index += 1) {
@@ -12647,7 +12252,7 @@ function interpolateRenderStateAtTime(renderState, time) {
   next.camera = interpolateSourceAtTimeFor(renderState, "camera", safeTime, renderState.camera);
   next.items = renderState.items.map((item) => interpolateSourceAtTimeFor(renderState, item.id, safeTime, item));
   next.motion.playhead = safeTime;
-  return applyLiveSourceEdits(applyActiveCameraTracking(applyPromptMotion(next, safeTime), renderState), safeTime);
+  return applyLiveSourceEdits(applyActiveCameraTracking(next, renderState), safeTime);
 }
 
 function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
@@ -12870,7 +12475,6 @@ async function buildProductionPack() {
     { path: "project/camera_plan.json", content: JSON.stringify(buildCameraPlan(), null, 2) },
     { path: "project/multi_camera_plan.json", content: JSON.stringify(buildMultiCameraPlan(), null, 2) },
     { path: "project/motion_keyframes.csv", content: buildMotionCsv() },
-    { path: "project/prompt_blocks.json", content: JSON.stringify(state.motion.promptBlocks || [], null, 2) },
     { path: "project/framing_analysis.json", content: JSON.stringify(quality.framing, null, 2) },
     { path: "docs/shot_bible.md", content: buildShotBibleMarkdown(quality) },
     { path: "docs/live_action_brief.md", content: buildLiveActionBrief(quality) },
@@ -12910,7 +12514,6 @@ function buildPrevisManifest(quality, storyboard = []) {
     actorCount: state.items.filter((item) => item.type === "actor").length,
     propCount: state.items.filter((item) => item.type === "prop").length,
     keyframeCount: state.motion.keyframes.length,
-    promptBlockCount: (state.motion.promptBlocks || []).length,
     cameraCount: cameraProfileCount(state),
     cameraNames: multiCameraCore.normalizeProfiles(
       state.cameras,
@@ -12923,7 +12526,7 @@ function buildPrevisManifest(quality, storyboard = []) {
       readiness: quality.readiness,
       framingReviewCount: quality.framing.reviewCount,
     },
-    exports: ["Project cut list", "Continuity report", "Blender previs", "Top-down blocking", "Camera storyboard", "Multi-camera plan", "CozyClay prompt blocks"],
+    exports: ["Project cut list", "Continuity report", "Blender previs", "Top-down blocking", "Camera storyboard", "Multi-camera plan"],
     storyboardFrames: storyboard.map((frame) => ({
       time: frame.time,
       path: frame.path,
@@ -12936,7 +12539,6 @@ function buildPrevisManifest(quality, storyboard = []) {
       "project/camera_plan.json",
       "project/multi_camera_plan.json",
       "project/motion_keyframes.csv",
-      "project/prompt_blocks.json",
       "project/framing_analysis.json",
       "docs/shot_bible.md",
       "docs/live_action_brief.md",
@@ -15045,7 +14647,7 @@ async function pollManagedProjectCommands() {
     if (hasUnsavedProjectChanges()) {
       managedSaveConflict = true;
       setProjectSaveStatus("conflict");
-      notifyApp("외부 이미지 명령이 도착했지만 저장되지 않은 편집이 있어 반영을 멈췄습니다.");
+      notifyApp("외부 MCP 명령이 도착했지만 저장되지 않은 편집이 있어 반영을 멈췄습니다.");
       return;
     }
     const previousSceneId = activeSceneId;
@@ -15063,7 +14665,7 @@ async function pollManagedProjectCommands() {
       switchProjectCut(previousSceneId, previousCutId, { renderStoryboard: false });
       setProjectSaveStatus("saved");
     }
-    notifyApp("이미지 기반 장면 명령을 반영했습니다.");
+    notifyApp("외부 MCP 장면·동작 명령을 반영했습니다.");
   } catch {
     // The local server may be restarting; the next poll will retry.
   } finally {
@@ -15510,38 +15112,6 @@ function renderMediaExportBusy() {
   });
 }
 
-function promptBlockSeedanceDirective(block) {
-  const analysis = analyzePromptMotion(block.text);
-  const instructions = [];
-  const direction = analysis.directionAngle < 0
-    ? "left"
-    : analysis.directionAngle > 0
-      ? "right"
-      : analysis.direction < 0
-        ? "backward"
-        : "forward";
-  if (analysis.locomotion) {
-    const start = analysis.speedStart.toFixed(2);
-    const end = analysis.speedEnd.toFixed(2);
-    const speed = analysis.accelerate
-      ? `velocity ramps from ${start} to ${end} m/s`
-      : analysis.decelerate
-        ? `velocity eases from ${start} to ${end} m/s`
-        : `root velocity stays at ${start} m/s`;
-    instructions.push(`translate ${direction} using root motion only; ${speed}`);
-  }
-  if (analysis.jump) instructions.push("follow a vertical translation arc with a 0.80 m peak");
-  if (analysis.rise) instructions.push(`elevate ${analysis.float ? "with gentle buoyant drift" : "smoothly"}`);
-  if (analysis.turn) instructions.push(`rotate heading by ${analysis.turnDegrees} degrees`);
-  if (!instructions.length) instructions.push("use the MCP-resolved transform plan when available");
-  if (analysis.posePreset) {
-    instructions.push("blend to the explicit " + analysis.poseLabel + " pose only; preserve all other limb positions");
-  } else {
-    instructions.push("preserve the authored body pose and limb positions");
-  }
-  return `- @${sourceLabel(block.source)} · ${block.start.toFixed(1)}–${block.end.toFixed(1)}s: ${instructions.join("; ")}.`;
-}
-
 function buildSeedancePrompt() {
   const cam = state.camera;
   const setup = sanitizeCameraSetup(state.cameraSetup);
@@ -15550,7 +15120,6 @@ function buildSeedancePrompt() {
   const actors = state.items.filter((item) => item.type === "actor");
   const props = state.items.filter((item) => item.type === "prop");
   const keyframes = sortKeyframes(state.motion.keyframes);
-  const promptBlocks = normalizePromptBlocks(state.motion.promptBlocks, state.motion.duration);
   const framing = analyzeFraming();
   const motionResponsibility = buildSeedanceGuideSegments(state);
   const perspectiveSubject = actors[0] || props[0] || null;
@@ -15562,7 +15131,7 @@ function buildSeedancePrompt() {
     "For each moving subject: the hollow circle is the segment start, the bright dot is the current root position, the crosshair target is the next destination, and the arrow shows the remaining travel direction.",
     "Expanding radial arrows mean the subject moves toward the locked camera; contracting radial arrows mean the subject moves farther away.",
     "CAM labels describe camera responsibility. SUBJ labels and teal guides describe subject root-position movement.",
-    "Subject motion rule: use root translation, heading, elevation, and velocity changes. Keep the authored body pose by default; when a prompt block explicitly names a pose or gesture, blend only to that named pose. Never invent a walk or run gait.",
+    "Subject motion rule: use only the authored keyframe translation, heading, elevation, and body pose. Interpolate between explicit pose keys when present; never invent a walk or run gait.",
     "All HUD, paths, anchors, arrows, markers, labels, and guide graphics are annotations only. Use their motion meaning, but do not reproduce the graphics in the final video.",
     "Do not copy the graphic style, colored proxy models, UI, or diagram look.",
     "Final output must be cinematic live-action footage with realistic people, props, space, lighting, and camera behavior.",
@@ -15578,11 +15147,6 @@ function buildSeedancePrompt() {
     "",
     "Motion keyframes:",
     ...keyframes.map((keyframe) => `- ${sourceLabel(keyframe.source)} · ${keyframe.label} at ${keyframe.time.toFixed(1)}s · ${keyTransitionLabels[normalizeTransition(keyframe.transition)]}: ${keyframeSummary(keyframe)}.`),
-    "",
-    "Prompt blocks (time-coded transform directives):",
-    ...(promptBlocks.length
-      ? promptBlocks.map(promptBlockSeedanceDirective)
-      : ["- none"]),
     "",
     "Actors:",
     ...actors.map((item) => {
@@ -15612,10 +15176,6 @@ function buildSeedanceGuideSegments(renderState) {
   const duration = Number(renderState.motion?.duration || 0);
   const times = new Set([0, duration]);
   (renderState.motion?.keyframes || []).forEach((keyframe) => times.add(clamp(Number(keyframe.time), 0, duration)));
-  normalizePromptBlocks(renderState.motion?.promptBlocks, duration).forEach((block) => {
-    times.add(clamp(Number(block.start), 0, duration));
-    times.add(clamp(Number(block.end), 0, duration));
-  });
   const sortedTimes = [...times].sort((a, b) => a - b);
   if (sortedTimes.length < 2) return ["- Entire shot: CAM: LOCKED; SUBJ: HOLD."];
   const lines = [];

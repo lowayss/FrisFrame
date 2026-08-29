@@ -68,6 +68,7 @@ def run_smoke_test():
                 "update_camera_blocking",
                 "add_actor_to_cut",
                 "apply_scene_commands",
+                "apply_motion_commands",
             }
             assert expected.issubset(tool_names)
 
@@ -221,6 +222,31 @@ def run_smoke_test():
             assert guide["sourceName"] == "set-reference.jpg"
             assert guide["anchors"][0]["worldZ"] == -3.0
 
+            motion_result, motion_text = call_tool("apply_motion_commands", {
+                "project_id": project_id,
+                "revision": 3,
+                "scene_index": 0,
+                "cut_index": 0,
+                "operations": [
+                    {"op": "add_keyframe", "source_id": "image-actor", "time": 0, "label": "시작", "pose_preset": "neutral"},
+                    {"op": "add_keyframe", "id": "move-key", "source_id": "image-actor", "time": 2.4, "label": "팔짱", "pose_preset": "armsCrossed", "x": 0.52, "y": 0.44, "transition": "linear", "path_mode": "arc-left"},
+                    {"op": "update_keyframe", "id": "move-key", "note": "경로 유지 확인"},
+                    {"op": "set_export_range", "start": 0, "end": 2.4},
+                ],
+            })
+            assert motion_result["isError"] is False
+            motion_applied = json.loads(motion_text)
+            assert motion_applied["revision"] == 4
+
+            _, motion_project_text = call_tool("get_project", {"project_id": project_id})
+            motion_project = json.loads(motion_project_text)
+            motion_state = motion_project["document"]["project"]["scenes"][0]["cuts"][0]["blocking"]["motion"]
+            actor_keys = [key for key in motion_state["keyframes"] if key["source"] == "image-actor"]
+            assert [key["time"] for key in actor_keys] == [0.0, 2.4]
+            assert actor_keys[1]["posePreset"] == "armsCrossed"
+            assert actor_keys[1]["segment"]["plan"]["kind"] == "arc"
+            assert motion_state["exportRange"] == {"start": 0, "end": 2.4}
+
             conn = sqlite3.connect(db_path)
             try:
                 row = conn.execute(
@@ -230,9 +256,9 @@ def run_smoke_test():
                 versions = conn.execute("SELECT revision FROM project_versions WHERE project_id = ?", (project_id,)).fetchall()
             finally:
                 conn.close()
-            assert row == (3, "managed", "local")
-            assert sorted(versions) == [(1,), (2,)]
-            print("MCP Server: protocol, schema, clamping, version history, and conflict checks passed")
+            assert row == (4, "managed", "local")
+            assert sorted(versions) == [(1,), (2,), (3,)]
+            print("MCP Server: protocol, schema, scene commands, motion keys, version history, and conflict checks passed")
         finally:
             process.terminate()
             process.wait(timeout=5)

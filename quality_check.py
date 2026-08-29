@@ -42,8 +42,6 @@ def main() -> None:
         "storyboard-core.js",
         "motion-core.js",
         "scene-blocking-core.js",
-        "prompt-block-core.js",
-        "prompt-motion-core.js",
         "previs-runtime-core.js",
         "timeline-core.js",
         "project-recovery-core.js",
@@ -58,8 +56,6 @@ def main() -> None:
     for filename in (
         "tests/motion-core.test.cjs",
         "tests/scene-blocking-core.test.cjs",
-        "tests/prompt-block-core.test.cjs",
-        "tests/prompt-motion-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
         "tests/project-recovery-core.test.cjs",
