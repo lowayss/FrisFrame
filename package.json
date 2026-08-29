@@ -46,6 +46,7 @@
       "electron/file-save.cjs",
       "electron/preload.cjs",
       "electron/workspace-ux.js",
+      "electron/hud-export-ux.js",
       "electron/startup.html",
       "package.json"
     ],
