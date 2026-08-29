@@ -8,6 +8,7 @@ on:
       - "package-lock.json"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
+      - "SIGNING.md"
       - "README.md"
       - ".github/workflows/desktop-builds.yml"
   push:
@@ -20,6 +21,7 @@ on:
       - "package-lock.json"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
+      - "SIGNING.md"
       - "README.md"
       - ".github/workflows/desktop-builds.yml"
 
@@ -50,10 +52,55 @@ jobs:
         run: npm ci
       - name: Verify source contracts
         run: npm run check
-      - name: Build macOS package
+
+      - name: Build unsigned macOS package
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run desktop:build:mac
+
+      - name: Validate macOS release secrets
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=0
+          for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name GitHub Actions secret is required for tagged macOS releases."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Build signed and notarized macOS package
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --mac dmg zip --arm64 --config.forceCodeSigning=true --config.mac.notarize=true
+
       - name: Verify macOS package
         run: npm run desktop:verify
+
+      - name: Verify Apple signature and notarization
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          APP="release/mac-arm64/FrisFrame.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=2 "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
+          xcrun stapler validate "$APP"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -85,10 +132,52 @@ jobs:
         run: npm ci
       - name: Verify source contracts
         run: npm run check
-      - name: Build Windows package
+
+      - name: Build unsigned Windows package
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: npm run desktop:build:win
+
+      - name: Validate Windows release secrets
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) { $missing += "WIN_CSC_LINK" }
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) { $missing += "WIN_CSC_KEY_PASSWORD" }
+          if ($missing.Count -gt 0) {
+            throw "Missing GitHub Actions secrets for tagged Windows release: $($missing -join ', ')"
+          }
+
+      - name: Build signed Windows package
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --win nsis --x64 --config.forceCodeSigning=true
+
       - name: Verify Windows package
         run: npm run desktop:verify
+
+      - name: Verify Windows Authenticode signatures
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        run: |
+          $targets = @(
+            (Get-ChildItem -Path release -Filter "FrisFrame-*-x64.exe" | Select-Object -First 1).FullName,
+            (Join-Path $PWD "release/win-unpacked/FrisFrame.exe")
+          )
+          foreach ($target in $targets) {
+            if (-not (Test-Path $target)) { throw "Signed target not found: $target" }
+            $signature = Get-AuthenticodeSignature -FilePath $target
+            Write-Host "$target -> $($signature.Status) / $($signature.SignerCertificate.Subject)"
+            if ($signature.Status -ne "Valid") { throw "Invalid Authenticode signature: $target" }
+          }
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
