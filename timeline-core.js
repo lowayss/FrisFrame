@@ -3,7 +3,7 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.FrisFrameTimelineCore = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function createTimelineCore() {
-  const TIME_PRECISION = 4;
+  const TIME_PRECISION = 6;
 
   function finiteNumber(value, fallback = 0) {
     const number = Number(value);

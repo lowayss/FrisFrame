@@ -9,7 +9,9 @@ const {
   motionSegments,
   normalizePathMode,
   normalizeTransition,
+  pointDistance,
   poseFieldsChanged,
+  quadraticBezierArcLengthPoint,
   rescaleKeyframeTimes,
   samplePlanarPath,
   transitionProgress,
@@ -17,6 +19,15 @@ const {
 
 function near(actual, expected, epsilon = 0.0001) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
+}
+
+function segmentDistances(points) {
+  return points.slice(1).map((point, index) => pointDistance(points[index], point));
+}
+
+function spreadRatio(values) {
+  const safe = values.filter((value) => value > 0.000001);
+  return Math.max(...safe) / Math.min(...safe);
 }
 
 assert.equal(normalizeTransition("linear"), "linear");
@@ -72,8 +83,59 @@ const curve = samplePlanarPath(
   "free-curve",
   { control: { x: 0.5, y: 1 } },
 );
-near(curve.x, 0.5);
-near(curve.y, 0.5);
+near(curve.x, 0.5, 0.001);
+near(curve.y, 0.5, 0.001);
+
+const arcLengthStart = quadraticBezierArcLengthPoint(
+  { x: 0, y: 0 },
+  { x: 0.05, y: 1.4 },
+  { x: 1, y: 0 },
+  0,
+);
+const arcLengthEnd = quadraticBezierArcLengthPoint(
+  { x: 0, y: 0 },
+  { x: 0.05, y: 1.4 },
+  { x: 1, y: 0 },
+  1,
+);
+near(arcLengthStart.x, 0);
+near(arcLengthStart.y, 0);
+near(arcLengthEnd.x, 1);
+near(arcLengthEnd.y, 0);
+
+const curveStart = { x: 0, y: 0 };
+const curveControl = { x: 0.05, y: 1.4 };
+const curveEnd = { x: 1, y: 0 };
+const equalTimeSteps = Array.from({ length: 9 }, (_entry, index) => index / 8);
+// Constant-distance remapping is camera-only by design: Seedance should receive
+// cleaner camera velocity without silently changing authored actor motion.
+const cameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
+  curveStart,
+  curveEnd,
+  progress,
+  "free-curve",
+  { sourceType: "camera", control: curveControl, arcLengthSamples: 96 },
+));
+const actorCurve = equalTimeSteps.map((progress) => samplePlanarPath(
+  curveStart,
+  curveEnd,
+  progress,
+  "free-curve",
+  { sourceType: "actor", control: curveControl },
+));
+const cameraSpeedSpread = spreadRatio(segmentDistances(cameraCurve));
+const actorSpeedSpread = spreadRatio(segmentDistances(actorCurve));
+assert.ok(cameraSpeedSpread < 1.08, `camera free-curve speed spread should stay low, got ${cameraSpeedSpread}`);
+assert.ok(actorSpeedSpread > 2, "actor free-curve must keep authored parameter timing instead of receiving camera-only speed remapping");
+
+const optedOutCameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
+  curveStart,
+  curveEnd,
+  progress,
+  "free-curve",
+  { sourceType: "camera", control: curveControl, constantSpeed: false },
+));
+assert.ok(spreadRatio(segmentDistances(optedOutCameraCurve)) > 2, "camera constant-speed remapping must be explicitly disableable");
 
 const arcStart = circularArcPoint({ x: 0, y: 0 }, { x: 1, y: 0 }, 0, 1);
 const arcMid = circularArcPoint({ x: 0, y: 0 }, { x: 1, y: 0 }, 0.5, 1);
@@ -110,4 +172,4 @@ assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 12).map((key) => key.ti
 assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 0).map((key) => key.time), [0, 3, 6]);
 assert.deepEqual(originalTiming.map((key) => key.time), [0, 3, 6], "rescaling must not mutate the source array");
 
-console.log("motion-core: transitions and path constraints passed");
+console.log("motion-core: transitions, path constraints, and camera reference speed passed");

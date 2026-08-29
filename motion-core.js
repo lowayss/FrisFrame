@@ -166,9 +166,50 @@
     };
   }
 
+  function pointDistance(start = {}, end = {}) {
+    return Math.hypot(
+      finiteNumber(end.x, 0) - finiteNumber(start.x, 0),
+      finiteNumber(end.y, 0) - finiteNumber(start.y, 0),
+    );
+  }
+
+  function quadraticBezierArcLengthPoint(start = {}, control = {}, end = {}, progress = 0, sampleCount = 48) {
+    const targetProgress = clamp(Number(progress), 0, 1);
+    if (targetProgress <= 0) return quadraticBezierPoint(start, control, end, 0);
+    if (targetProgress >= 1) return quadraticBezierPoint(start, control, end, 1);
+
+    const steps = Math.round(clamp(finiteNumber(sampleCount, 48), 12, 128));
+    const samples = [];
+    let previous = quadraticBezierPoint(start, control, end, 0);
+    let totalDistance = 0;
+    samples.push({ t: 0, point: previous, distance: 0 });
+
+    for (let index = 1; index <= steps; index += 1) {
+      const t = index / steps;
+      const point = quadraticBezierPoint(start, control, end, t);
+      totalDistance += pointDistance(previous, point);
+      samples.push({ t, point, distance: totalDistance });
+      previous = point;
+    }
+
+    if (totalDistance <= 0.000001) return quadraticBezierPoint(start, control, end, targetProgress);
+    const targetDistance = totalDistance * targetProgress;
+    for (let index = 1; index < samples.length; index += 1) {
+      const current = samples[index];
+      if (current.distance < targetDistance) continue;
+      const before = samples[index - 1];
+      const span = Math.max(0.000001, current.distance - before.distance);
+      const localProgress = clamp((targetDistance - before.distance) / span, 0, 1);
+      const remappedT = before.t + (current.t - before.t) * localProgress;
+      return quadraticBezierPoint(start, control, end, remappedT);
+    }
+    return quadraticBezierPoint(start, control, end, 1);
+  }
+
   function samplePlanarPath(start = {}, end = {}, progress = 0, mode = "straight", options = {}) {
     const t = clamp(Number(progress), 0, 1);
-    const normalized = normalizePathMode(mode, options.sourceType || "camera");
+    const sourceType = options.sourceType || "camera";
+    const normalized = normalizePathMode(mode, sourceType);
     if (normalized === "arc-left" || normalized === "arc-right") {
       return circularArcPoint(start, end, t, normalized === "arc-left" ? 1 : -1, options.bulge);
     }
@@ -177,6 +218,9 @@
         x: (finiteNumber(start.x, 0) + finiteNumber(end.x, 0)) / 2,
         y: (finiteNumber(start.y, 0) + finiteNumber(end.y, 0)) / 2,
       };
+      if (sourceType === "camera" && options.constantSpeed !== false) {
+        return quadraticBezierArcLengthPoint(start, control, end, t, options.arcLengthSamples);
+      }
       return quadraticBezierPoint(start, control, end, t);
     }
     if (normalized === "horizontal") {
@@ -206,7 +250,9 @@
     motionSegments,
     normalizePathMode,
     normalizeTransition,
+    pointDistance,
     poseFieldsChanged,
+    quadraticBezierArcLengthPoint,
     quadraticBezierPoint,
     rescaleKeyframeTimes,
     samplePlanarPath,
