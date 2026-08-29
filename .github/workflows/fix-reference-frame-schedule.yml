@@ -1,0 +1,38 @@
+name: One-shot frame-accurate export schedule fix
+
+on:
+  push:
+    branches:
+      - fix/reference-export-frame-sampling-20260829
+    paths:
+      - .github/workflows/fix-reference-frame-schedule.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/reference-export-frame-sampling-20260829
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply frame-accurate export schedule
+        run: python3 tools/fix_reference_frame_schedule.py
+      - name: Run full project checks
+        run: python3 quality_check.py
+      - name: Commit frame-accurate export schedule
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js motion-core.js tests/motion-core.test.cjs tests/dom-contract.test.cjs tests/reference-video-contract.test.cjs
+          git diff --cached --check
+          git commit -m "Make reference MP4 sampling frame-accurate"
+          git push origin HEAD:fix/reference-export-frame-sampling-20260829
