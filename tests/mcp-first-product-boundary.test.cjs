@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 const preload = fs.readFileSync(path.join(root, "electron/preload.cjs"), "utf8");
 const alignment = fs.readFileSync(path.join(root, "electron/alignment-ux.js"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
+const referenceWorkflow = fs.readFileSync(path.join(root, "reference-workflow-core.js"), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const guide = fs.readFileSync(path.join(root, "docs/USER_GUIDE.md"), "utf8");
 const workflow = fs.readFileSync(path.join(root, "MCP_FIRST_WORKFLOW.md"), "utf8");
@@ -18,8 +19,8 @@ assert.match(preload, /saveFile:\s*\(payload\)/,
 assert.equal(/generateImage\s*:|generateVideo\s*:|seedancePrompt\s*:|aiPrompt\s*:/.test(preload), false,
   "desktop bridge must not expose generative-AI or final-prompt APIs");
 
-// Legacy output surfaces may remain in shared browser source for compatibility,
-// but the Electron product must actively remove them from the user workflow.
+// Legacy output surfaces may remain in shared app.js/index.html until their bindings are
+// safely split, but the Electron product must actively remove them from the user workflow.
 for (const retiredId of [
   "blockingPlanBtn",
   "backgroundSheetBtn",
@@ -32,6 +33,20 @@ for (const retiredId of [
 }
 assert.match(preload, /document\.querySelectorAll\("\.spatial-reference-panel"\)[\s\S]*\.remove\(\)/,
   "desktop workflow must remove the in-app spatial/background reference panel");
+
+// Reference workflow core now owns only batch MP4 export + internal safety policy.
+assert.match(referenceWorkflow, /installBatchReferenceExportUi/,
+  "multi-cut MP4 ZIP export must remain available");
+for (const retiredSymbol of [
+  "buildReferencePromptGuide",
+  "installReferencePromptGuideUi",
+  "referencePromptGuideBtn",
+  "installReferenceReadinessUi",
+  "referenceReadinessBtn",
+]) {
+  assert.equal(referenceWorkflow.includes(retiredSymbol), false,
+    `${retiredSymbol} must not return to the supported reference workflow core`);
+}
 
 // Selection/alignment polish must stay discoverable and use the freshly typed time.
 assert.match(alignment, /Alt\/Option\+클릭 · 겹친 대상 순환/,
@@ -70,4 +85,4 @@ assert.match(workflow, /FrisFrame 자체는 이미지를 분석하지 않는다/
 assert.match(workflow, /최종 Seedance 프롬프트를 작성한다/,
   "workflow doc must keep final prompt composition in the external MCP conversation");
 
-console.log("mcp-first-product-boundary: desktop UI, docs, selection polish, and AI boundary contracts passed");
+console.log("mcp-first-product-boundary: prompt/readiness UI removal, desktop UI, docs, selection polish, and AI boundary contracts passed");
