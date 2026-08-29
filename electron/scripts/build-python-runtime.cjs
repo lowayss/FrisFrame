@@ -18,7 +18,7 @@ const runtimeConfigs = {
     targetArch: "arm64",
   },
   "win32-x64": {
-    url: "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.12.13%2B20260510-x86_64-pc-windows-msvc_install_only_stripped.tar.gz",
+    url: "https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.12.13%2B20260510-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
     sha256: "24168aff2e7d93784c6a436124c4ebb79b076a4e289bde4902c08333507b71d0",
     bundledPython: ["python", "python.exe"],
     venvPython: ["Scripts", "python.exe"],
