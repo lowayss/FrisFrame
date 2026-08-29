@@ -1,0 +1,42 @@
+name: One-shot final product boundary cleanup
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+      - name: Remove obsolete preload shims and stale docs
+        run: python3 tools/one_shot_finish_product_boundary_cleanup.py
+      - name: Verify preload syntax
+        run: node --check electron/preload.cjs
+      - name: Verify product boundary contract
+        run: node tests/mcp-first-product-boundary.test.cjs
+      - name: Verify full project contracts
+        run: python3 quality_check.py
+      - name: Verify patch whitespace
+        run: git diff --check
+      - name: Commit final cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- electron/preload.cjs tests/mcp-first-product-boundary.test.cjs README.md MAINTENANCE.md; then
+            echo "No cleanup diff to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add electron/preload.cjs tests/mcp-first-product-boundary.test.cjs README.md MAINTENANCE.md
+          git commit -m "Finish shared-source product boundary cleanup"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
