@@ -26,21 +26,11 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           motion = Path('motion-core.js')
           text = motion.read_text(encoding='utf-8')
-          old_slug = '''  function safeFileSlug(value, fallback = "cut") {
-            const normalized = String(value || "")
-              .normalize("NFKC")
-              .trim()
-              .replace(/[\\\\/:*?"<>|]+/g, "-")
-              .replace(/\\s+/g, "-")
-              .replace(/-+/g, "-")
-              .replace(/^[.-]+|[.-]+$/g, "")
-              .slice(0, 80);
-            return normalized || fallback;
-          }
-          '''
+
           new_slug = '''  function safeFileSlug(value, fallback = "cut") {
             const clean = (input) => String(input || "")
               .normalize("NFKC")
@@ -57,38 +47,14 @@ jobs:
               : normalized;
           }
           '''
-          if old_slug not in text:
-            raise SystemExit('safeFileSlug block not found')
-          text = text.replace(old_slug, new_slug, 1)
+          slug_pattern = re.compile(
+              r'  function safeFileSlug\(value, fallback = "cut"\) \{.*?\n  \}\n\n(?=  function collectReferenceBatchCuts)',
+              re.S,
+          )
+          text, slug_count = slug_pattern.subn(new_slug, text, count=1)
+          if slug_count != 1:
+            raise SystemExit(f'safeFileSlug patch count: {slug_count}')
 
-          old_collect = '''  function collectReferenceBatchCuts(project = {}) {
-            const entries = [];
-            (project.scenes || []).forEach((scene, sceneIndex) => {
-              (scene.cuts || []).forEach((cut, cutIndex) => {
-                const blocking = cut?.blocking;
-                const duration = finiteNumber(blocking?.motion?.duration, 0);
-                if (!blocking || duration <= 0) return;
-                const sceneNumber = Number(scene.number || sceneIndex + 1);
-                const cutNumber = Number(cut.number || cutIndex + 1);
-                const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
-                entries.push({
-                  sceneId: scene.id || "",
-                  cutId: cut.id || "",
-                  sceneNumber,
-                  cutNumber,
-                  sceneHeading: scene.heading || "",
-                  title: cut.title || "",
-                  status: cut.status || "",
-                  filename: `${base}_reference.mp4`,
-                  blocking: cloneValue(blocking),
-                  duration,
-                  fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
-                });
-              });
-            });
-            return entries;
-          }
-          '''
           new_collect = '''  function collectReferenceBatchCuts(project = {}) {
             const entries = [];
             const usedFilenames = new Set();
@@ -128,15 +94,20 @@ jobs:
             return entries;
           }
           '''
-          if old_collect not in text:
-            raise SystemExit('collectReferenceBatchCuts block not found')
-          motion.write_text(text.replace(old_collect, new_collect, 1), encoding='utf-8')
+          collect_pattern = re.compile(
+              r'  function collectReferenceBatchCuts\(project = \{\}\) \{.*?\n  \}\n\n(?=  function addReadinessIssue)',
+              re.S,
+          )
+          text, collect_count = collect_pattern.subn(new_collect, text, count=1)
+          if collect_count != 1:
+            raise SystemExit(f'collectReferenceBatchCuts patch count: {collect_count}')
+          motion.write_text(text, encoding='utf-8')
 
           test = Path('tests/reference-batch-export.test.cjs')
           test_text = test.read_text(encoding='utf-8')
           marker = 'assert.equal(safeFileSlug(""), "cut");\n'
           addition = '''assert.equal(safeFileSlug(""), "cut");
-          assert.equal(safeFileSlug("../CON"), "CON");
+          assert.equal(safeFileSlug("../CON"), "_CON");
           assert.equal(safeFileSlug("CON"), "_CON");
           assert.equal(safeFileSlug("bad\\u0000name"), "bad-name");
 
@@ -159,9 +130,11 @@ jobs:
           assert.equal(new Set(duplicateFilenameEntries.map((entry) => entry.filename.toLowerCase())).size, 3);
           assert.ok(duplicateFilenameEntries.every((entry) => !entry.filename.includes("/")));
           '''
-          if marker not in test_text:
-            raise SystemExit('test insertion marker not found')
-          test.write_text(test_text.replace(marker, addition, 1), encoding='utf-8')
+          if 'duplicateFilenameProject' not in test_text:
+            if marker not in test_text:
+              raise SystemExit('test insertion marker not found')
+            test_text = test_text.replace(marker, addition, 1)
+          test.write_text(test_text, encoding='utf-8')
       - name: Run full quality checks
         run: python3 quality_check.py
       - name: Commit validated hardening
