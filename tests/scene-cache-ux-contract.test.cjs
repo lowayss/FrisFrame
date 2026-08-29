@@ -22,12 +22,24 @@ assert.match(source, /threeEditMode === "pose"[\s\S]*selected\?\.kind === "item"
   "the selected actor must leave the reusable-rig path while pose handles are being edited");
 assert.match(source, /delete structural\.x;[\s\S]*delete structural\.bodyPose;/,
   "actor position, orientation and body pose must be treated as transform-only changes rather than rig rebuilds");
+assert.match(source, /const actorRigRuntime = new WeakMap\(\)/,
+  "actor runtime state must be cached without keeping disposed rigs alive");
 assert.match(source, /function applyActorJointTransforms\(/,
   "cached actor rigs must update existing joint groups from the evaluated body pose");
 assert.match(source, /!object\.isGroup \|\| !object\.userData\?\.jointId/,
   "actor joint updates must reject meshes and target only rig joint groups");
-assert.match(source, /body\.scale\.set\(/,
-  "cached actor rigs must refresh physical actor scale without recreating geometry");
+assert.match(source, /runtime\.poseSignature !== poseSignature/,
+  "joint transforms must only be reapplied when the actor body pose changes");
+assert.match(source, /stats\.actorJointTransformSkips \+= 1/,
+  "skipped joint work must be observable for performance validation");
+assert.match(source, /runtime\.scaleSignature !== scaleSignature/,
+  "actor scale writes must be skipped when physical dimensions are unchanged");
+assert.match(source, /runtime\.groundingSignature !== groundingSignature/,
+  "expensive actor bounds grounding must only rerun when pose or physical scale changes");
+assert.match(source, /new THREE\.Box3\(\)\.setFromObject\(body\)/,
+  "grounding recomputation must retain the existing accurate Box3 path when needed");
+assert.match(source, /stats\.actorGroundingReuses \+= 1/,
+  "reused grounding must be observable for performance validation");
 assert.match(source, /body\.rotation\.set\(pitch, Math\.PI \/ 2 - angle, 0, "YXZ"\)/,
   "cached actor rigs must refresh actor pitch and facing");
 assert.match(source, /group\.position\.set\(position\.x, position\.y, position\.z\)/,
@@ -54,6 +66,7 @@ const sandbox = {
   },
   selected: null,
   threeEditMode: "move",
+  actorBodyPoseForRender: (actor) => actor?.bodyPose || {},
 };
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "scene-cache-ux.js" });
@@ -103,6 +116,29 @@ assert.notEqual(
   cacheApi.actorRigSignature({ ...actor, size: 1.25 }, sandbox.state),
   "actor physical-structure changes must invalidate the cached rig",
 );
+
+const translatedActor = { ...actor, x: 0.9, y: 0.1, facing: 270, pitch: -8 };
+assert.equal(
+  cacheApi.actorPoseTransformSignature(actor),
+  cacheApi.actorPoseTransformSignature(translatedActor),
+  "plain actor translation/orientation must not trigger joint-pose work",
+);
+assert.notEqual(
+  cacheApi.actorPoseTransformSignature(actor),
+  cacheApi.actorPoseTransformSignature(dynamicVariant),
+  "authored body-pose changes must refresh existing joint transforms",
+);
+assert.equal(
+  cacheApi.actorScaleSignature({ width: 0.55, height: 1.75, depth: 0.35 }),
+  cacheApi.actorScaleSignature({ width: 0.55, height: 1.75, depth: 0.35 }),
+  "identical physical dimensions must reuse actor scale and grounding",
+);
+assert.notEqual(
+  cacheApi.actorScaleSignature({ width: 0.55, height: 1.75, depth: 0.35 }),
+  cacheApi.actorScaleSignature({ width: 0.62, height: 1.9, depth: 0.4 }),
+  "physical dimension changes must invalidate actor scale and grounding cache",
+);
+
 assert.equal(cacheApi.actorRigEligible(actor), true,
   "ordinary moving actors must be eligible for rig reuse");
 sandbox.selected = { kind: "item", id: actor.id };
@@ -118,4 +154,4 @@ assert.ok(packageJson.build.files.includes("electron/scene-cache-ux.js"),
 assert.match(main, /"scene-cache-ux\.js"[\s\S]*"preview-cache-ux\.js"[\s\S]*"performance-ux\.js"/,
   "scene caching must load before preview caching and render coalescing");
 
-console.log("scene-cache-ux-contract: static prop cache and moving actor-rig reuse contracts passed");
+console.log("scene-cache-ux-contract: static props, moving actor rigs, pose and grounding cache contracts passed");
