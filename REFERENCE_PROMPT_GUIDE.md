@@ -4,6 +4,29 @@
 
 FrisFrame 자체는 영상 생성 AI가 아닙니다. 역할은 카메라, 배우 블로킹, 타이밍, 프레이밍, 렌즈 변화와 공간 관계를 프리비즈 MP4로 만드는 것입니다.
 
+
+## 플랫폼과 모델은 반드시 구분한다
+
+FrisFrame의 프롬프트 가이드에서는 다음 네 가지를 서로 다른 층으로 취급합니다.
+
+```text
+사용 플랫폼
+→ Higgsfield / Runway / 직접·기타
+
+생성·편집 모델
+→ Seedance 2.5 / Seedance 2.0 / Aleph 2.0 / 기타
+
+출력 방식
+→ 최종 생성 프롬프트 / Claude·Fable 등에 프롬프트 작성 요청
+
+FrisFrame MP4 역할
+→ 3D 프리비즈(공간·카메라) / 모션 레퍼런스(동작·타이밍)
+```
+
+**Higgsfield와 Runway는 플랫폼**입니다. 그 안에서 여러 모델을 선택할 수 있습니다. **Seedance는 ByteDance의 비디오 생성 모델군**이며 Higgsfield와 Runway 같은 플랫폼에서 제공될 수 있습니다. **Aleph 2.0은 Runway의 비디오 편집 모델**입니다.
+
+따라서 `Higgsfield = Seedance` 또는 `Runway = Aleph`처럼 동일시하지 않습니다. 예를 들어 `Runway → Seedance 2.5 → 3D 프리비즈`도 가능하고, `Runway → Aleph 2.0 → 모션 레퍼런스`처럼 사용할 수도 있습니다.
+
 ## 첨부 튜토리얼에서 확인한 핵심
 
 튜토리얼 `How To Save AI Credits With Higgsfield + Blender`의 핵심은 **생성하기 전에 구조를 잠그는 것**입니다.

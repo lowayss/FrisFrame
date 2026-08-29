@@ -240,16 +240,33 @@
   }
 
   function normalizeReferencePromptPlatform(value) {
-    const normalized = String(value || "seedance").trim().toLowerCase();
-    return ["seedance", "higgsfield", "runway", "prompt-writer"].includes(normalized) ? normalized : "seedance";
+    const normalized = String(value || "generic").trim().toLowerCase();
+    return ["generic", "higgsfield", "runway"].includes(normalized) ? normalized : "generic";
   }
 
-  function referencePromptPlatformNote(platform = "seedance") {
+  function normalizeReferencePromptModel(value) {
+    const normalized = String(value || "seedance-2.5").trim().toLowerCase();
+    return ["seedance-2.5", "seedance-2.0", "aleph-2.0", "generic"].includes(normalized) ? normalized : "seedance-2.5";
+  }
+
+  function normalizeReferencePromptOutput(value) {
+    const normalized = String(value || "final").trim().toLowerCase();
+    return ["final", "prompt-writer"].includes(normalized) ? normalized : "final";
+  }
+
+  function referencePromptPlatformNote(platform = "generic") {
     const normalized = normalizeReferencePromptPlatform(platform);
-    if (normalized === "higgsfield") return "Higgsfield는 생성 플랫폼입니다. 이 템플릿은 튜토리얼과 가장 가까운 Higgsfield + Seedance Video-to-Video 조합을 기준으로 합니다.";
-    if (normalized === "runway") return "Runway는 모델별 레퍼런스 동작이 다릅니다. 이 템플릿은 Aleph/Edit Studio 계열처럼 입력 영상을 보존·변환하는 흐름을 기준으로 짧고 직접적인 지시를 사용합니다.";
-    if (normalized === "prompt-writer") return "튜토리얼처럼 Claude/Fable 같은 외부 도구에 FrisFrame MP4와 이미지 레퍼런스를 첨부하고, 초 단위 Seedance 프롬프트를 작성하게 하는 요청문입니다.";
-    return "Seedance Video-to-Video 기준입니다. FrisFrame MP4는 카메라·블로킹·타이밍을, 이미지/텍스트 레퍼런스는 인물·장소·스타일을 담당하도록 역할을 분리합니다.";
+    if (normalized === "higgsfield") return "Higgsfield는 여러 생성 모델을 선택해 사용하는 제작 플랫폼입니다. 아래 모델 선택과는 별개입니다.";
+    if (normalized === "runway") return "Runway는 여러 생성/편집 모델을 사용하는 제작 플랫폼입니다. Seedance 2.5 같은 외부 모델과 Aleph 2.0 같은 Runway 모델을 구분해 선택합니다.";
+    return "직접 API·다른 제작 플랫폼·모델 제공사 UI에서 사용할 때 선택합니다. 플랫폼과 생성 모델은 서로 다른 개념입니다.";
+  }
+
+  function referencePromptModelNote(model = "seedance-2.5") {
+    const normalized = normalizeReferencePromptModel(model);
+    if (normalized === "seedance-2.5") return "Seedance 2.5는 ByteDance의 비디오 생성 모델입니다. 텍스트·이미지·비디오·오디오 레퍼런스를 역할별로 사용할 수 있습니다.";
+    if (normalized === "seedance-2.0") return "Seedance 2.0은 ByteDance의 멀티모달 비디오 생성 모델입니다. 플랫폼과 무관하게 레퍼런스 역할을 명확히 지정하는 템플릿을 사용합니다.";
+    if (normalized === "aleph-2.0") return "Aleph 2.0은 Runway의 비디오 편집 모델입니다. 기존 영상의 구조를 유지하면서 무엇을 바꿀지 짧고 직접적으로 지시하는 방식이 적합합니다.";
+    return "기타 레퍼런스 지원 모델용 일반 템플릿입니다. 실제 입력 규칙은 선택한 모델 문서를 확인하세요.";
   }
 
   function normalizeReferencePromptRole(value) {
@@ -272,8 +289,10 @@
     return `S${String(entry.sceneNumber || 0).padStart(2, "0")} C${String(entry.cutNumber || 0).padStart(2, "0")} · ${entry.title || "컷"}`;
   }
 
-  function buildReferencePromptGuide(entry = {}, platform = "seedance", options = {}) {
+  function buildReferencePromptGuide(entry = {}, platform = "generic", options = {}) {
     const normalized = normalizeReferencePromptPlatform(platform);
+    const model = normalizeReferencePromptModel(options.model);
+    const outputMode = normalizeReferencePromptOutput(options.outputMode);
     const referenceRole = normalizeReferencePromptRole(options.referenceRole);
     const motion = entry?.blocking?.motion || {};
     const duration = Math.max(0.1, Number(entry.duration || motion.duration || 0) || 0.1);
@@ -287,13 +306,25 @@
       ? "Treat the FrisFrame MP4 as the master motion/timing reference: preserve the authored motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion. Placeholder appearance and background may be replaced by the supplied references."
       : "Treat the FrisFrame MP4 as the master previs/spatial reference: preserve spatial layout, camera composition and trajectory, subject position, framing, lens progression, camera timing, actor root blocking, and beat timing. Primitive colors/shapes are blocking markers only, not final design.";
 
-    if (normalized === "prompt-writer") {
+    const platformLabel = normalized === "higgsfield" ? "HIGGSFIELD" : normalized === "runway" ? "RUNWAY" : "DIRECT / OTHER PLATFORM";
+    const modelLabel = model === "seedance-2.5" ? "SEEDANCE 2.5" : model === "seedance-2.0" ? "SEEDANCE 2.0" : model === "aleph-2.0" ? "ALEPH 2.0" : "GENERIC REFERENCE MODEL";
+
+    if (outputMode === "prompt-writer") {
+      const targetInstruction = model === "aleph-2.0"
+        ? `Write a concise Runway Aleph 2.0 transformation prompt for the attached ${duration.toFixed(2)}-second FrisFrame MP4.`
+        : model.startsWith("seedance-")
+          ? `Write a ${duration.toFixed(2)}-second ${modelLabel} reference-video prompt based on the attached FrisFrame MP4.`
+          : `Write a ${duration.toFixed(2)}-second reference-video generation prompt for the selected model based on the attached FrisFrame MP4.`;
       return [
-        `Write a ${duration.toFixed(2)}-second Seedance video-to-video prompt based on the attached FrisFrame blocking MP4.`,
-        `The shot is ${cutLabel} at ${fps} FPS. Read the entire input video and write the final generation prompt second-by-second so it matches the authored camera path, framing, lens changes, actor root blocking, spatial relationships, and timing.`,
+        `PLATFORM: ${platformLabel}`,
+        `MODEL: ${modelLabel}`,
+        targetInstruction,
+        `The shot is ${cutLabel} at ${fps} FPS. Read the entire input video before writing the prompt.`,
         roleInstruction,
-        "Treat character/location/creative references as appearance references: identity, wardrobe, environment, color palette, lighting, materials, and mood. Keep natural secondary body motion subtle and compatible with the authored blocking instead of inventing a different camera or root path.",
-        "Return the prompt in these sections: SHOT, ACTIVE REFERENCES, GLOBAL STYLE, SCENE / ACTION, SECOND-BY-SECOND TIMELINE, AUDIO / SFX.",
+        "Treat character/location/creative references as appearance references: identity, wardrobe, environment, color palette, lighting, materials, and mood.",
+        model === "aleph-2.0"
+          ? "For Aleph 2.0, keep the final transformation prompt short, precise, and limited to what should change while preserving the source structure."
+          : "For Seedance/reference generation, describe scene meaning and reference roles without re-inventing camera/root motion already encoded in the FrisFrame MP4.",
         "",
         `SCENE / ACTION NOTES: ${story}`,
         `REFERENCE MAP: ${references}`,
@@ -302,26 +333,22 @@
       ].join("\n");
     }
 
-    if (normalized === "runway") {
+    if (model === "aleph-2.0") {
       return [
-        `RUNWAY REFERENCE STARTER · ${cutLabel} · ${duration.toFixed(2)}s`,
+        `${platformLabel} · ALEPH 2.0 · ${cutLabel} · ${duration.toFixed(2)}s`,
         "",
         referenceRole === "motion"
           ? "Transform the FrisFrame motion reference into the requested final scene while preserving its motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion."
           : "Transform the FrisFrame previs into the requested final scene while preserving the input video's spatial layout, camera trajectory, timing, framing, subject position/blocking, and spatial relationships.",
-        `Scene/action: ${story}`,
-        `Replace placeholder geometry with these final references/subjects: ${references}`,
+        `Change/replace: ${story}`,
+        `Use these appearance references: ${references}`,
         `Final visual target: ${style}`,
-        `Motion/audio notes: ${audio}`,
-        "Keep the requested transformation specific and concise. Add extra motion only when it supports the authored blocking.",
-        "",
-        "Reference usage: @Video 1 = FrisFrame previs structure. Add image/video references with Runway's @ reference picker when the selected model supports them.",
+        `Audio notes: ${audio}`,
+        "Keep the instruction concise and change only what is requested. Preserve the rest of the source structure.",
       ].join("\n");
     }
 
-    const heading = normalized === "higgsfield"
-      ? "HIGGSFIELD · SEEDANCE VIDEO-TO-VIDEO"
-      : "SEEDANCE VIDEO-TO-VIDEO";
+    const heading = `${platformLabel} · ${modelLabel}`;
     return [
       `${heading} · ${cutLabel} · ${duration.toFixed(2)}s · ${fps} FPS`,
       "",
@@ -425,10 +452,9 @@
     const platformSelect = documentObject.createElement("select");
     Object.assign(platformSelect.style, fieldStyle);
     [
-      ["seedance", "Seedance V2V"],
-      ["higgsfield", "Higgsfield · Seedance V2V"],
-      ["runway", "Runway · Reference / Aleph"],
-      ["prompt-writer", "Claude / Fable · 프롬프트 작성 요청"],
+      ["generic", "직접 / 기타 플랫폼"],
+      ["higgsfield", "Higgsfield"],
+      ["runway", "Runway"],
     ].forEach(([value, label]) => {
       const option = documentObject.createElement("option");
       option.value = value;
@@ -437,6 +463,32 @@
     });
     const platformNote = documentObject.createElement("div");
     Object.assign(platformNote.style, { color: "#91a69a", fontSize: "11px", lineHeight: "1.45" });
+    const modelSelect = documentObject.createElement("select");
+    Object.assign(modelSelect.style, fieldStyle);
+    [
+      ["seedance-2.5", "Seedance 2.5 · ByteDance"],
+      ["seedance-2.0", "Seedance 2.0 · ByteDance"],
+      ["aleph-2.0", "Aleph 2.0 · Runway"],
+      ["generic", "기타 Reference 지원 모델"],
+    ].forEach(([value, label]) => {
+      const option = documentObject.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      modelSelect.appendChild(option);
+    });
+    const modelNote = documentObject.createElement("div");
+    Object.assign(modelNote.style, { color: "#91a69a", fontSize: "11px", lineHeight: "1.45" });
+    const outputModeSelect = documentObject.createElement("select");
+    Object.assign(outputModeSelect.style, fieldStyle);
+    [
+      ["final", "최종 생성 프롬프트"],
+      ["prompt-writer", "Claude / Fable 등에 프롬프트 작성 요청"],
+    ].forEach(([value, label]) => {
+      const option = documentObject.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      outputModeSelect.appendChild(option);
+    });
     const roleSelect = documentObject.createElement("select");
     Object.assign(roleSelect.style, fieldStyle);
     [
@@ -484,8 +536,11 @@
       heading,
       intro,
       makeLabel("컷", cutSelect),
-      makeLabel("대상", platformSelect),
+      makeLabel("사용 플랫폼", platformSelect),
       platformNote,
+      makeLabel("생성 / 편집 모델", modelSelect),
+      modelNote,
+      makeLabel("출력 방식", outputModeSelect),
       makeLabel("FrisFrame MP4 역할", roleSelect),
       roleNote,
       makeLabel("장면 / 행동", story),
@@ -502,9 +557,12 @@
     const selectedEntry = () => entries[Number(cutSelect.value) || 0] || entries[0] || null;
     const refreshOutput = () => {
       platformNote.textContent = referencePromptPlatformNote(platformSelect.value);
+      modelNote.textContent = referencePromptModelNote(modelSelect.value);
       roleNote.textContent = referencePromptRoleNote(roleSelect.value);
       const entry = selectedEntry();
       output.value = entry ? buildReferencePromptGuide(entry, platformSelect.value, {
+        model: modelSelect.value,
+        outputMode: outputModeSelect.value,
         referenceRole: roleSelect.value,
         story: story.value,
         references: references.value,
@@ -533,6 +591,8 @@
     build.addEventListener("click", refreshOutput);
     cutSelect.addEventListener("change", refreshOutput);
     platformSelect.addEventListener("change", refreshOutput);
+    modelSelect.addEventListener("change", refreshOutput);
+    outputModeSelect.addEventListener("change", refreshOutput);
     roleSelect.addEventListener("change", refreshOutput);
     copy.addEventListener("click", async () => {
       refreshOutput();
@@ -682,9 +742,12 @@
     installBatchReferenceExportUi,
     installReferencePromptGuideUi,
     installReferenceReadinessUi,
+    normalizeReferencePromptModel,
+    normalizeReferencePromptOutput,
     normalizeReferencePromptPlatform,
     normalizeReferencePromptRole,
     partitionReferenceBatchByReadiness,
+    referencePromptModelNote,
     referencePromptPlatformNote,
     referencePromptRoleNote,
     readinessStatusText,
