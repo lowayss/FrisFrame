@@ -499,13 +499,15 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             token_hash = secret_digest(token)
             expires_at = int(time.time()) + SESSION_TTL_SECONDS
             conn = sqlite3.connect(database_path(), timeout=10.0)
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO sessions (token_hash, license_hash, expires_at) VALUES (?, ?, ?)",
-                (token_hash, license_hash, expires_at),
-            )
-            conn.commit()
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO sessions (token_hash, license_hash, expires_at) VALUES (?, ?, ?)",
+                    (token_hash, license_hash, expires_at),
+                )
+                conn.commit()
+            finally:
+                conn.close()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Set-Cookie", self.session_cookie(token))
@@ -520,9 +522,11 @@ class PrevisHandler(SimpleHTTPRequestHandler):
         token = self.get_cookie_value("frisframe_session")
         if token:
             conn = sqlite3.connect(database_path(), timeout=10.0)
-            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (secret_digest(token),))
-            conn.commit()
-            conn.close()
+            try:
+                conn.execute("DELETE FROM sessions WHERE token_hash = ?", (secret_digest(token),))
+                conn.commit()
+            finally:
+                conn.close()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Set-Cookie", self.session_cookie("", 0))
