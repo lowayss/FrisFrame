@@ -60,6 +60,7 @@ def main() -> None:
         "electron/main.cjs",
         "electron/workspace-ux.js",
         "electron/hud-export-ux.js",
+        "electron/interaction-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
