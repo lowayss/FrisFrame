@@ -50,6 +50,7 @@
       "electron/interaction-ux.js",
       "electron/selection-ux.js",
       "electron/alignment-ux.js",
+      "electron/history-safety-ux.js",
       "electron/startup.html",
       "package.json"
     ],
