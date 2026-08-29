@@ -252,8 +252,13 @@
     return exact;
   };
 
-  if (threeView?.raycaster) {
+  // Three.js creates the raycaster lazily with the 3D viewport. Retune its line
+  // and point thresholds both immediately and after a view-button activation.
+  const tuneRaycaster = () => {
+    if (!threeView?.raycaster) return;
     threeView.raycaster.params.Line.threshold = Math.max(0.09, Number(threeView.raycaster.params.Line.threshold || 0));
     threeView.raycaster.params.Points.threshold = Math.max(0.11, Number(threeView.raycaster.params.Points.threshold || 0));
-  }
+  };
+  tuneRaycaster();
+  document.getElementById("viewButtons")?.addEventListener("click", () => requestAnimationFrame(tuneRaycaster), true);
 })();
