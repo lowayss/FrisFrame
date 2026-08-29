@@ -1,0 +1,38 @@
+name: One-shot frame base composition refactor
+
+on:
+  push:
+    branches:
+      - refactor/frame-base-composition-20260829
+    paths:
+      - .github/workflows/refactor-frame-base.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/frame-base-composition-20260829
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract frame base composition
+        run: python3 tools/refactor_frame_base.py
+      - name: Run full project checks
+        run: python3 quality_check.py
+      - name: Commit frame base composition extraction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js motion-core.js tests/motion-core.test.cjs tests/dom-contract.test.cjs tests/reference-video-contract.test.cjs
+          git diff --cached --check
+          git commit -m "Extract base frame composition"
+          git push origin HEAD:refactor/frame-base-composition-20260829
