@@ -443,6 +443,59 @@
     return Math.abs(safeTime - frame / safeFps) <= Math.max(0.000001, toleranceSeconds);
   }
 
+
+  function referenceFinalCameraExposure(blocking = {}, exportRange = {}, fps = 24, minimumFrames = 2) {
+    const motion = blocking?.motion || {};
+    const duration = Math.max(0, finiteNumber(motion.duration, 0));
+    const rangeStart = clamp(finiteNumber(exportRange.start, 0), 0, duration);
+    const rangeEnd = clamp(finiteNumber(exportRange.end, duration), 0, duration);
+    const minimum = Math.max(1, Math.round(finiteNumber(minimumFrames, 2)));
+    const empty = {
+      changed: false,
+      exposureFrames: 0,
+      minimumFrames: minimum,
+      finalKeyTime: null,
+      lastSampleTime: rangeStart,
+    };
+    if (!(rangeEnd > rangeStart)) return empty;
+
+    const schedule = referenceExportFrameSchedule({ start: rangeStart, end: rangeEnd, fps, minFrameCount: 2 });
+    const lastSampleTime = schedule.times.length ? schedule.times[schedule.times.length - 1] : rangeStart;
+    const cameraKeys = (Array.isArray(motion.keyframes) ? motion.keyframes : [])
+      .filter((keyframe) => keyframe?.source === "camera" && Number.isFinite(Number(keyframe?.time)))
+      .filter((keyframe) => finiteNumber(keyframe.time, 0) <= rangeEnd + 0.000001)
+      .sort((a, b) => finiteNumber(a.time, 0) - finiteNumber(b.time, 0));
+    if (cameraKeys.length < 2) return { ...empty, lastSampleTime };
+
+    let finalIndex = -1;
+    for (let index = cameraKeys.length - 1; index >= 0; index -= 1) {
+      const time = finiteNumber(cameraKeys[index]?.time, -1);
+      if (time >= rangeStart - 0.000001 && time <= rangeEnd + 0.000001) {
+        finalIndex = index;
+        break;
+      }
+    }
+    if (finalIndex <= 0) return { ...empty, lastSampleTime };
+
+    const previousKey = cameraKeys[finalIndex - 1];
+    const finalKey = cameraKeys[finalIndex];
+    const finalKeyTime = finiteNumber(finalKey.time, rangeEnd);
+    const fallbackCamera = blocking?.camera || {};
+    const fromPose = { ...fallbackCamera, ...(previousKey?.pose || {}) };
+    const toPose = { ...fallbackCamera, ...(finalKey?.pose || {}) };
+    const changed = poseFieldsChanged(
+      fromPose,
+      toPose,
+      ["x", "y", "height", "panDeg", "tiltDeg", "focal", "aimX", "aimY"],
+      0.0001,
+    );
+    const exposureFrames = schedule.times.reduce(
+      (count, sampleTime) => count + (sampleTime + 0.000001 >= finalKeyTime ? 1 : 0),
+      0,
+    );
+    return { changed, exposureFrames, minimumFrames: minimum, finalKeyTime, lastSampleTime };
+  }
+
   function referenceTailDiscreteEvents(blocking = {}, exportRange = {}, fps = 24) {
     const motion = blocking?.motion || {};
     const duration = Math.max(0, finiteNumber(motion.duration, 0));
@@ -562,6 +615,13 @@
     if (offFrameGrid) addReadinessIssue(issues, "warning", "keys-off-frame-grid", `${offFrameGrid}개 키가 ${Math.round(fps)}FPS 프레임 틱에서 벗어나 있습니다.`);
 
     let tailDiscrete = { lastSampleTime: rangeStart, events: [] };
+    let finalCameraExposure = {
+      changed: false,
+      exposureFrames: 0,
+      minimumFrames: 2,
+      finalKeyTime: null,
+      lastSampleTime: rangeStart,
+    };
     const validRangeForSampling = rangeStart >= 0
       && rangeEnd <= duration + 0.0005
       && rangeEnd > rangeStart;
@@ -574,6 +634,20 @@
           "warning",
           "tail-discrete-event-unsampled",
           `${tailDiscrete.events.length}개 도착 전환이 마지막 CFR 샘플(${tailDiscrete.lastSampleTime.toFixed(3)}초) 뒤에 있어 MP4에 직접 나타나지 않습니다. 키를 최소 1프레임 앞당기거나 출력 구간을 늘리세요.`,
+        );
+      }
+      finalCameraExposure = referenceFinalCameraExposure(
+        blocking,
+        { start: rangeStart, end: rangeEnd },
+        fps,
+        2,
+      );
+      if (finalCameraExposure.changed && finalCameraExposure.exposureFrames < finalCameraExposure.minimumFrames) {
+        addReadinessIssue(
+          issues,
+          "warning",
+          "camera-final-framing-short",
+          `마지막 카메라 도착 구도가 MP4에서 ${finalCameraExposure.exposureFrames}프레임만 직접 보입니다. Seedance가 최종 프레이밍을 읽을 수 있도록 마지막 카메라 키를 앞당기거나 출력 구간을 늘려 최소 ${finalCameraExposure.minimumFrames}프레임 이상 유지하세요.`,
         );
       }
     }
@@ -595,6 +669,7 @@
         actorCount: actors.length,
         cameraKeyCount: keyframes.filter((keyframe) => keyframe.source === "camera").length,
         tailDiscreteEventCount: tailDiscrete.events.length,
+        finalCameraExposureFrames: finalCameraExposure.exposureFrames,
       },
       metadata: {
         sceneNumber: metadata.sceneNumber || 0,
@@ -986,6 +1061,7 @@
     quadraticBezierPoint,
     referenceEntryKey,
     referenceExportFrameSchedule,
+    referenceFinalCameraExposure,
     referenceTailDiscreteEvents,
     rescaleKeyframeTimes,
     safeFileSlug,
