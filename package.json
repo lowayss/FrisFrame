@@ -51,6 +51,7 @@
       "electron/selection-ux.js",
       "electron/alignment-ux.js",
       "electron/history-safety-ux.js",
+      "electron/preview-cache-ux.js",
       "electron/performance-ux.js",
       "electron/startup.html",
       "package.json"
