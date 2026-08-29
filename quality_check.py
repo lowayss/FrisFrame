@@ -57,6 +57,7 @@ def main() -> None:
         "tests/motion-core.test.cjs",
         "tests/reference-video-contract.test.cjs",
         "tests/camera-motion-presets.test.cjs",
+        "tests/reference-batch-export.test.cjs",
         "tests/scene-blocking-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
