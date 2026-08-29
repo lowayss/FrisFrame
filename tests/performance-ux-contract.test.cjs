@@ -19,6 +19,14 @@ assert.match(source, /renderSourceSelect = noop/,
   "direct manipulation must suppress source-select rebuilding");
 assert.match(source, /syncProjectChrome = noop/,
   "direct manipulation must not recalculate project chrome and save fingerprints every pointer event");
+assert.match(source, /function flushFastPoseControls\(/,
+  "pose dragging must have a lightweight inspector update path");
+assert.match(source, /activePoseDrag\(\) && scheduleFastPoseControls\(updateInputs\)/,
+  "pose dragging must bypass the full properties\/preset-grid rebuild path");
+assert.match(source, /stats\.coalescedPoseUi \+= 1/,
+  "pose inspector writes must be coalesced to animation frames");
+assert.match(source, /document\.addEventListener\("pointerup", finishPoseSession, true\)/,
+  "pose inspector must perform a full refresh after the direct edit finishes");
 assert.match(source, /requestAnimationFrame\(\(\) => \{/,
   "expensive direct-edit renderers must be coalesced on animation frames");
 assert.match(source, /coalesceDirectRenderer\("renderThreeView"/,
@@ -26,10 +34,9 @@ assert.match(source, /coalesceDirectRenderer\("renderThreeView"/,
 assert.match(source, /coalesceDirectRenderer\("renderCameraFramePreview"/,
   "camera-frame preview renders must be coalesced during direct manipulation");
 
-// These become true after the packaging files are updated in the same change set.
 assert.ok(packageJson.build.files.includes("electron/performance-ux.js"),
   "desktop package must include the performance UX layer");
 assert.match(main, /"performance-ux\.js"/,
   "Electron main process must inject the performance UX layer");
 
-console.log("performance-ux-contract: fast sync, incremental timeline, and render coalescing contracts passed");
+console.log("performance-ux-contract: fast sync, incremental timeline, pose fast path, and render coalescing contracts passed");
