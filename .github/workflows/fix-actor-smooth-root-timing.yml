@@ -26,6 +26,20 @@ jobs:
           node-version: '22'
       - name: Apply actor smooth root timing
         run: python3 tools/fix_actor_smooth_root_timing.py
+      - name: Migrate guarded evaluator contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("tests/reference-video-contract.test.cjs")
+          text = path.read_text(encoding="utf-8")
+          old = r'''assert.match(app, /interpolatePoseFor\([\s\S]*?plan\.progress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
+            "render-state interpolation must reach the guarded pose evaluator through the core timing plan and camera reference options");'''
+          new = r'''assert.match(app, /interpolatePoseFor\([\s\S]*?interpolationProgress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
+            "render-state interpolation must reach the guarded pose evaluator through authored actor timing and camera reference options");'''
+          if text.count(old) != 1:
+              raise SystemExit(f"contract anchor count={text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
       - name: Run full project checks
         run: python3 quality_check.py
       - name: Commit actor smooth root timing
