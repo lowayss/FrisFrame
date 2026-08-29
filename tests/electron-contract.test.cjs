@@ -17,6 +17,7 @@ const packageVerifier = fs.readFileSync(path.join(root, "electron/scripts/verify
 const runtimeStager = fs.readFileSync(path.join(root, "electron/scripts/stage-runtime.cjs"), "utf8");
 const afterPack = fs.readFileSync(path.join(root, "electron/after-pack.cjs"), "utf8");
 const desktopWorkflow = fs.readFileSync(path.join(root, ".github/workflows/desktop-builds.yml"), "utf8");
+const signingGuide = fs.readFileSync(path.join(root, "SIGNING.md"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 
 assert.equal(packageJson.main, "electron/main.cjs");
@@ -25,7 +26,11 @@ assert.equal(packageLock.packages[""].version, packageJson.version);
 assert.ok(readme.includes(`FrisFrame-${packageJson.version}-arm64.dmg`));
 assert.ok(readme.includes(`FrisFrame-${packageJson.version}-x64.exe`));
 assert.equal(packageJson.build.asar, true);
-assert.equal(packageJson.build.mac.identity, null);
+assert.equal(packageJson.build.mac.hardenedRuntime, true);
+assert.equal(packageJson.build.mac.notarize, false,
+  "ordinary builds stay unsigned; tagged release workflow enables notarization explicitly");
+assert.equal(Object.prototype.hasOwnProperty.call(packageJson.build.mac, "identity"), false,
+  "macOS signing identity must come from CI credentials, not repository config");
 assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "runtime" && entry.from === "dist-runtime/staged-runtime"));
 assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "licenses/THIRD_PARTY_NOTICES.md"));
 assert.equal(packageJson.build.mac.icon, "build/icon.icns");
@@ -54,6 +59,18 @@ assert.match(desktopWorkflow, /name: Windows · x64/);
 assert.match(desktopWorkflow, /runs-on: windows-latest/);
 assert.match(desktopWorkflow, /name: FrisFrame-macOS-arm64/);
 assert.match(desktopWorkflow, /name: FrisFrame-Windows-x64/);
+assert.match(desktopWorkflow, /MAC_CSC_LINK:\s*\$\{\{ secrets\.MAC_CSC_LINK \}\}/);
+assert.match(desktopWorkflow, /APPLE_APP_SPECIFIC_PASSWORD:\s*\$\{\{ secrets\.APPLE_APP_SPECIFIC_PASSWORD \}\}/);
+assert.match(desktopWorkflow, /APPLE_TEAM_ID:\s*\$\{\{ secrets\.APPLE_TEAM_ID \}\}/);
+assert.match(desktopWorkflow, /WIN_CSC_LINK:\s*\$\{\{ secrets\.WIN_CSC_LINK \}\}/);
+assert.match(desktopWorkflow, /--config\.forceCodeSigning=true/);
+assert.match(desktopWorkflow, /--config\.mac\.notarize=true/);
+assert.match(desktopWorkflow, /codesign --verify --deep --strict/);
+assert.match(desktopWorkflow, /xcrun stapler validate/);
+assert.match(desktopWorkflow, /Get-AuthenticodeSignature/);
+assert.match(signingGuide, /Developer ID \+ notarization/);
+assert.match(signingGuide, /WIN_CSC_KEY_PASSWORD/);
+assert.match(signingGuide, /missing or invalid production signing secret intentionally fails/i);
 
 assert.match(main, /contextIsolation:\s*true/);
 assert.match(main, /nodeIntegration:\s*false/);
@@ -127,4 +144,4 @@ assert.ok(server.includes("FRISFRAME_FFMPEG"));
 assert.equal(/https:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(server), false,
   "server CSP must not allow remote renderer assets");
 
-console.log("electron-contract: runtime, security, navigation, permissions, offline assets, and persistent data path passed");
+console.log("electron-contract: runtime, signing, security, navigation, permissions, offline assets, and persistent data path passed");
