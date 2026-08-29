@@ -310,6 +310,19 @@ def json_bytes(payload):
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
+def atomic_write_bytes(path, data):
+    destination = Path(path)
+    temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, destination)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 class PrevisHandler(SimpleHTTPRequestHandler):
     server_version = "FrisFrame"
     sys_version = ""
@@ -742,7 +755,7 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             self.remove_job(job_id)
             raise ValueError("영상 작업의 최대 용량을 초과했습니다.")
         try:
-            frame_path.write_bytes(data)
+            atomic_write_bytes(frame_path, data)
             with JOBS_LOCK:
                 current = JOBS.get(job_id)
                 if current:
