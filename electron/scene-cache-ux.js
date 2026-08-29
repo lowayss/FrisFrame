@@ -8,10 +8,15 @@
     staticItemBuilds: 0,
     staticItemReuses: 0,
     staticItemInvalidations: 0,
+    actorRigBuilds: 0,
+    actorRigReuses: 0,
+    actorRigTransformUpdates: 0,
+    actorRigInvalidations: 0,
     protectedWorldClears: 0,
   };
 
   const staticItems = new Map();
+  const actorRigs = new Map();
   let mainRenderDepth = 0;
   let previewRenderDepth = 0;
 
@@ -40,6 +45,33 @@
     ]);
   }
 
+  function actorRigEligible(item) {
+    if (!item || item.type !== "actor" || item.visible === false) return false;
+    const poseEditingSelectedActor = typeof threeEditMode !== "undefined"
+      && threeEditMode === "pose"
+      && selected?.kind === "item"
+      && selected.id === item.id;
+    return !poseEditingSelectedActor;
+  }
+
+  function actorRigSignature(item, renderState = state) {
+    const structural = { ...item };
+    // These values can be updated on the existing rig without recreating any
+    // geometry/materials or selection helpers.
+    delete structural.x;
+    delete structural.y;
+    delete structural.facing;
+    delete structural.pitch;
+    delete structural.verticalOffset;
+    delete structural.mountedHeight;
+    delete structural.bodyPose;
+    return JSON.stringify([
+      structural,
+      selected?.kind === "item" && selected.id === item.id,
+      Boolean(renderState.showNames),
+    ]);
+  }
+
   function disposeDetached(group) {
     if (!group) return;
     try {
@@ -49,7 +81,7 @@
     }
   }
 
-  function invalidateEntry(itemId, { dispose = true } = {}) {
+  function invalidateStaticEntry(itemId, { dispose = true } = {}) {
     const entry = staticItems.get(itemId);
     if (!entry) return;
     staticItems.delete(itemId);
@@ -57,7 +89,15 @@
     stats.staticItemInvalidations += 1;
   }
 
-  function reusableEntriesFor(renderState = state) {
+  function invalidateActorEntry(itemId, { dispose = true } = {}) {
+    const entry = actorRigs.get(itemId);
+    if (!entry) return;
+    actorRigs.delete(itemId);
+    if (dispose && !entry.group.parent) disposeDetached(entry.group);
+    stats.actorRigInvalidations += 1;
+  }
+
+  function reusableStaticEntriesFor(renderState = state) {
     const reusable = new Map();
     (renderState.items || []).forEach((item) => {
       if (!staticItemEligible(item, renderState)) return;
@@ -69,15 +109,111 @@
     return reusable;
   }
 
+  function reusableActorEntriesFor(renderState = state) {
+    const reusable = new Map();
+    (renderState.items || []).forEach((item) => {
+      if (!actorRigEligible(item)) return;
+      const entry = actorRigs.get(item.id);
+      if (!entry) return;
+      const signature = actorRigSignature(item, renderState);
+      if (entry.signature === signature) reusable.set(item.id, entry);
+    });
+    return reusable;
+  }
+
+  function clearCacheMapForHardWorldClear(cache, invalidationStat) {
+    for (const [itemId, entry] of cache) {
+      const attached = entry.group.parent === threeView?.world;
+      cache.delete(itemId);
+      if (!attached) disposeDetached(entry.group);
+      stats[invalidationStat] += 1;
+    }
+  }
+
+  function actorModelFor(group) {
+    return group?.children?.find((child) => child.name === "humanoid-rig-v2") || null;
+  }
+
+  function applyActorJointTransforms(body, renderItem) {
+    const pose = actorBodyPoseForRender(renderItem);
+    body.traverse((object) => {
+      if (!object.isGroup || !object.userData?.jointId) return;
+      const jointId = object.userData.jointId;
+      const rotation = { ...(pose[jointId] || { x: 0, y: 0, z: 0 }) };
+      if (jointId === "lowerArmL" || jointId === "lowerArmR") rotation.x = -Number(rotation.x || 0);
+      object.rotation.set(
+        degToRad(Number(rotation.x || 0)),
+        degToRad(Number(rotation.y || 0)),
+        degToRad(Number(rotation.z || 0)),
+        "XYZ",
+      );
+    });
+  }
+
+  function syncActorRig(group, item, renderState = state) {
+    const THREE = window.THREE;
+    const body = actorModelFor(group);
+    if (!THREE || !body) return false;
+
+    const renderItem = resolvedItemPose(item, renderState);
+    const dimensions = actorPhysicalDimensions(renderItem);
+    const rigScale = dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M;
+
+    // Reapply only the authored/evaluated transforms. The expensive actor
+    // geometry, materials, editor metadata and helper objects stay allocated.
+    applyActorJointTransforms(body, renderItem);
+    body.scale.set(
+      dimensions.width / spatialScaleCore.ACTOR_RIG_WIDTH_M,
+      dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M,
+      dimensions.depth / spatialScaleCore.ACTOR_RIG_DEPTH_M,
+    );
+
+    // Match makeThreeItem's grounding behavior. Bounds are measured before
+    // actor facing/pitch and before the stage/world translation are applied.
+    group.position.set(0, 0, 0);
+    body.position.y = 0;
+    body.rotation.set(0, 0, 0);
+    group.updateMatrixWorld(true);
+    const actorBounds = new THREE.Box3().setFromObject(body);
+    body.position.y = renderItem.autoMounted ? -0.79 * rigScale : Math.max(0, -actorBounds.min.y);
+
+    const angle = degToRad(Number(renderItem.facing || 0));
+    const pitch = degToRad(Number(renderItem.pitch || 0));
+    body.rotation.set(pitch, Math.PI / 2 - angle, 0, "YXZ");
+
+    const verticalY = Number(renderItem.verticalOffset || 0) + Number(renderItem.mountedHeight || 0);
+    const position = mapToWorld(renderItem, renderState, verticalY);
+    group.position.set(position.x, position.y, position.z);
+
+    const arrow = group.children.find((child) => child.type === "ArrowHelper");
+    if (arrow) {
+      const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
+      const arrowHeight = renderItem.autoMounted
+        ? Math.max(1.05, dimensions.height * 0.84)
+        : dimensions.height * 0.84;
+      const arrowLength = Math.max(0.3, 0.78 * rigScale);
+      arrow.position.set(0, arrowHeight, 0);
+      arrow.setDirection(direction);
+      arrow.setLength(arrowLength, arrowLength * 0.28, arrowLength * 0.17);
+    }
+
+    group.updateMatrixWorld(true);
+    stats.actorRigTransformUpdates += 1;
+    return true;
+  }
+
   window.FrisFrameSceneCacheUxTest = {
     staticItemEligible,
     staticItemSignature,
+    actorRigEligible,
+    actorRigSignature,
+    syncActorRig,
     stats,
   };
 
   if (typeof renderThreeView === "function") {
     const originalRenderThreeView = renderThreeView;
-    renderThreeView = function cachedStaticSceneRender(...args) {
+    renderThreeView = function cachedSceneRender(...args) {
       mainRenderDepth += 1;
       try {
         return originalRenderThreeView(...args);
@@ -101,62 +237,94 @@
 
   if (typeof clearThreeWorld === "function") {
     const originalClearThreeWorld = clearThreeWorld;
-    clearThreeWorld = function preserveStaticItemsDuringClear() {
+    clearThreeWorld = function preserveCachedItemsDuringClear() {
       if (!threeView?.ready || !mainRenderDepth || previewRenderDepth) {
+        if (threeView?.ready) {
+          clearCacheMapForHardWorldClear(staticItems, "staticItemInvalidations");
+          clearCacheMapForHardWorldClear(actorRigs, "actorRigInvalidations");
+        }
         return originalClearThreeWorld();
       }
 
       const renderState = threeView.lastState || state;
-      const reusable = reusableEntriesFor(renderState);
-      const protectedGroups = new Set();
+      const reusableStatic = reusableStaticEntriesFor(renderState);
+      const reusableActors = reusableActorEntriesFor(renderState);
+      let protectedCount = 0;
 
       for (const [itemId, entry] of staticItems) {
-        if (reusable.get(itemId) === entry && entry.group.parent === threeView.world) {
+        if (reusableStatic.get(itemId) === entry && entry.group.parent === threeView.world) {
           threeView.world.remove(entry.group);
-          protectedGroups.add(entry.group);
+          protectedCount += 1;
           continue;
         }
-        // If an old cached object is still attached, let the normal world clear
-        // dispose it. Detached stale entries are disposed here.
         const attached = entry.group.parent === threeView.world;
         staticItems.delete(itemId);
         if (!attached) disposeDetached(entry.group);
         stats.staticItemInvalidations += 1;
       }
 
+      for (const [itemId, entry] of actorRigs) {
+        if (reusableActors.get(itemId) === entry && entry.group.parent === threeView.world) {
+          threeView.world.remove(entry.group);
+          protectedCount += 1;
+          continue;
+        }
+        const attached = entry.group.parent === threeView.world;
+        actorRigs.delete(itemId);
+        if (!attached) disposeDetached(entry.group);
+        stats.actorRigInvalidations += 1;
+      }
+
       originalClearThreeWorld();
-      if (protectedGroups.size) stats.protectedWorldClears += 1;
+      if (protectedCount) stats.protectedWorldClears += 1;
     };
   }
 
   if (typeof makeThreeItem === "function") {
     const originalMakeThreeItem = makeThreeItem;
-    makeThreeItem = function cachedStaticThreeItem(item, renderState = state) {
+    makeThreeItem = function cachedThreeItem(item, renderState = state) {
       // The preview renderer owns a separate scene graph. Never move cached
-      // editor-world objects into previewWorld; preview-cache-ux handles that path.
-      if (!mainRenderDepth || previewRenderDepth || !staticItemEligible(item, renderState)) {
-        return originalMakeThreeItem(item, renderState);
+      // editor-world objects into previewWorld; preview-cache-ux handles it.
+      if (!mainRenderDepth || previewRenderDepth) return originalMakeThreeItem(item, renderState);
+
+      if (item?.type === "actor" && actorRigEligible(item)) {
+        const signature = actorRigSignature(item, renderState);
+        const cached = actorRigs.get(item.id);
+        if (cached?.signature === signature && syncActorRig(cached.group, item, renderState)) {
+          stats.actorRigReuses += 1;
+          return cached.group;
+        }
+        if (cached) invalidateActorEntry(item.id);
+        const group = originalMakeThreeItem(item, renderState);
+        actorRigs.set(item.id, { signature, group });
+        stats.actorRigBuilds += 1;
+        return group;
       }
 
-      const signature = staticItemSignature(item, renderState);
-      const cached = staticItems.get(item.id);
-      if (cached?.signature === signature) {
-        stats.staticItemReuses += 1;
-        return cached.group;
+      if (staticItemEligible(item, renderState)) {
+        const signature = staticItemSignature(item, renderState);
+        const cached = staticItems.get(item.id);
+        if (cached?.signature === signature) {
+          stats.staticItemReuses += 1;
+          return cached.group;
+        }
+        if (cached) invalidateStaticEntry(item.id);
+        const group = originalMakeThreeItem(item, renderState);
+        staticItems.set(item.id, { signature, group });
+        stats.staticItemBuilds += 1;
+        return group;
       }
 
-      if (cached) invalidateEntry(item.id);
-      const group = originalMakeThreeItem(item, renderState);
-      staticItems.set(item.id, { signature, group });
-      stats.staticItemBuilds += 1;
-      return group;
+      return originalMakeThreeItem(item, renderState);
     };
   }
 
   window.addEventListener("beforeunload", () => {
-    for (const [itemId, entry] of staticItems) {
-      if (!entry.group.parent) disposeDetached(entry.group);
-      staticItems.delete(itemId);
+    for (const cache of [staticItems, actorRigs]) {
+      for (const [itemId, entry] of cache) {
+        if (!entry.group.parent) disposeDetached(entry.group);
+        cache.delete(itemId);
+      }
     }
   }, { once: true });
 })();
