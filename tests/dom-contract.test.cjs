@@ -43,7 +43,9 @@ assert.ok(ids.has("exportRangeTools") && ids.has("exportStartInput") && ids.has(
 assert.ok(html.indexOf('id="exportMenu"') < html.indexOf('id="exportRangeTools"') && html.indexOf('id="exportRangeTools"') < html.indexOf('class="timeline panel"'), "MP4 export range belongs in the export menu, not the editing timeline");
 assert.ok(app.includes("function normalizeExportRange("), "MP4 export range needs a normalized time window");
 assert.match(app, /function exportVideoForDocument\([\s\S]*?const exportRange = normalizeExportRange\([\s\S]*?const exportDuration = Math\.max\(0\.01, exportRange\.end - exportRange\.start\)/, "MP4 export must derive frame duration from the selected range");
-assert.match(app, /const renderTime = exportRange\.start \+ progress \* exportDuration;[\s\S]*?interpolateRenderStateAtTime\(exportState, renderTime\)/, "MP4 export must render frames from the selected start time");
+assert.match(app, /const renderTime = frameSchedule\.times\[index\];[\s\S]*?interpolateRenderStateAtTime\(exportState, renderTime\)/, "MP4 export must render frames from the CFR schedule");
+assert.ok(app.includes("window.FrisFrameMotionCore?.referenceExportFrameSchedule"), "MP4 export timing must come from motion-core");
+assert.equal(app.includes("index / (frameCount - 1)"), false, "MP4 evaluation must not stretch authored time across frameCount - 1 intervals");
 assert.match(app, /exportRangeResetBtn[\s\S]*?state\.motion\.exportRange = \{ start: 0, end: state\.motion\.duration \}/, "MP4 export needs a one-click full-range reset");
 assert.match(app, /const \{\s*collisionEpsilon: timelineCollisionEpsilon,[\s\S]*?\} = timelineCore;/, "timeline collision helpers must come from the timeline core");
 assert.ok(app.includes("const PROJECT_SCHEMA_VERSION = 11;"), "continuity and cut snapshots require project schema v11");

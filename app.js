@@ -14902,7 +14902,18 @@ async function exportVideoForDocument(documentState, options = {}) {
     exportState.motion.duration,
   );
   const exportDuration = Math.max(0.01, exportRange.end - exportRange.start);
-  const frameCount = Math.max(2, Math.round(exportDuration * fps));
+  const referenceExportFrameSchedule = window.FrisFrameMotionCore?.referenceExportFrameSchedule;
+  if (typeof referenceExportFrameSchedule !== "function") {
+    notifyApp("모션 코어의 MP4 프레임 스케줄을 불러오지 못했습니다.");
+    return;
+  }
+  const frameSchedule = referenceExportFrameSchedule({
+    start: exportRange.start,
+    end: exportRange.end,
+    fps,
+    minFrameCount: 2,
+  });
+  const frameCount = frameSchedule.frameCount;
   if (frameCount > 1800 && !confirm(
     `${frameCount.toLocaleString()}프레임을 준비합니다. 시간이 오래 걸리고 저장 공간이 많이 필요할 수 있습니다. 계속할까요?`,
   )) return;
@@ -14920,8 +14931,7 @@ async function exportVideoForDocument(documentState, options = {}) {
     selected = null;
 
     for (let index = 0; index < frameCount; index += 1) {
-      const progress = frameCount <= 1 ? 0 : index / (frameCount - 1);
-      const renderTime = exportRange.start + progress * exportDuration;
+      const renderTime = frameSchedule.times[index];
       const renderState = interpolateRenderStateAtTime(exportState, renderTime);
       renderThreeView(renderState, true, { ...size, multiCamera: options.multiCamera === true });
       await nextFrame();
