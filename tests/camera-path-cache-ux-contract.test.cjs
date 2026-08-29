@@ -18,10 +18,22 @@ assert.match(source, /new window\.THREE\.Group\(\)/,
   "path meshes and key markers must be collected into one reusable Three.js group");
 assert.match(source, /originalDrawThreeMotionPaths\(renderState, group\)/,
   "the existing path renderer must remain the source of truth for cached path geometry");
-assert.match(source, /function cameraRigSignature\(/,
-  "camera rigs must have an explicit cache identity");
+assert.match(source, /function cameraRigStructureSignature\(/,
+  "camera rigs must separate structural cache identity from live pose values");
+assert.match(source, /function syncCameraRig\(/,
+  "moving cameras must update an existing camera rig rather than rebuilding it");
+assert.match(source, /function syncCameraCone\(/,
+  "FOV cone geometry must be updated in place for moving or zooming cameras");
+assert.match(source, /setLinePoints\(parts\.supportLines\[0\]/,
+  "tripod support lines must be updated in place");
+assert.match(source, /parts\.body\.position\.copy\(camPos\)/,
+  "camera body transform must follow the evaluated camera pose");
+assert.match(source, /parts\.aimArrow\.setDirection\(aimDirection\)/,
+  "camera aim helper must follow live orientation");
 assert.match(source, /stats\.cameraRigReuses \+= 1/,
   "camera rig reuse must be observable for performance validation");
+assert.match(source, /stats\.cameraRigTransformUpdates \+= 1/,
+  "camera transform-only updates must be observable for performance validation");
 assert.match(source, /threeView\.world\.remove\(pathCache\.group\)/,
   "cached motion paths must be detached before normal world disposal");
 assert.match(source, /threeView\.world\.remove\(entry\.group\)/,
@@ -78,15 +90,25 @@ assert.notEqual(
 
 const profile = { id: "camera-1", name: "A CAM", color: "#69c9ff" };
 const camera = { x: 0.2, y: 0.3, height: 1.6, panDeg: 25, tiltDeg: 0, focal: 35 };
-assert.equal(
-  api.cameraRigSignature(camera, sandbox.state, profile, true, { x: 0, y: 0 }),
-  api.cameraRigSignature({ ...camera }, sandbox.state, { ...profile }, true, { x: 0, y: 0 }),
-  "unchanged camera state must reuse the complete rig including its FOV cone",
-);
 assert.notEqual(
   api.cameraRigSignature(camera, sandbox.state, profile, true, { x: 0, y: 0 }),
-  api.cameraRigSignature({ ...camera, panDeg: 40 }, sandbox.state, profile, true, { x: 0, y: 0 }),
-  "camera pose changes must invalidate an exact camera rig cache rather than showing stale helpers",
+  api.cameraRigSignature({ ...camera, panDeg: 40, focal: 85 }, sandbox.state, profile, true, { x: 0, y: 0 }),
+  "exact camera diagnostics must still detect live pose and lens changes",
+);
+assert.equal(
+  api.cameraRigStructureSignature(sandbox.state, profile, true),
+  api.cameraRigStructureSignature({ ...sandbox.state, cameraSetup: { sensorWidthMm: 24 } }, profile, true),
+  "lens/sensor changes must stay on the transform/FOV update path instead of rebuilding the camera body",
+);
+assert.notEqual(
+  api.cameraRigStructureSignature(sandbox.state, profile, true),
+  api.cameraRigStructureSignature(sandbox.state, { ...profile, color: "#ff5f57" }, true),
+  "profile material changes must rebuild the camera rig structure",
+);
+assert.notEqual(
+  api.cameraRigStructureSignature(sandbox.state, profile, true),
+  api.cameraRigStructureSignature(sandbox.state, profile, false),
+  "active/selection helper structure changes must rebuild the appropriate rig shell",
 );
 
 assert.ok(packageJson.build.files.includes("electron/camera-path-cache-ux.js"),
@@ -94,4 +116,4 @@ assert.ok(packageJson.build.files.includes("electron/camera-path-cache-ux.js"),
 assert.match(main, /"scene-cache-ux\.js"[\s\S]*"camera-path-cache-ux\.js"[\s\S]*"preview-cache-ux\.js"[\s\S]*"performance-ux\.js"/,
   "camera/path caching must load after scene caching and before preview/render coalescing");
 
-console.log("camera-path-cache-ux-contract: camera rig and 3D motion path cache contracts passed");
+console.log("camera-path-cache-ux-contract: moving camera rig, FOV cone and 3D motion path cache contracts passed");
