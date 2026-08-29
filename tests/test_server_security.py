@@ -100,6 +100,28 @@ class ServerSecurityTests(unittest.TestCase):
         self.assertIn("/manual-guide-core.js", server.STATIC_FILES)
         self.assertNotIn("/video-analysis-core.js", server.STATIC_FILES)
 
+    def test_get_session_closes_database_connection_when_query_fails(self):
+        handler = object.__new__(server.PrevisHandler)
+        handler.get_cookie_value = lambda _name: "session-token"
+        connection = mock.MagicMock()
+        connection.cursor.return_value.execute.side_effect = sqlite3.OperationalError("simulated session query failure")
+        previous_license_check = server.ENABLE_LICENSE_CHECK
+        try:
+            server.ENABLE_LICENSE_CHECK = True
+            with mock.patch.object(server.sqlite3, "connect", return_value=connection):
+                self.assertIsNone(handler.get_session())
+        finally:
+            server.ENABLE_LICENSE_CHECK = previous_license_check
+        connection.close.assert_called_once_with()
+
+    def test_verify_license_key_closes_database_connection_when_query_fails(self):
+        handler = object.__new__(server.PrevisHandler)
+        connection = mock.MagicMock()
+        connection.cursor.return_value.execute.side_effect = sqlite3.OperationalError("simulated license query failure")
+        with mock.patch.object(server.sqlite3, "connect", return_value=connection):
+            self.assertIsNone(handler.verify_license_key("FRIS-TEST-FAIL-0001"))
+        connection.close.assert_called_once_with()
+
     def test_atomic_frame_write_preserves_previous_file_on_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "frame_000001.jpg"

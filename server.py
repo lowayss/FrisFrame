@@ -376,6 +376,7 @@ class PrevisHandler(SimpleHTTPRequestHandler):
         if not token:
             return None
         token_hash = secret_digest(token)
+        conn = None
         try:
             conn = sqlite3.connect(database_path(), timeout=10.0)
             cursor = conn.cursor()
@@ -386,12 +387,14 @@ class PrevisHandler(SimpleHTTPRequestHandler):
                 (token_hash, int(time.time())),
             )
             row = cursor.fetchone()
-            conn.close()
             if not row:
                 return None
             return {"token_hash": token_hash, "license_hash": row[0], "expires_at": row[1]}
         except Exception:
             return None
+        finally:
+            if conn is not None:
+                conn.close()
 
     def get_cookie_value(self, name):
         cookie_header = self.headers.get("Cookie")
@@ -414,6 +417,7 @@ class PrevisHandler(SimpleHTTPRequestHandler):
         legacy_hash = legacy_license_digest(key)
         if legacy_hash not in candidates:
             candidates.append(legacy_hash)
+        conn = None
         try:
             conn = sqlite3.connect(database_path(), timeout=10.0)
             cursor = conn.cursor()
@@ -429,10 +433,12 @@ class PrevisHandler(SimpleHTTPRequestHandler):
                 cursor.execute("UPDATE sessions SET license_hash = ? WHERE license_hash = ?", (key_hash, previous_hash))
                 cursor.execute("UPDATE projects SET owner_license_hash = ? WHERE owner_license_hash = ?", (key_hash, previous_hash))
                 conn.commit()
-            conn.close()
             return key_hash if row is not None else None
         except Exception:
             return None
+        finally:
+            if conn is not None:
+                conn.close()
 
     def validate_origin(self):
         origin = self.headers.get("Origin")
