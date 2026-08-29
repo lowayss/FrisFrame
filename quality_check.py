@@ -103,6 +103,8 @@ def main() -> None:
         "tests/preview-cache-ux-contract.test.cjs",
         "tests/performance-ux-contract.test.cjs",
         "tests/large-scene-performance.test.cjs",
+        "tests/spawn-layout-contract.test.cjs",
+        "tests/desktop-ux-manifest.test.cjs",
         "tests/mcp-desktop-runtime-contract.test.cjs",
         "tests/mcp-first-product-boundary.test.cjs",
         "tests/dom-contract.test.cjs",
