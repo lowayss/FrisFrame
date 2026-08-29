@@ -122,6 +122,29 @@ class ServerSecurityTests(unittest.TestCase):
             self.assertIsNone(handler.verify_license_key("FRIS-TEST-FAIL-0001"))
         connection.close.assert_called_once_with()
 
+    def test_activate_license_closes_database_connection_when_insert_fails(self):
+        handler = object.__new__(server.PrevisHandler)
+        handler.is_https_request = lambda: True
+        handler.activation_rate_limited = lambda: False
+        handler.read_body = lambda _limit: json.dumps({"licenseKey": "FRIS-TEST-0000-0001"}).encode("utf-8")
+        handler.verify_license_key = lambda _key: "sha256:test-license"
+        connection = mock.MagicMock()
+        connection.cursor.return_value.execute.side_effect = sqlite3.OperationalError("simulated activation insert failure")
+        with mock.patch.object(server.sqlite3, "connect", return_value=connection):
+            with self.assertRaises(sqlite3.OperationalError):
+                handler.activate_license()
+        connection.close.assert_called_once_with()
+
+    def test_deactivate_license_closes_database_connection_when_delete_fails(self):
+        handler = object.__new__(server.PrevisHandler)
+        handler.get_cookie_value = lambda _name: "session-token"
+        connection = mock.MagicMock()
+        connection.execute.side_effect = sqlite3.OperationalError("simulated deactivation delete failure")
+        with mock.patch.object(server.sqlite3, "connect", return_value=connection):
+            with self.assertRaises(sqlite3.OperationalError):
+                handler.deactivate_license()
+        connection.close.assert_called_once_with()
+
     def test_atomic_frame_write_preserves_previous_file_on_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "frame_000001.jpg"
