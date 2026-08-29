@@ -197,6 +197,116 @@ function installMcpFirstWorkflowUi() {
       .camera-frame-mode-btn,
       .three-jog-container { transition: opacity .14s ease; }
       .canvas-wrap:not(:hover) .stage-zoom-controls { opacity: .72; }
+
+      /* Timeline: keep everyday keyframing visible and move secondary controls away. */
+      .timeline.frisframe-timeline-polished {
+        padding-top: 8px;
+      }
+      .frisframe-timeline-polished .timeline-main {
+        gap: 5px !important;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .frisframe-timeline-polished #addKeyBtn {
+        border-color: #d95440;
+        background: var(--accent, #ff6b55);
+        color: #fff8f5;
+      }
+      .frisframe-timeline-polished #addKeyBtn:hover {
+        background: #f75f49;
+      }
+      .frisframe-timeline-polished #updateKeyBtn,
+      .frisframe-timeline-polished #deleteKeyBtn {
+        min-width: 0;
+        padding: 0 8px;
+      }
+      .frisframe-timeline-polished .timeline-edit-tools {
+        gap: 3px;
+        margin-left: 2px;
+      }
+      .frisframe-timeline-polished .timeline-fields {
+        display: grid !important;
+        grid-template-columns: minmax(140px, 1.6fr) minmax(92px, .65fr) !important;
+        gap: 7px !important;
+        align-items: end;
+      }
+      .frisframe-timeline-polished .timeline-fields > label {
+        min-width: 0;
+      }
+      .frisframe-timeline-polished #keyTimeInput {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .frisframe-timeline-advanced {
+        margin: 6px 0 4px;
+        border: 0;
+      }
+      .frisframe-timeline-advanced > summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 25px;
+        padding: 0 8px;
+        border: 1px solid rgba(255,255,255,.09);
+        border-radius: 6px;
+        color: #aeb5be;
+        background: rgba(255,255,255,.025);
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 800;
+        user-select: none;
+        list-style: none;
+      }
+      .frisframe-timeline-advanced > summary::-webkit-details-marker { display: none; }
+      .frisframe-timeline-advanced > summary::before {
+        content: "›";
+        font-size: 15px;
+        line-height: 1;
+        transition: transform .12s ease;
+      }
+      .frisframe-timeline-advanced[open] > summary::before { transform: rotate(90deg); }
+      .frisframe-timeline-advanced-copy {
+        color: #707781;
+        font-weight: 600;
+      }
+      .frisframe-timeline-advanced-body {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 7px;
+        margin-top: 7px;
+        padding: 8px;
+        border: 1px solid rgba(255,255,255,.07);
+        border-radius: 7px;
+        background: rgba(0,0,0,.08);
+      }
+      .frisframe-timeline-advanced-body > label {
+        min-width: 118px;
+        flex: 1 1 140px;
+      }
+      .frisframe-timeline-advanced-body #timelineMode {
+        flex: 0 0 auto;
+        align-self: center;
+      }
+      .frisframe-timeline-advanced-body #cameraHeightKeyBtn {
+        align-self: end;
+      }
+      .frisframe-timeline-polished .timeline-hint,
+      .frisframe-timeline-polished #keyStatus {
+        font-size: 10px;
+        opacity: .8;
+      }
+      .frisframe-timeline-polished .source-timeline-list:empty {
+        display: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .frisframe-panel-edge-toggle,
+        .compact-details > summary::after,
+        .frisframe-timeline-advanced > summary::before {
+          transition: none !important;
+        }
+      }
     `;
     document.head.append(style);
 
@@ -207,6 +317,15 @@ function installMcpFirstWorkflowUi() {
       set(key, value) {
         try { window.localStorage.setItem(key, value); } catch { /* optional UI state */ }
       },
+    };
+
+    let resizeFrame = 0;
+    const scheduleResize = () => {
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0;
+        window.dispatchEvent(new Event("resize"));
+      });
     };
 
     const retiredExportIds = [
@@ -260,6 +379,8 @@ function installMcpFirstWorkflowUi() {
     relabel("framePairPanelBtn", "첫·끝 프레임");
     relabel("videoBtn", "프리비즈 MP4");
     relabel("videoPanelBtn", "프리비즈 MP4");
+    relabel("addKeyBtn", "키 +");
+    relabel("updateKeyBtn", "갱신");
 
     const exportCopy = document.querySelector(".export-panel-copy");
     if (exportCopy) {
@@ -271,6 +392,34 @@ function installMcpFirstWorkflowUi() {
       note.className = "frisframe-export-note";
       note.textContent = "배경·인물·소품 이미지는 외부 생성형 이미지 도구에서 만들고, 최종 영상 설명과 프롬프트 조립은 MCP 대화에서 처리합니다.";
       exportActions.prepend(note);
+    }
+
+    const timeline = document.querySelector(".timeline");
+    const timelineFields = timeline?.querySelector(".timeline-fields");
+    if (timeline && timelineFields && !timeline.classList.contains("frisframe-timeline-polished")) {
+      timeline.classList.add("frisframe-timeline-polished");
+      const advanced = document.createElement("details");
+      advanced.className = "frisframe-timeline-advanced";
+      advanced.open = safeStorage.get("frisframe.ui.timelineAdvanced") === "1";
+      advanced.innerHTML = '<summary>세부 설정 <span class="frisframe-timeline-advanced-copy">도착 · 경로 · 보기 · 전체 시간</span></summary><div class="frisframe-timeline-advanced-body"></div>';
+      const body = advanced.querySelector(".frisframe-timeline-advanced-body");
+      const moveIntoAdvanced = (element) => {
+        if (!element || !body) return;
+        const movable = element.closest("label") || element;
+        body.append(movable);
+      };
+      moveIntoAdvanced(document.getElementById("keyTransitionSelect"));
+      moveIntoAdvanced(document.getElementById("keyPathSelect"));
+      moveIntoAdvanced(document.getElementById("durationInput"));
+      moveIntoAdvanced(document.getElementById("timelineMode"));
+      moveIntoAdvanced(document.getElementById("cameraHeightKeyBtn"));
+      timelineFields.insertAdjacentElement("afterend", advanced);
+      advanced.addEventListener("toggle", () => safeStorage.set("frisframe.ui.timelineAdvanced", advanced.open ? "1" : "0"));
+
+      const timeInput = document.getElementById("keyTimeInput");
+      if (timeInput) {
+        timeInput.title = "현재 시간 · Alt+←/→ 0.1초 이동 · Shift+Alt+←/→ 1초 이동";
+      }
     }
 
     const detailsKey = (details, index) => {
@@ -301,15 +450,6 @@ function installMcpFirstWorkflowUi() {
     };
     requestAnimationFrame(rememberDetailsState);
 
-    const propertiesPanel = document.getElementById("propertiesPanel");
-    const propertiesForm = document.getElementById("propertiesForm");
-    if (propertiesPanel && propertiesForm) {
-      const revealProperties = () => {
-        if (!propertiesForm.hidden) propertiesPanel.open = true;
-      };
-      new MutationObserver(revealProperties).observe(propertiesForm, { attributes: true, attributeFilter: ["hidden"] });
-    }
-
     let leftHidden = safeStorage.get("frisframe.ui.leftPanelHidden") === "1";
     let rightHidden = safeStorage.get("frisframe.ui.rightPanelHidden") === "1";
     let focusMode = false;
@@ -329,7 +469,7 @@ function installMcpFirstWorkflowUi() {
         focusButton.setAttribute("aria-pressed", String(focusMode));
         focusButton.title = focusMode ? "집중 모드 끝내기 (Shift+F)" : "캔버스 집중 모드 (Shift+F)";
       }
-      window.dispatchEvent(new Event("resize"));
+      scheduleResize();
     };
 
     const setFocusMode = (next) => {
@@ -347,6 +487,21 @@ function installMcpFirstWorkflowUi() {
       }
       syncWorkspacePanels();
     };
+
+    const propertiesPanel = document.getElementById("propertiesPanel");
+    const propertiesForm = document.getElementById("propertiesForm");
+    if (propertiesPanel && propertiesForm) {
+      const revealProperties = () => {
+        if (propertiesForm.hidden) return;
+        propertiesPanel.open = true;
+        if (focusMode) setFocusMode(false);
+        if (rightHidden) {
+          rightHidden = false;
+          syncWorkspacePanels();
+        }
+      };
+      new MutationObserver(revealProperties).observe(propertiesForm, { attributes: true, attributeFilter: ["hidden"] });
+    }
 
     if (canvasWrap) {
       const createEdgeToggle = (side) => {
@@ -386,6 +541,19 @@ function installMcpFirstWorkflowUi() {
       focusButton.setAttribute("aria-pressed", "false");
       focusButton.addEventListener("click", () => setFocusMode(!focusMode));
       toolbar.prepend(focusButton);
+
+      const toolbarMenus = [...toolbar.querySelectorAll("details.toolbar-menu")];
+      toolbarMenus.forEach((menu) => {
+        menu.addEventListener("toggle", () => {
+          if (!menu.open) return;
+          toolbarMenus.forEach((other) => {
+            if (other !== menu) other.open = false;
+          });
+        });
+        menu.addEventListener("click", (event) => {
+          if (event.target.closest("button")) requestAnimationFrame(() => { menu.open = false; });
+        });
+      });
     }
 
     const annotationToolbar = document.getElementById("annotationToolbar");
@@ -422,11 +590,28 @@ function installMcpFirstWorkflowUi() {
     }
 
     window.addEventListener("keydown", (event) => {
-      if (!event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.key.toLowerCase() !== "f") return;
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable) return;
-      event.preventDefault();
-      setFocusMode(!focusMode);
+      const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
+
+      if (event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "f" && !typing) {
+        event.preventDefault();
+        setFocusMode(!focusMode);
+        return;
+      }
+
+      if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !typing) {
+        const timeInput = document.getElementById("keyTimeInput");
+        const durationInput = document.getElementById("durationInput");
+        if (!timeInput) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 1 : 0.1;
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const maximum = Number(durationInput?.value || timeInput.max || 60);
+        const next = Math.min(maximum, Math.max(0, Number(timeInput.value || 0) + step * direction));
+        timeInput.value = String(Math.round(next * 1000) / 1000);
+        timeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     });
 
     removeRetiredExportControls();
