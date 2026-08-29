@@ -16,20 +16,10 @@
   const style = document.createElement("style");
   style.textContent = `
     /* 3D HUD: keep edit mode visible, hide instructions until requested. */
-    .three-hud.frisframe-hud-polished {
-      gap: 6px;
-    }
-    .three-hud.frisframe-hud-polished .three-hud-controls {
-      gap: 6px;
-    }
-    .three-hud.frisframe-hud-polished .three-editbar {
-      min-height: 30px;
-    }
-    .frisframe-3d-help {
-      position: relative;
-      margin: 0;
-      border: 0;
-    }
+    .three-hud.frisframe-hud-polished { gap: 6px; }
+    .three-hud.frisframe-hud-polished .three-hud-controls { gap: 6px; }
+    .three-hud.frisframe-hud-polished .three-editbar { min-height: 30px; }
+    .frisframe-3d-help { position: relative; margin: 0; border: 0; }
     .frisframe-3d-help > summary {
       min-height: 29px;
       display: inline-flex;
@@ -81,29 +71,15 @@
       box-shadow: 0 10px 28px rgba(0,0,0,.28);
       backdrop-filter: blur(10px);
     }
-    .frisframe-3d-help:not([open]) .three-shortcuts {
-      display: none !important;
-    }
-    .frisframe-3d-help .three-shortcuts span {
-      white-space: nowrap;
-      font-size: 9px;
-    }
-    .three-wrap .three-jog-container {
-      transition: opacity .14s ease, transform .14s ease;
-    }
-    .three-wrap:not(:hover) .three-jog-container {
-      opacity: .28;
-    }
+    .frisframe-3d-help:not([open]) .three-shortcuts { display: none !important; }
+    .frisframe-3d-help .three-shortcuts span { white-space: nowrap; font-size: 9px; }
+    .three-wrap .three-jog-container { transition: opacity .14s ease, transform .14s ease; }
+    .three-wrap:not(:hover) .three-jog-container { opacity: .28; }
     .three-wrap:hover .three-jog-container,
-    .three-jog-container:focus-within {
-      opacity: 1;
-    }
+    .three-jog-container:focus-within { opacity: 1; }
 
     /* Export: range is MP4 detail, not the first thing users should manage. */
-    #exportMenu .frisframe-export-range-details {
-      margin: 1px 0 4px;
-      border: 0;
-    }
+    #exportMenu .frisframe-export-range-details { margin: 1px 0 4px; border: 0; }
     #exportMenu .frisframe-export-range-details > summary {
       min-height: 30px;
       display: flex;
@@ -127,9 +103,7 @@
       line-height: 1;
       transition: transform .12s ease;
     }
-    #exportMenu .frisframe-export-range-details[open] > summary::before {
-      transform: rotate(90deg);
-    }
+    #exportMenu .frisframe-export-range-details[open] > summary::before { transform: rotate(90deg); }
     #exportMenu .frisframe-export-range-details > summary small {
       margin-left: auto;
       color: #727a84;
@@ -145,12 +119,8 @@
     }
     #exportMenu .toolbar-menu-popover > #frameBtn,
     #exportMenu .toolbar-menu-popover > #framePairBtn,
-    #exportMenu .toolbar-menu-popover > #videoBtn {
-      min-height: 34px;
-    }
-    #exportMenu .toolbar-menu-popover > #videoBtn {
-      margin-top: 2px;
-    }
+    #exportMenu .toolbar-menu-popover > #videoBtn { min-height: 34px; }
+    #exportMenu .toolbar-menu-popover > #videoBtn { margin-top: 2px; }
     .frisframe-export-workflow-note {
       margin: 3px 2px 1px;
       color: #727983;
@@ -209,19 +179,11 @@
       border-color: rgba(255,255,255,.18);
       background: rgba(255,255,255,.06);
     }
-    .frisframe-time-stepper #keyTimeInput {
-      width: 100%;
-      min-width: 0;
-    }
-    #viewButtons [data-view]::after {
-      content: "";
-    }
+    .frisframe-time-stepper #keyTimeInput { width: 100%; min-width: 0; }
 
     @media (prefers-reduced-motion: reduce) {
       .frisframe-export-range-details > summary::before,
-      .three-wrap .three-jog-container {
-        transition: none !important;
-      }
+      .three-wrap .three-jog-container { transition: none !important; }
     }
   `;
   document.head.append(style);
