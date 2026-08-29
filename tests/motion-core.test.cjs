@@ -93,6 +93,13 @@ assert.equal(motionSegments(guideKeys).length, 2);
 assert.equal(activeMotionSegment(guideKeys, 1)?.end.id, "b");
 assert.equal(activeMotionSegment(guideKeys, 3), null, "hold segments do not report continuous movement");
 
+const propHeightKeys = [
+  { id: "floor", time: 0, pose: { mountedHeight: 2 } },
+  { id: "drop", time: 3, transition: "linear", pose: { mountedHeight: 0 } },
+];
+assert.equal(motionSegments(propHeightKeys, ["mountedHeight"]).length, 1);
+assert.equal(activeMotionSegment(propHeightKeys, 1, ["mountedHeight"])?.end.id, "drop");
+
 const originalTiming = [
   { id: "start", time: 0 },
   { id: "middle", time: 3 },

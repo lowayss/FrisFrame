@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -93,6 +94,7 @@ class ServerSecurityTests(unittest.TestCase):
         self.assertNotIn("/.git/config", server.STATIC_FILES)
         self.assertIn("/app.js", server.STATIC_FILES)
         self.assertIn("/motion-core.js", server.STATIC_FILES)
+        self.assertIn("/scene-blocking-core.js", server.STATIC_FILES)
         self.assertIn("/project-recovery-core.js", server.STATIC_FILES)
         self.assertIn("/manual-guide-core.js", server.STATIC_FILES)
         self.assertNotIn("/video-analysis-core.js", server.STATIC_FILES)
@@ -297,6 +299,65 @@ class ProjectManagementApiTests(unittest.TestCase):
             "last_activity": 0,
             "status": "encoding",
         }, now))
+        self.assertFalse(server.job_is_expired({
+            "created_at": 0,
+            "last_activity": 0,
+            "status": "queued",
+        }, now))
+        self.assertIsInstance(server.ENCODE_LOCK, type(threading.Lock()))
+
+    def test_mp4_encoder_allows_only_one_active_job(self):
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        second_entered = threading.Event()
+        failures = []
+        job_ids = ["encoder-test-first", "encoder-test-second"]
+
+        with server.JOBS_LOCK:
+            for job_id in job_ids:
+                server.JOBS[job_id] = {
+                    "status": "queued",
+                    "created_at": time.time(),
+                    "last_activity": time.time(),
+                }
+
+        def hold_first_encoder():
+            try:
+                with server.exclusive_mp4_encoder(job_ids[0]):
+                    first_entered.set()
+                    release_first.wait(2)
+            except Exception as error:
+                failures.append(error)
+
+        def wait_for_second_encoder():
+            try:
+                first_entered.wait(2)
+                with server.exclusive_mp4_encoder(job_ids[1]):
+                    second_entered.set()
+            except Exception as error:
+                failures.append(error)
+
+        first_thread = threading.Thread(target=hold_first_encoder)
+        second_thread = threading.Thread(target=wait_for_second_encoder)
+        try:
+            first_thread.start()
+            second_thread.start()
+            self.assertTrue(first_entered.wait(1))
+            self.assertFalse(second_entered.wait(0.1))
+            release_first.set()
+            self.assertTrue(second_entered.wait(1))
+            first_thread.join(timeout=2)
+            second_thread.join(timeout=2)
+            self.assertFalse(first_thread.is_alive())
+            self.assertFalse(second_thread.is_alive())
+            self.assertEqual(failures, [])
+        finally:
+            release_first.set()
+            first_thread.join(timeout=2)
+            second_thread.join(timeout=2)
+            with server.JOBS_LOCK:
+                for job_id in job_ids:
+                    server.JOBS.pop(job_id, None)
 
     def test_rename_uses_revision_and_preserves_newer_content(self):
         _, stored = self.request_json("/api/projects/store", {"document": self.project_document("원본")})

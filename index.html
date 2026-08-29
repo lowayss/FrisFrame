@@ -6,7 +6,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
     <title>FrisFrame</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260716-04" />
+    <link rel="stylesheet" href="./styles.css?v=20260829-01" />
     <script src="./boot-errors.js?v=20260713-01"></script>
   </head>
   <body>
@@ -64,8 +64,29 @@
           <details class="toolbar-menu" id="exportMenu">
             <summary><i data-lucide="share-2" aria-hidden="true"></i><span>내보내기</span><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
             <div class="toolbar-menu-popover">
+              <div id="exportRangeTools" class="export-range-tools" aria-label="MP4 익스포트 구간">
+                <strong>MP4 출력 구간</strong>
+                <div class="export-range-fields">
+                  <label class="compact-field">
+                    <span>시작</span>
+                    <input id="exportStartInput" type="number" min="0" max="60" step="0.01" value="0" aria-label="MP4 출력 시작 시간" />
+                    <span>초</span>
+                  </label>
+                  <span class="export-range-separator">–</span>
+                  <label class="compact-field">
+                    <span>끝</span>
+                    <input id="exportEndInput" type="number" min="0.01" max="60" step="0.01" value="15" aria-label="MP4 출력 끝 시간" />
+                    <span>초</span>
+                  </label>
+                </div>
+                <div class="export-range-actions">
+                  <button id="exportRangeResetBtn" class="text-btn" type="button" title="전체 타임라인을 출력 구간으로 설정">전체</button>
+                  <span id="exportRangeSummary" class="export-range-summary">0.00–15.00초 · 15.00초</span>
+                </div>
+              </div>
               <button id="blockingPlanBtn" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹 이미지</span></button>
               <button id="frameBtn" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
+              <button id="backgroundSheetBtn" class="primary-btn"><i data-lucide="layers-3" aria-hidden="true"></i><span>배경시트 레퍼런스</span></button>
               <button id="framePairBtn" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝 프레임</span></button>
               <button id="productionPackBtn" class="text-btn"><i data-lucide="package-check" aria-hidden="true"></i><span>촬영 자료 ZIP</span></button>
               <button id="multiCamPreviewBtn" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠 프리뷰</span></button>
@@ -290,6 +311,20 @@
           </button>
         </details>
 
+        <details class="spatial-reference-panel compact-details" aria-label="배경 공간 레퍼런스" open>
+          <summary><span>배경 공간 레퍼런스</span><small id="spatialReferenceStatus">없음</small></summary>
+          <label class="spatial-reference-file-btn" for="spatialReferenceImageInput">
+            <i data-lucide="image-plus" aria-hidden="true"></i>
+            <span>세트 / 배경 이미지 넣기</span>
+          </label>
+          <input id="spatialReferenceImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <img id="spatialReferencePreview" class="spatial-reference-preview" alt="배경 공간 레퍼런스 미리보기" hidden />
+          <div class="spatial-reference-actions">
+            <button id="clearSpatialReferenceBtn" type="button" class="text-btn" disabled>제거</button>
+          </div>
+          <p class="spatial-reference-help">형태를 복사하지 않고, 큰 덩어리·인물 비례·위치·깊이·거리 관계를 구조 분석 기준으로 사용합니다.</p>
+        </details>
+
         <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible open>
           <summary>카메라</summary>
           <section class="camera-rig-panel" aria-label="멀티카메라">
@@ -299,8 +334,8 @@
             </div>
             <div id="cameraRigList" class="camera-rig-list"></div>
             <div class="camera-rig-actions">
-              <button id="addCameraBtn" type="button" class="text-btn"><i data-lucide="plus" aria-hidden="true"></i><span>카메라 추가</span></button>
-              <button id="multiCamPreviewPanelBtn" type="button" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠 보기</span></button>
+              <button id="addCameraBtn" type="button" class="text-btn" aria-label="카메라 추가"><i data-lucide="plus" aria-hidden="true"></i><span>추가</span></button>
+              <button id="multiCamPreviewPanelBtn" type="button" class="text-btn" aria-label="멀티카메라 프리뷰"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠</span></button>
             </div>
           </section>
           <div class="lock-control-group" aria-label="카메라 편집 잠금">
@@ -480,12 +515,12 @@
               <button type="button" data-timeline-view="combined" class="is-active">통합</button>
               <button type="button" data-timeline-view="split">대상별</button>
             </div>
-            <button id="addKeyBtn" class="text-btn" title="키프레임 추가 (K)"><span>키프레임 추가</span></button>
-            <button id="cameraHeightKeyBtn" class="text-btn camera-height-key-btn" type="button" title="현재 시간에 카메라 높이 키 추가 또는 갱신"><span>카메라 높이 키</span></button>
-            <button id="updateKeyBtn" class="text-btn" title="선택 키 갱신 (Shift+K)"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>선택 키 갱신</span></button>
+            <button id="addKeyBtn" class="text-btn" title="키프레임 추가 (K)" aria-label="키프레임 추가"><span>키 추가</span></button>
+            <button id="cameraHeightKeyBtn" class="text-btn camera-height-key-btn" type="button" title="현재 시간에 카메라 높이 키 추가 또는 갱신" aria-label="카메라 높이 키 추가 또는 갱신"><span>높이 키</span></button>
+            <button id="updateKeyBtn" class="text-btn" title="선택 키 갱신 (Shift+K)" aria-label="선택한 키프레임 갱신"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>키 갱신</span></button>
             <button id="deleteKeyBtn" class="text-btn"><i data-lucide="trash-2" aria-hidden="true"></i><span>삭제</span></button>
             <div class="timeline-edit-tools" aria-label="키프레임 선택 편집">
-              <button id="selectAllKeysBtn" class="text-btn" type="button" title="현재 보이는 키 모두 선택"><i data-lucide="list-checks" aria-hidden="true"></i><span>모두 선택</span></button>
+              <button id="selectAllKeysBtn" class="text-btn" type="button" title="현재 보이는 키 모두 선택" aria-label="현재 보이는 키 모두 선택"><i data-lucide="list-checks" aria-hidden="true"></i><span>전체 키</span></button>
               <button id="copyKeysBtn" class="icon-btn" type="button" title="선택 키 복사 (Cmd/Ctrl+C)" aria-label="선택 키 복사"><i data-lucide="copy" aria-hidden="true"></i></button>
               <button id="pasteKeysBtn" class="icon-btn" type="button" title="현재 시간에 키 붙여넣기 (Cmd/Ctrl+V)" aria-label="현재 시간에 키 붙여넣기"><i data-lucide="clipboard-paste" aria-hidden="true"></i></button>
             </div>
@@ -566,6 +601,24 @@
           <div id="sourceTimelineList" class="source-timeline-list" aria-label="대상별 타임라인"></div>
           <div class="timeline-hint" id="timelineHint">키 0 · 15초 · 24 FPS</div>
           <div id="keyStatus" class="status-line">키프레임 없음</div>
+          <details id="promptBlockPanel" class="prompt-block-panel" aria-label="모션 프롬프트 블록">
+            <summary class="prompt-block-panel-head">
+              <div>
+                <span class="section-kicker">COZYCLAY PROMPT BLOCKS</span>
+                <strong>모션 프롬프트 블록</strong>
+              </div>
+              <span class="prompt-block-meta">AI 동작 구간</span>
+            </summary>
+            <div class="prompt-block-panel-content">
+              <div class="prompt-block-add-row">
+                <select id="promptBlockSourceSelect" aria-label="프롬프트 블록 대상"></select>
+                <button id="addPromptBlockBtn" type="button" class="primary-btn">블록 추가</button>
+              </div>
+              <p id="promptBlockHelp" class="prompt-block-help">배우별 모션을 시간 구간으로 나눕니다. 이동·속도와 문장에 명시한 포즈만 반영하고, 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다.</p>
+              <div id="promptBlockTimeline" class="prompt-block-timeline" aria-label="프롬프트 블록 타임라인"></div>
+              <div id="promptBlockList" class="prompt-block-list"></div>
+            </div>
+          </details>
         </section>
       </main>
 
@@ -602,11 +655,17 @@
               <div class="range-val-container"><input id="sizeValue" type="number" min="0.25" max="4" step="0.01" value="1" /><span>x</span></div>
               <input id="sizeSlider" type="range" min="0.25" max="4" step="0.01" value="1" />
             </label>
+            <div id="physicalScaleReadout" class="physical-scale-readout" role="status" aria-live="polite"></div>
 
             <label id="actorElevationField" class="range-row" hidden>
               <span>수직 높이</span>
               <div class="range-val-container"><input id="actorElevationValue" type="number" min="-1" max="5" step="0.05" value="0" /><span>m</span></div>
               <input id="actorElevationSlider" type="range" min="-1" max="5" step="0.05" value="0" />
+            </label>
+
+            <label id="actorDummyField" class="stack-field" hidden>
+              <span>더미 유형</span>
+              <select id="selectedActorDummy"></select>
             </label>
 
             <div id="propSpecificFields" class="property-subgroup" hidden>
@@ -660,19 +719,6 @@
                   <select id="actorSeatSelect"></select>
                 </label>
               </div>
-            </div>
-
-            <div id="actorMotionFields" class="property-subgroup" hidden>
-              <label class="stack-field">
-                <span>동선 동작</span>
-                <select id="actorLocomotionMode">
-                  <option value="auto">속도에 따라 자동</option>
-                  <option value="pose">포즈 유지</option>
-                  <option value="walk">걷기</option>
-                  <option value="run">달리기</option>
-                </select>
-              </label>
-              <p id="actorLocomotionHint" class="actor-pose-hint">동선 거리와 속도에 맞춰 팔·다리 보행을 프리뷰에 합성합니다.</p>
             </div>
 
             <div id="actorPoseFields" class="actor-pose-editor" hidden>
@@ -793,10 +839,11 @@
 
         <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible data-desktop-default="closed">
           <summary>내보내기</summary>
-          <p class="export-panel-copy">2D 동선도와 3D 카메라 프레임을 이미지 또는 영상으로 준비합니다.</p>
+          <p class="export-panel-copy">2D 동선도, 3D 카메라 프레임, 배경시트 레퍼런스를 준비합니다.</p>
           <div class="export-panel-actions">
             <button id="blockingPlanPanelBtn" type="button" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹</span></button>
             <button id="framePanelBtn" type="button" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
+            <button id="backgroundSheetPanelBtn" type="button" class="primary-btn"><i data-lucide="layers-3" aria-hidden="true"></i><span>배경시트</span></button>
             <button id="framePairPanelBtn" type="button" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝</span></button>
             <button id="productionPackPanelBtn" type="button" class="text-btn"><i data-lucide="package-check" aria-hidden="true"></i><span>촬영 자료</span></button>
             <button id="multiCamPreviewPanelBtnSecondary" type="button" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠</span></button>
@@ -940,8 +987,8 @@
               <header><i data-lucide="box" aria-hidden="true"></i><div><span>05</span><h3>3D 프리비즈</h3><p>높이와 거리감을 포함한 무대 배치와 실제 카메라 프레임을 함께 검토합니다.</p></div></header>
               <div class="manual-detail-grid">
                 <section><h4>대상 편집</h4><ul><li><b>G 이동</b>: 배우, 소품과 카메라를 바닥면에서 이동합니다.</li><li><b>R 회전</b>: 선택 대상을 회전하고 카메라는 팬 방향을 바꿉니다.</li><li><b>P 포즈</b>: 배우 관절 구체나 팔·다리·머리 등 **신체 부위를 직접 드래그**하여 관절인형처럼 직관적으로 자세를 만듭니다. 관절을 선택하면 나타나는 **3차원 회전 기즈모 고리(빨강: X축 앞뒤, 초록: Y축 회전, 파랑: Z축 기울기)**를 잡고 드래그하면 단축키 없이 편리하게 해당 축으로만 정밀 포징이 가능합니다.</li></ul></section>
-                <section><h4>간편 포즈 시스템</h4><ul><li><b>30+ 프리셋</b>: 기본, 이동, 앉기/눕기, 액션, 제스처 5개 카테고리 탭 제공.</li><li><b>복사 & 붙여넣기</b>: 현재 배우의 포즈를 복사해 다른 배우에게 그대로 붙여넣습니다.</li><li><b>내 포즈</b>: 마음에 드는 커스텀 포즈에 이름을 붙여 보관하고 필요할 때 재활용합니다.</li><li><b>랜덤</b>: 클릭 시 관절 각도를 난수화해 다양하고 러프한 자세를 빠르게 잡아줍니다.</li></ul></section>
-                <section><h4>동선 동작</h4><ul><li><b>자동</b>: 키 사이 이동 속도에 맞춰 걷기 또는 달리기를 만들고 도착할 때 저장된 포즈로 수렴합니다.</li><li><b>걷기·달리기</b>: 연출 의도에 맞춰 동작을 직접 고정합니다.</li><li><b>포즈 유지</b>: 보행 없이 위치 경로만 확인합니다.</li><li>자동 탑승 배우는 차량 좌석 포즈를 유지합니다.</li></ul></section>
+                <section><h4>간편 포즈 시스템</h4><ul><li><b>25개 프리셋</b>: 기본, 앉기/눕기, 액션, 제스처 4개 카테고리 탭 제공.</li><li><b>복사 & 붙여넣기</b>: 현재 배우의 포즈를 복사해 다른 배우에게 그대로 붙여넣습니다.</li><li><b>내 포즈</b>: 마음에 드는 커스텀 포즈에 이름을 붙여 보관하고 필요할 때 재활용합니다.</li><li><b>랜덤</b>: 클릭 시 관절 각도를 난수화해 다양하고 러프한 자세를 빠르게 잡아줍니다.</li></ul></section>
+                <section><h4>동선 재생</h4><ul><li>배우는 키프레임에 기록한 위치와 방향을 따라 이동합니다.</li><li>포즈 키가 있으면 두 포즈 사이를 자연스럽게 보간합니다.</li><li>자동 탑승 배우는 차량 좌석 포즈를 유지합니다.</li></ul></section>
                 <section><h4>화면 읽기</h4><ul><li>배우, 소품, 카메라와 동선은 서로 다른 색으로 구분됩니다.</li><li>마네킹의 눈·코·입과 머리 방향으로 정면과 시선을 확인합니다.</li><li>오른쪽 아래 카메라 프레임은 표시값 없이 최종 구도만 보여줍니다.</li></ul></section>
                 <section><h4>항상 가능한 시점 조작</h4><ul><li><b>좌클릭</b>: 대상 위에서는 선택·편집하고, 무대 바닥이나 빈 공간에서는 오빗합니다.</li><li><b>가운데 버튼</b>도 오빗으로 동작합니다.</li><li><b>우클릭 드래그</b> 또는 <b>Shift + 가운데 버튼</b>으로 무대 전체를 화면의 좌우·위아래로 이동합니다.</li><li><b>휠</b>로 확대·축소하며, <b>Ctrl + 가운데 버튼</b>으로도 줌할 수 있습니다.</li></ul></section>
                 <section><h4>확인할 것</h4><ul><li>배우가 차량이나 소품과 실제로 겹치지 않는지 확인합니다.</li><li>카메라 높이 변화와 지미집·드론 경로는 측면 각도에서도 확인합니다.</li></ul></section>
@@ -1013,10 +1060,11 @@
               <div class="manual-detail-grid">
                 <section><h4>2D 블로킹 이미지</h4><ul><li>현재 재생 위치의 배우·카메라 배치와 전체 동선, 키 번호, 방향 화살표를 한 장의 PNG로 준비합니다.</li><li>AI 입력에서는 3D 가이드 영상과 함께 별도의 `@plan` 공간 참고 이미지로 사용합니다.</li></ul></section>
                 <section><h4>현재 프레임</h4><ul><li>현재 재생 위치의 카메라 프레임을 PNG로 준비합니다.</li><li>프리뷰의 `이미지 복사`로 클립보드에 넣어 다른 앱에 붙여넣을 수 있습니다.</li></ul></section>
+                <section><h4>배경시트 레퍼런스</h4><ul><li>깨끗한 3D 히어로 프레임, 좌·우 사선 프레임, 2D 평면도, 카메라 설정, 무대 구조 JSON을 하나의 ZIP으로 묶습니다.</li><li>Codex는 이미지와 JSON을 함께 읽어 계단·발코니·벽체·가구의 구조를 유지한 배경 이미지를 만들 수 있습니다.</li><li>별도 프롬프트 입력 없이 구조 데이터가 원본 기준이 됩니다.</li></ul></section>
                 <section><h4>시작·끝 프레임</h4><ul><li>정확히 0초와 전체 시간 끝의 프레임 두 장을 만듭니다.</li><li>두 이미지는 확인 후 ZIP으로 저장합니다.</li></ul></section>
                 <section><h4>멀티캠과 개별 컷</h4><ul><li>`멀티카메라 프리뷰`는 현재 시간의 카메라들을 한 장의 비교 시트로 보여주고, 각 화면의 이미지를 복사할 수 있습니다.</li><li>`멀티캠 영상`은 카메라 순서대로 분할된 H.264 MP4를 먼저 보여줍니다. 카메라를 2대 이상 만든 경우에만 사용할 수 있습니다.</li><li>스토리보드의 선택 컷에서 `이 컷 이미지`는 대표 카메라 프레임을, `이 컷 영상`은 해당 컷만의 H.264 MP4를 준비합니다.</li></ul></section>
                 <section><h4>촬영 자료 ZIP</h4><ul><li>전체 컷 리스트, 연속성 보고서, 카메라별 설정·키프레임, Blender 스크립트와 프리뷰 이미지를 한 번에 준비합니다.</li><li>`project/multi_camera_plan.json`에는 카메라 이름·렌즈·센서·높이·방향·포커스와 카메라별 키가 분리되어 담깁니다.</li><li>포함 파일 수와 미해결 확인 항목을 먼저 읽은 뒤 ZIP을 저장합니다. MP4는 별도의 `프리비즈 영상` 또는 `멀티캠 영상`에서 준비합니다.</li></ul></section>
-                <section><h4>프리비즈 영상</h4><ul><li>카메라 프레임만 렌더링하며 화살표, 지침, 앵커, 렌즈 정보 같은 화면 표식은 포함하지 않습니다.</li><li>출력은 H.264 MP4이며 생성 후 영상 플레이어에서 먼저 재생해 확인합니다.</li></ul></section>
+              <section><h4>프리비즈 영상</h4><ul><li>카메라 프레임만 렌더링하며 화살표, 지침, 앵커, 렌즈 정보 같은 화면 표식은 포함하지 않습니다.</li><li>상단 `내보내기` 메뉴의 `MP4 출력 구간`에서 시작·끝 시간을 정하면 해당 구간만 H.264 MP4로 준비합니다. `전체`를 누르면 전체 타임라인을 출력합니다.</li><li>출력은 영상 플레이어에서 먼저 확인하며, 프레임은 순서대로 전송하고 MP4는 한 번에 하나만 인코딩합니다.</li></ul></section>
                 <section><h4>스토리보드 시트</h4><ul><li>스토리보드의 `이미지 묶기`에서 4·6·12컷 시트를 준비합니다.</li><li>전체 시나리오와 현재 상태 필터가 그대로 적용됩니다.</li></ul></section>
               </div>
               <div class="manual-callout success"><i data-lucide="shield-check" aria-hidden="true"></i><p><strong>자동 다운로드 없음</strong> 모든 출력은 `내보내기 프리뷰`에서 확인하고 `이 프리뷰로 저장`을 직접 눌러야 파일로 저장됩니다.</p></div>
@@ -1243,13 +1291,18 @@
     <script src="./vendor/three.min.js?v=0.160.0"></script>
     <script src="./vendor/lucide.min.js?v=0.468.0"></script>
     <script src="./motion-core.js?v=20260713-01"></script>
+    <script src="./scene-blocking-core.js?v=20260815-01"></script>
+    <script src="./prompt-block-core.js?v=20260828-02"></script>
+    <script src="./prompt-motion-core.js?v=20260829-02"></script>
+    <script src="./previs-runtime-core.js?v=20260828-01"></script>
     <script src="./timeline-core.js?v=20260716-01"></script>
     <script src="./project-recovery-core.js?v=20260713-01"></script>
     <script src="./storyboard-core.js?v=20260716-01"></script>
     <script src="./manual-guide-core.js?v=20260713-01"></script>
-    <script src="./pose-core.js?v=20260714-01"></script>
+    <script src="./pose-core.js?v=20260801-02"></script>
     <script src="./camera-drafting-core.js?v=20260716-01"></script>
     <script src="./multi-camera-core.js?v=20260716-01"></script>
-    <script src="./app.js?v=20260718-06"></script>
+    <script src="./spatial-scale-core.js?v=20260829-01"></script>
+    <script src="./app.js?v=20260829-02"></script>
   </body>
 </html>

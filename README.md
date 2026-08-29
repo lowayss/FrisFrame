@@ -26,7 +26,7 @@ python3 quality_check.py
 
 ## macOS 데스크톱 앱
 
-Apple Silicon용 설치 이미지는 `release/FrisFrame-0.3.17-arm64.dmg`입니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
+Apple Silicon용 설치 이미지는 버전에 따라 `release/FrisFrame-0.4.0-arm64.dmg` 형태로 생성됩니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
 
 기존 로컬 서버 프로젝트를 데스크톱 앱으로 처음 옮기고 패키지를 다시 만드는 명령은 다음과 같습니다.
 
@@ -69,12 +69,19 @@ npm run desktop:build
 - 두 개 이상 선택하면 `선택 구간`과 `구간 맞춤`으로 시작점은 유지하면서 전체 타이밍을 늘이거나 줄일 수 있습니다.
 - `스냅`은 프레임, 0.1초, 0.5초, 1초 또는 끄기 중에서 선택합니다.
 - `부드럽게`, `일정 속도`, `직전 유지`, `즉시 전환`으로 키 사이 움직임을 정합니다.
-- 배우의 `동선 동작`은 `자동`, `걷기`, `달리기`, `포즈 유지` 중에서 선택합니다. 자동은 키 사이 실제 이동 속도에 맞춰 걷기와 달리기를 정하고, 각 키에 도착할 때 저장된 포즈로 자연스럽게 돌아옵니다.
-- `포즈 유지`는 보행 동작 없이 배치 경로만 확인할 때 사용합니다. 자동 탑승 배우는 동선 동작과 관계없이 좌석 포즈를 유지합니다.
+- 배우 동선은 키프레임에 기록한 위치와 방향을 그대로 보간합니다. 포즈 키가 있으면 사용자가 지정한 두 포즈 사이만 보간하며 자동 보행은 만들지 않습니다.
+- 자동 탑승 배우는 차량의 좌석 포즈를 유지합니다.
 - 통합 타임라인과 대상별 타임라인을 전환할 수 있습니다.
 - `카메라 높이 키`는 현재 시간의 카메라 키가 있으면 높이만 갱신하고, 없으면 새 카메라 키를 만듭니다.
 - 센서 포맷은 풀프레임, Super 35, APS-C 또는 직접 입력을 지원하며 센서 폭이 2D 시야, 3D 카메라 프레임과 구도 분석의 실제 화각에 함께 반영됩니다.
 - 조리개는 컷 전체의 촬영 메타데이터이고, 포커스 거리는 카메라 키에 저장됩니다. 서로 다른 포커스 거리의 카메라 키 두 개로 랙 포커스 타이밍을 설계할 수 있습니다.
+
+## AI 동작 Prompt Blocks
+
+- `모션 프롬프트 블록`은 코지클레이의 Prompt Blocks 개념을 프리즈프레임의 배우별 타임라인으로 옮긴 기능입니다. 선택한 배우에 시간 구간과 자연어 모션 요청을 추가하며, 문장에 명시한 포즈만 기존 포즈 코어로 반영합니다. 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다.
+- 블록을 좌우로 끌어 이동하고 양 끝 핸들을 끌어 시작·끝 시간을 조절할 수 있습니다. 같은 배우의 블록은 겹치지 않으며, 서로 다른 배우의 블록은 같은 시간에 병렬로 둘 수 있습니다.
+- 문장은 최대 500자, 한 블록은 0.5초 이상 5초 이하로 정규화됩니다. 블록은 프로젝트 상태에 저장되고 촬영 자료 ZIP의 `project/prompt_blocks.json`과 `docs/seedance_prompt.md`에 함께 기록됩니다.
+- Prompt Blocks는 키프레임과 분리된 변위 레이어입니다. `앞으로 걷다가 점점 빠르게 달린다`는 배우 포즈를 바꾸지 않고 전진 변위와 속도 곡선으로만 반영됩니다. 2D·3D 로컬 프리뷰와 AI 생성용 프롬프트 모두 포즈·팔다리를 고정하며, 원문은 기록용 JSON에만 보존하고 생성 프롬프트에는 그대로 전달하지 않습니다.
 
 ## 잠금과 연속성
 
@@ -91,8 +98,10 @@ npm run desktop:build
 
 ## 3D와 내보내기
 
+- 3D 무대는 미터 기준으로 보정됩니다. 표준 성인 더미의 기준 높이는 1.78m이며, 더미 유형과 X/Y/Z 배율은 실제 인물 외곽 크기에 반영됩니다. 세트·소품 메시도 카탈로그의 폭·높이·깊이에 맞춰 자동 정렬되고 바닥 기준면에 접지됩니다.
+- 카메라 프리뷰는 렌즈·센서·카메라 높이·피사체 높이를 같은 공간에서 계산합니다. 선택한 배우나 소품의 속성에는 현재 해석된 `실측 스케일`이 표시되며, 배경시트 `scene_manifest.json`과 Seedance 프롬프트에도 미터 기준과 물리 치수가 기록됩니다.
 - 3D에서는 대상 위의 좌클릭과 `G` 이동·`R` 회전으로 대상을 편집합니다. 무대 바닥이나 빈 공간의 좌클릭 드래그와 가운데 버튼은 오빗, 우클릭 또는 `Shift + 가운데 버튼`은 화면 이동, `Ctrl + 가운데 버튼`과 휠은 줌으로 동작합니다.
-- 배우 동선 재생은 키 사이 이동 거리와 시간으로 보폭·주기를 계산해 발과 팔의 교차 움직임, 체중 이동과 작은 상하 움직임을 만듭니다. 시작·도착 키에서는 사용자가 저장한 포즈가 우선합니다.
+- 배우 동선 재생은 키 사이 이동 거리와 시간으로 위치·방향을 보간합니다. 시작·도착 키와 모션 프롬프트에서 사용자가 지정한 포즈만 적용하고, 걷기·뛰기 팔다리 동작은 자동 생성하지 않습니다.
 - 오른쪽 아래 카메라 프레임은 현재 렌즈와 카메라 높이로 보이는 실제 출력 구도입니다.
 - 카메라 패널의 `카메라 추가`로 컷마다 최대 4대의 카메라를 둘 수 있습니다. 카메라 이름, 색상, 위치, 방향, 렌즈, 높이와 카메라 키는 카메라별로 보존됩니다.
 - `멀티캠 보기`는 현재 시간의 모든 카메라를 1·2·4분할로 비교합니다. 분할 화면을 클릭하면 해당 카메라가 편집 대상으로 활성화됩니다. `멀티카메라 프리뷰` 저장 창에서는 전체 시트와 각 카메라 이미지 복사를 함께 제공합니다.
@@ -102,9 +111,11 @@ npm run desktop:build
 - 키프레임의 `지문`에는 `웃으며 오른쪽으로 두 걸음`처럼 해당 구간에 표시할 짧은 행동 설명을 기록합니다. 비워 두면 이동 방향에서 기본 지문을 자동 생성합니다.
 - `2D 블로킹 이미지`는 현재 재생 위치의 배치와 전체 동선, 키 번호, 방향 화살표, 현재 구간의 지문을 1920px PNG로 준비합니다. 3D 가이드 영상과 함께 별도의 공간 참고 이미지로 첨부할 수 있습니다.
 - `현재 프레임`은 현재 재생 위치의 카메라 프레임을 PNG로 준비합니다.
+- `배경시트 레퍼런스`는 샷 카메라와 무관한 세트 전체 정면·좌측·우측 3D 개요, 2D 평면도, 카메라·장면 구조 JSON, 전체 FrisFrame 상태와 사용 규칙 README를 하나의 ZIP으로 준비합니다. 배우·인물 더미는 자동 제외하고 세트 건축과 소품만 남깁니다. 별도 프롬프트를 입력하는 기능이 아니라, Codex가 이미지와 구조 데이터를 함께 읽어 현실적인 배경 이미지를 만들 수 있게 하는 제작 패키지입니다.
 - `시작+끝`은 정확히 0초와 전체 길이 끝의 카메라 프레임 두 장을 ZIP으로 준비합니다.
 - `촬영 자료 ZIP`은 전체 프로젝트 컷 리스트 CSV, 연속성·검토 보고서, 활성 카메라 계획, 카메라별 `multi_camera_plan.json`, 동선 키프레임 CSV, Blender 스크립트, 2D 동선도와 카메라 스토리보드를 묶습니다.
-- `프리비즈 영상`은 전체 시간과 FPS에 맞춰 모든 프레임을 렌더링한 뒤 H.264 MP4로 준비합니다.
+- `프리비즈 영상`은 타임라인의 `MP4 출력 구간` 시작·끝과 FPS에 맞춰 해당 프레임만 렌더링한 뒤 H.264 MP4로 준비합니다. `전체`를 누르면 전체 타임라인을 출력합니다.
+- MP4 프레임은 순서대로 전송하고 FFmpeg 인코딩은 앱 전체에서 한 번에 하나만 실행합니다. 다른 창에서 시작한 영상 작업은 앞 작업이 끝난 뒤 이어서 처리됩니다.
 - 프리비즈 영상과 카메라 프레임에는 화살표, 지문, 앵커, 렌즈와 카메라 정보 같은 화면 표식을 포함하지 않습니다.
 - 촬영 자료 ZIP에는 MP4를 중복 포함하지 않습니다. 영상은 별도 프리뷰에서 확인하고 저장해 패키지 준비 시간과 용량을 줄입니다.
 
@@ -195,6 +206,76 @@ FrisFrame 저장소는 AI 모델(예: Claude Desktop, Cursor 등)이 자연어 �
   - `create_cut`: 지시어 분석 기반 카메라 자동 가배치를 포함하여 스토리보드 컷 추가
   - `update_camera_blocking`: 특정 컷의 3D 카메라 매개변수(위치, 높이, 각도, 화각) 미세 수정
   - `add_actor_to_cut`: 3D 프리비즈 씬에 신규 배우 추가
+  - `apply_scene_commands`: 레퍼런스 이미지에서 추출한 공간 앵커와 더미·소품·카메라 명령을 현재 컷에 반영
+
+`apply_scene_commands`는 이미지를 프롬프트로 바꾸거나 외형을 복사하는 기능이 아닙니다. Codex/Claude 같은 비전 호출자가 레퍼런스에서 확정한 구조 정보를 `spatial_guide`와 `add_dummy`, `update_dummy`, `remove_dummy`, `set_camera` 명령으로 보내면, FrisFrame이 현재 컷에 저장하고 덩어리 블로킹으로 표시합니다. `world_x_m/world_z_m`은 무대 중심 기준 월드 미터 좌표이고, `physical_dimensions_m`은 `width/height/depth` 실측 치수입니다. 이 값이 인물과 세트의 크기 비례, 위치, 거리감, 깊이 순서를 결정합니다.
+
+예를 들어 레퍼런스 이미지에서 다음처럼 구조 계획만 보내면 됩니다.
+
+```json
+{
+  "project_id": "abcd1234",
+  "revision": 3,
+  "spatial_guide": {
+    "source_name": "set-reference.jpg",
+    "status": "applied",
+    "anchors": [
+      {
+        "id": "back-wall",
+        "label": "후면 벽",
+        "kind": "set",
+        "world_x_m": 0,
+        "world_z_m": -3,
+        "dimensions_m": {"width": 10.2, "height": 3.0, "depth": 0.18},
+        "depth_layer": "background"
+      },
+      {
+        "id": "person-a",
+        "label": "인물 A",
+        "kind": "actor",
+        "world_x_m": -1.1,
+        "world_z_m": 1.8,
+        "dimensions_m": {"width": 0.54, "height": 1.78, "depth": 0.36},
+        "depth_layer": "midground"
+      }
+    ],
+    "depth_layers": [
+      {"id": "background", "label": "배경", "order": 0, "distance_m": 3},
+      {"id": "midground", "label": "중경", "order": 1, "distance_m": 1.8}
+    ]
+  },
+  "operations": [
+    {
+      "op": "add_dummy",
+      "id": "person-a",
+      "type": "actor",
+      "name": "인물 A",
+      "anchor_id": "person-a",
+      "world_x_m": -1.1,
+      "world_z_m": 1.8,
+      "physical_dimensions_m": {"width": 0.54, "height": 1.78, "depth": 0.36}
+    }
+  ]
+}
+```
+
+FrisFrame 안의 이미지 입력은 레퍼런스 썸네일을 보관하고, 실제 이미지 해석은 연결된 비전 호출자가 담당합니다. 따라서 “같은 모양”이 아니라 이미지에서 측정한 구조 앵커가 데이터로 남습니다.
+
+```json
+{
+  "project_id": "abcd1234",
+  "revision": 7,
+  "scene_index": 0,
+  "cut_index": 0,
+  "operations": [
+    {"op": "add_dummy", "id": "person-a", "type": "actor", "dummy_type": "child", "x": 0.28, "y": 0.44, "height": 0.2, "rotation": 35, "color": "#ff6262"},
+    {"op": "add_dummy", "id": "table-a", "type": "prop", "asset_type": "dining-table", "x": 0.64, "y": 0.58, "rotation": 90, "color": "#65d66f"},
+    {"op": "update_dummy", "id": "person-a", "x": 0.34, "scale_y": 1.1}
+  ]
+}
+```
+
+이미지 명령이 저장되면 열린 FrisFrame이 약 1.6초 안에 새 revision을 확인해 현재 장면을 자동으로 갱신합니다. 저장되지 않은 수동 편집이 있으면 덮어쓰지 않고 충돌 상태로 멈춥니다.
 
 ### Claude Desktop 연동 설정
 
@@ -206,16 +287,17 @@ FrisFrame 저장소는 AI 모델(예: Claude Desktop, Cursor 등)이 자연어 �
     "frisframe": {
       "command": "python3",
       "args": [
-        "/Users/loways/Documents/영화작업용/stage-blocking-lab/mcp_server.py"
+        "/Users/loways/Documents/AI_Studio/01_projects/film-studio/02_tools/stage-blocking-lab/mcp_server.py"
       ],
       "env": {
-        "PREVIS_DB_PATH": "/Users/loways/Documents/영화작업용/stage-blocking-lab/previs_projects.db",
         "FRISFRAME_MCP_OWNER_LICENSE_HASH": "local"
       }
     }
   }
 }
 ```
+
+`PREVIS_DB_PATH`를 생략하면 MCP 서버가 먼저 macOS 앱의 `~/Library/Application Support/FrisFrame/data/frisframe.db`를 찾아 현재 데스크톱 앱과 같은 프로젝트를 사용합니다.
 
 MCP는 지정한 소유자 범위의 `managed` 프로젝트만 읽고 수정합니다. 로컬 라이선스 검사를 끈 기본 실행은 `local`을 사용하며, 라이선스를 켠 서버에서는 해당 사용자의 소유자 해시를 명시해야 합니다. 모든 수정 도구는 `get_project`에서 받은 현재 `revision`을 요구하며, 값이 오래되면 덮어쓰지 않고 충돌로 중단합니다.
 

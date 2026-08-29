@@ -7,7 +7,6 @@ const {
   interpolateBodyPose,
   mirrorBodyPose,
   presetBodyPose,
-  proceduralLocomotion,
   sanitizeBodyPose,
 } = require("../pose-core.js");
 
@@ -21,18 +20,10 @@ assert.equal(clamped.head.x, 45);
 assert.equal(clamped.head.y, -20);
 assert.equal(clamped.head.z, 0);
 
-const walk = presetBodyPose("walk");
-assert.notEqual(walk.upperLegL.x, walk.upperLegR.x);
-const midpoint = interpolateBodyPose(neutral, walk, 0.5);
-assert.equal(midpoint.upperLegL.x, walk.upperLegL.x / 2);
-
-const walkingCycle = proceduralLocomotion(neutral, "walk", Math.PI / 2, 1);
-assert.ok(walkingCycle.pose.upperLegL.x > walkingCycle.pose.upperLegR.x, "walking must alternate the legs");
-assert.ok(walkingCycle.pose.upperArmL.x < walkingCycle.pose.upperArmR.x, "arms must counter-swing against the legs");
-assert.ok(walkingCycle.bob > 0, "walking must add a subtle body lift");
-const heldPose = proceduralLocomotion(walk, "pose", Math.PI / 2, 1);
-assert.deepEqual(heldPose.pose, walk, "pose mode must preserve the keyed pose");
-assert.equal(heldPose.bob, 0);
+const seated = presetBodyPose("sit");
+assert.notEqual(seated.upperLegL.x, neutral.upperLegL.x);
+const midpoint = interpolateBodyPose(neutral, seated, 0.5);
+assert.equal(midpoint.upperLegL.x, seated.upperLegL.x / 2);
 
 const mirrored = mirrorBodyPose({
   upperArmL: { x: 20, y: 15, z: -30 },
@@ -76,7 +67,7 @@ allLabelIds.forEach((presetId) => {
 });
 
 // Verify PRESET_CATEGORIES structure
-assert.ok(PRESET_CATEGORIES.length >= 5, "should have at least 5 categories");
+assert.ok(PRESET_CATEGORIES.length >= 4, "should have at least 4 categories");
 PRESET_CATEGORIES.forEach((category) => {
   assert.ok(category.id, "category must have id");
   assert.ok(category.label, "category must have label");

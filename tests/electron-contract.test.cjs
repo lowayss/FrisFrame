@@ -69,13 +69,15 @@ assert.ok(server.includes('"/vendor/lucide.min.js"'));
 assert.ok(server.includes('"/pose-core.js"'));
 assert.ok(server.includes('"/camera-drafting-core.js"'));
 assert.ok(server.includes('"/multi-camera-core.js"'));
+assert.ok(server.includes('"/scene-blocking-core.js"'));
 assert.ok(server.includes('"/timeline-core.js"'));
 assert.ok(runtimeBuilder.includes('"pose-core.js"'), "desktop runtime must bundle pose-core.js");
 assert.ok(runtimeBuilder.includes('"camera-drafting-core.js"'), "desktop runtime must bundle camera-drafting-core.js");
 assert.ok(runtimeBuilder.includes('"multi-camera-core.js"'), "desktop runtime must bundle multi-camera-core.js");
+assert.ok(runtimeBuilder.includes('"scene-blocking-core.js"'), "desktop runtime must bundle scene-blocking-core.js");
 assert.ok(runtimeBuilder.includes('"timeline-core.js"'), "desktop runtime must bundle timeline-core.js");
 assert.match(appJs, /window\.FrisFrameTimelineCore/);
-assert.ok(packageVerifier.includes("fs.accessSync(required[4], fs.constants.X_OK)"), "package verification must check FFmpeg executable permission");
+assert.ok(packageVerifier.includes('fs.accessSync(path.join(resources, "ffmpeg"), fs.constants.X_OK)'), "package verification must check FFmpeg executable permission");
 assert.ok(server.includes("FRISFRAME_FFMPEG"));
 assert.equal(/https:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(server), false,
   "server CSP must not allow remote renderer assets");

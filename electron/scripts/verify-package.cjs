@@ -23,7 +23,7 @@ for (const target of required) {
 }
 fs.accessSync(required[0], fs.constants.X_OK);
 fs.accessSync(required[1], fs.constants.X_OK);
-fs.accessSync(required[4], fs.constants.X_OK);
+fs.accessSync(path.join(resources, "ffmpeg"), fs.constants.X_OK);
 const plistCheck = spawnSync("/usr/bin/plutil", ["-extract", "NSAppTransportSecurity.NSAllowsArbitraryLoads", "raw", path.join(appPath, "Contents", "Info.plist")], { encoding: "utf8" });
 if (plistCheck.status !== 0 || plistCheck.stdout.trim() !== "false") {
   throw new Error("앱 전역 네트워크 허용이 꺼져 있지 않습니다.");

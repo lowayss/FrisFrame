@@ -20,6 +20,266 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* CozyClay-style time-coded prompt blocks */
+.prompt-block-panel {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(122, 219, 205, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(35, 54, 61, 0.72), rgba(20, 28, 34, 0.84));
+}
+
+.prompt-block-panel-head,
+.prompt-block-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-block-panel-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.prompt-block-panel-head::-webkit-details-marker {
+  display: none;
+}
+
+.prompt-block-panel-head::after {
+  content: "＋";
+  color: #7dd6c6;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.prompt-block-panel[open] .prompt-block-panel-head::after {
+  content: "－";
+}
+
+.prompt-block-panel-content {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.prompt-block-panel-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.prompt-block-meta {
+  padding: 4px 7px;
+  border: 1px solid rgba(126, 200, 255, 0.32);
+  border-radius: 999px;
+  color: #b8e4ff;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.prompt-block-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.prompt-block-add-row select,
+.prompt-block-field input,
+.prompt-block-row textarea {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.prompt-block-help {
+  margin: 8px 0 0;
+  color: #91a6ad;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.prompt-block-timeline {
+  margin-top: 10px;
+  padding: 8px 0 3px;
+}
+
+.prompt-block-lane {
+  display: grid;
+  grid-template-columns: minmax(64px, 84px) minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.prompt-block-lane:first-child {
+  margin-top: 0;
+}
+
+.prompt-block-lane-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lane-color, #7dd6c6);
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-block-track {
+  position: relative;
+  height: 38px;
+  border: 1px solid rgba(145, 166, 173, 0.22);
+  border-radius: 7px;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 10%);
+  overflow: hidden;
+}
+
+.prompt-block-playhead {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #ff806d;
+  pointer-events: none;
+}
+
+.prompt-block-chip {
+  position: absolute;
+  top: 5px;
+  min-width: 24px;
+  height: 27px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--block-color) 72%, white 10%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--block-color) 38%, #152126 62%);
+  color: #f3fff9;
+  text-align: left;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.prompt-block-chip:active {
+  cursor: grabbing;
+}
+
+.prompt-block-chip-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.prompt-block-chip small {
+  display: block;
+  color: rgba(242, 255, 250, 0.7);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.prompt-block-handle {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.prompt-block-handle-start { left: 0; }
+.prompt-block-handle-end { right: 0; }
+
+.prompt-block-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.prompt-block-empty {
+  padding: 10px;
+  border: 1px dashed rgba(145, 166, 173, 0.26);
+  border-radius: 8px;
+  color: #82949b;
+  font-size: 11px;
+}
+
+.prompt-block-row {
+  padding: 9px;
+  border: 1px solid rgba(145, 166, 173, 0.16);
+  border-radius: 9px;
+  background: rgba(12, 19, 23, 0.42);
+}
+
+.prompt-block-row-head strong {
+  color: #dff7ef;
+  font-size: 12px;
+}
+
+.prompt-block-row-head > span {
+  flex: 1;
+  color: #7dd6c6;
+  font-size: 11px;
+}
+
+.prompt-block-remove {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #b2c1c5;
+}
+
+.prompt-block-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.prompt-block-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px;
+  align-items: center;
+}
+
+.prompt-block-field > span {
+  grid-column: 1 / -1;
+  color: #82949b;
+  font-size: 10px;
+}
+
+.prompt-block-row textarea {
+  display: block;
+  min-height: 44px;
+  margin-top: 8px;
+  resize: vertical;
+}
+
+.prompt-block-motion-status {
+  display: block;
+  margin-top: 6px;
+  color: #80d7c6;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.prompt-block-motion-status.is-unmapped {
+  color: #d0a68f;
+}
+
+@media (max-width: 760px) {
+  .prompt-block-add-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .prompt-block-add-row button {
+    grid-column: 1 / -1;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1349,6 +1609,17 @@ input[type="range"] {
 .properties-form {
   display: grid;
   gap: 11px;
+}
+
+.physical-scale-readout {
+  margin-top: -4px;
+  padding: 7px 8px;
+  border: 1px solid #294b50;
+  border-radius: 6px;
+  background: rgba(31, 76, 78, 0.18);
+  color: #8fe2d5;
+  font: 760 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.01em;
 }
 
 .mini-details {
@@ -5533,6 +5804,105 @@ section + .panel-section,
   }
 }
 
+.spatial-reference-panel {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px 12px;
+  border: 1px solid #2b4548;
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(30, 67, 70, 0.28), rgba(21, 27, 31, 0.92));
+}
+
+.spatial-reference-panel > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: #dceae4;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.spatial-reference-panel[open] > summary {
+  margin-bottom: 2px;
+}
+
+.spatial-reference-panel > summary::after {
+  display: none;
+}
+
+.spatial-reference-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #dceae4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.spatial-reference-heading small {
+  color: #79cfc2;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: right;
+}
+
+.spatial-reference-file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid #427d7c;
+  border-radius: 6px;
+  background: rgba(57, 150, 143, 0.14);
+  color: #a7ebe0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.spatial-reference-file-btn:hover {
+  border-color: #6ed8ca;
+  background: rgba(57, 150, 143, 0.25);
+}
+
+.spatial-reference-file-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.spatial-reference-preview {
+  display: block;
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  border: 1px solid #30484b;
+  border-radius: 6px;
+  background: #0d1317;
+}
+
+.spatial-reference-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.spatial-reference-actions .text-btn {
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.spatial-reference-help {
+  margin: 0;
+  color: #91a7a5;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1240px) {
   .manual-tab {
     padding-right: 8px;
@@ -8046,6 +8416,13 @@ input[type="checkbox"] {
     width: min(660px, calc(100% - 24px));
   }
 
+  .three-hud-primary {
+    flex: 1 1 auto;
+  }
+
+  .three-shortcuts {
+    display: none;
+  }
 }
 
 /* --- Direct Annotations & Screen Pencil Styles --- */
@@ -8249,5 +8626,665 @@ input[type="checkbox"] {
   font-weight: 700;
   color: #38bdf8;
   min-width: 24px;
+  text-align: right;
+}
+
+/* Keep Korean control labels inside compact desktop panels. */
+.camera-rig-panel,
+.camera-rig-list,
+.camera-rig-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.camera-rig-panel,
+.camera-rig-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.camera-rig-panel > *,
+.camera-rig-list > *,
+.camera-rig-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.camera-rig-row {
+  grid-template-columns: minmax(0, 1fr) 27px 27px;
+  grid-template-areas:
+    "select duplicate remove"
+    "name name name";
+}
+
+.camera-rig-select {
+  grid-area: select;
+}
+
+.camera-rig-name {
+  grid-area: name;
+  display: none;
+}
+
+.camera-rig-row.is-active .camera-rig-name {
+  display: block;
+}
+
+.camera-rig-action[aria-label$="복제"] {
+  grid-area: duplicate;
+}
+
+.camera-rig-action[aria-label$="삭제"] {
+  grid-area: remove;
+}
+
+.camera-rig-action {
+  width: 27px;
+  min-width: 27px;
+}
+
+.camera-rig-select small {
+  flex: 0 0 auto;
+}
+
+.camera-rig-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.camera-rig-actions button {
+  min-width: 0;
+  padding-inline: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.space-preset-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.space-preset-grid button {
+  height: auto;
+  min-height: 32px;
+  padding: 4px 6px;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.timeline-main {
+  min-width: 0;
+  gap: 3px;
+}
+
+.timeline-main > button {
+  min-width: 0;
+  padding-inline: 5px;
+}
+
+#cameraHeightKeyBtn {
+  min-width: 72px;
+}
+
+.timeline-main > button > span,
+.timeline-edit-tools button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace {
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.canvas-wrap,
+.timeline,
+.three-hud {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cut-version-slot {
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "badge name save restore"
+    ". status save restore";
+}
+
+.cut-version-slot > b {
+  grid-area: badge;
+}
+
+.cut-version-slot > input {
+  grid-area: name;
+}
+
+.cut-version-slot > small {
+  grid-area: status;
+}
+
+.cut-version-slot > button[data-cut-version-action="capture"] {
+  grid-area: save;
+  padding-inline: 7px;
+}
+
+.cut-version-slot > button[data-cut-version-action="restore"] {
+  grid-area: restore;
+}
+
+/* -------------------------------------------------------------------------- */
+/* UI comfort pass: keep the production console readable as features grow.   */
+/* This layer intentionally lives last so legacy visual overrides cannot      */
+/* collapse the timeline or squeeze the object controls again.                */
+/* -------------------------------------------------------------------------- */
+:root {
+  --ff-left-panel: 224px;
+  --ff-right-panel: 294px;
+  --ff-timeline-height: 246px;
+}
+
+@media (min-width: 901px) {
+  .app {
+    grid-template-columns: var(--ff-left-panel) minmax(0, 1fr) var(--ff-right-panel);
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+
+  .left-panel,
+  .right-panel {
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .left-panel {
+    padding: 13px 13px 20px;
+  }
+
+  .right-panel {
+    padding: 13px 14px 20px;
+  }
+
+  .compact-details > summary {
+    min-height: 34px;
+    padding-block: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .panel-section + .panel-section,
+  section + section,
+  section + .panel-section,
+  .panel-section + section {
+    margin-top: 13px;
+    padding-top: 13px;
+  }
+
+  .workspace {
+    grid-template-rows: auto minmax(0, 1fr) var(--ff-timeline-height);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .canvas-wrap {
+    min-width: 0;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  #stageCanvas,
+  .three-wrap {
+    width: min(100%, calc((100dvh - 274px) * var(--stage-ratio)));
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .camera-frame {
+    width: min(35%, 380px);
+    min-width: 220px;
+  }
+
+  .timeline {
+    min-height: var(--ff-timeline-height);
+    max-height: var(--ff-timeline-height);
+    padding: 9px 12px 10px;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .timeline-main {
+    min-width: 0;
+    row-gap: 5px;
+    column-gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .timeline-main > button {
+    min-height: 30px;
+    padding-inline: 7px;
+  }
+
+  .timeline-edit-tools {
+    padding-left: 5px;
+  }
+
+  .timeline-fields {
+    min-width: 0;
+    grid-template-columns: minmax(142px, 1.3fr) repeat(4, minmax(105px, 1fr));
+    gap: 6px 7px;
+  }
+
+  .compact-field {
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .compact-field > span {
+    white-space: nowrap;
+  }
+
+  .compact-field input,
+  .compact-field select {
+    min-width: 0;
+  }
+
+  .timeline-track {
+    height: 36px;
+  }
+
+  .source-timeline-list {
+    max-height: 100px;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-color: #3d4850 transparent;
+    scrollbar-width: thin;
+  }
+
+  .source-lane {
+    grid-template-columns: 112px minmax(150px, 1fr) 30px;
+    gap: 8px;
+  }
+
+  .source-lane-label,
+  .source-lane-track {
+    min-height: 28px;
+  }
+
+  .timeline-hint,
+  .status-line {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .timeline:has(.timeline-selection-tools:not([hidden])) {
+    min-height: 286px;
+    max-height: 286px;
+  }
+
+  .timeline:has(.timeline-selection-tools:not([hidden])) + * {
+    min-height: 0;
+  }
+
+  .timeline-selection-tools {
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+@media (min-width: 1361px) {
+  :root {
+    --ff-left-panel: 240px;
+    --ff-right-panel: 308px;
+    --ff-timeline-height: 246px;
+  }
+}
+
+@media (max-width: 900px) {
+  .timeline {
+    min-height: 220px;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .source-timeline-list {
+    max-height: 180px;
+  }
+}
+
+/* Final layout guard for the optional CozyClay prompt-block inspector. */
+@media (min-width: 901px) {
+  :root {
+    --ff-timeline-height: 342px;
+  }
+
+  .workspace {
+    grid-template-rows: auto minmax(0, 1fr) var(--ff-timeline-height);
+  }
+
+  #stageCanvas,
+  .three-wrap {
+    width: min(100%, calc((100dvh - var(--ff-timeline-height) - 28px) * var(--stage-ratio)));
+  }
+
+  .timeline {
+    height: var(--ff-timeline-height);
+    min-height: 0;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .timeline-main,
+  .timeline-fields,
+  .timeline-selection-tools:not([hidden]),
+  .timeline-track,
+  .source-timeline-list,
+  .timeline-hint,
+  .status-line,
+  .prompt-block-panel {
+    flex: 0 0 auto;
+  }
+
+  .source-timeline-list {
+    max-height: 96px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .prompt-block-panel {
+    max-height: 190px;
+    margin-top: 5px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .prompt-block-panel[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .prompt-block-panel[open] .prompt-block-panel-content {
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .timeline {
+    max-height: min(420px, 44dvh);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .prompt-block-panel {
+    max-height: 190px;
+    overflow-y: auto;
+  }
+
+  .prompt-block-panel[open] {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Focus layout: the stage is the primary work surface.                      */
+/* Keep advanced controls available, but stop them from competing with it.   */
+/* -------------------------------------------------------------------------- */
+@media (min-width: 901px) {
+  :root {
+    --ff-timeline-height: 276px;
+  }
+
+  .workspace {
+    grid-template-rows: auto minmax(0, 1fr) var(--ff-timeline-height);
+  }
+
+  .timeline {
+    height: var(--ff-timeline-height);
+    min-height: 0;
+    max-height: var(--ff-timeline-height);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .timeline:not(:has(#promptBlockPanel[open])) #promptBlockPanel {
+    min-height: 0;
+    margin-top: 2px;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head {
+    min-height: 30px;
+    margin: 0;
+    padding: 0 5px;
+    border-top: 1px solid #283038;
+  }
+
+  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head .section-kicker {
+    display: none;
+  }
+
+  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-panel-head strong {
+    color: #8f9ba3;
+    font-size: 11px;
+    font-weight: 680;
+  }
+
+  .timeline:not(:has(#promptBlockPanel[open])) .prompt-block-meta {
+    padding: 3px 6px;
+    border-color: #344148;
+    color: #819096;
+    font-size: 9px;
+  }
+
+  .timeline:has(#promptBlockPanel[open]) {
+    height: 410px;
+    max-height: 410px;
+  }
+
+  .timeline:has(#promptBlockPanel[open]) .prompt-block-panel {
+    max-height: 230px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .timeline:has(#promptBlockPanel[open]) .prompt-block-panel-content {
+    overflow-y: auto;
+  }
+
+  #stageCanvas,
+  .three-wrap {
+    width: min(100%, calc((100dvh - var(--ff-timeline-height) - 28px) * var(--stage-ratio)));
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1350px) {
+  :root {
+    --ff-left-panel: 208px;
+    --ff-right-panel: 270px;
+  }
+
+  .app {
+    min-width: 1080px;
+  }
+
+  .left-panel,
+  .right-panel {
+    padding-inline: 10px;
+  }
+
+  .compact-details > summary {
+    font-size: 11.5px;
+  }
+
+  .timeline-fields {
+    grid-template-columns: minmax(108px, 1.1fr) repeat(4, minmax(76px, 1fr));
+    column-gap: 5px;
+  }
+
+  .source-lane {
+    grid-template-columns: 96px minmax(0, 1fr) 28px;
+    gap: 6px;
+  }
+
+  .timeline-edit-tools {
+    padding-left: 2px;
+  }
+
+  .timeline-edit-tools button {
+    padding-inline: 5px;
+  }
+}
+
+@media (min-width: 1351px) {
+  :root {
+    --ff-timeline-height: 288px;
+  }
+
+  .timeline:has(#promptBlockPanel[open]) {
+    height: 424px;
+    max-height: 424px;
+  }
+}
+
+/* User-controlled MP4 output range. Keep this separate from the full
+   timeline duration so changing the export window never rescales authored keys. */
+.export-range-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+  min-height: 34px;
+  padding: 4px 7px;
+  border: 1px solid #354b4a;
+  border-radius: 4px;
+  background: #111c1b;
+}
+
+.export-range-tools > strong {
+  flex: 0 0 auto;
+  color: #83ddd3;
+  font-size: 11.5px;
+}
+
+.export-range-tools .compact-field {
+  display: grid;
+  grid-template-columns: auto 68px auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.export-range-tools .compact-field input {
+  width: 68px;
+  min-width: 0;
+}
+
+.export-range-tools .compact-field > span:last-child {
+  color: #87959a;
+  font-size: 10.5px;
+}
+
+.export-range-separator {
+  color: #6b8581;
+  font-size: 15px;
+}
+
+.export-range-tools button {
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: #3b5d58;
+  background: #1a2a27;
+  color: #8bddd3;
+  font-size: 11.5px;
+}
+
+.export-range-tools button:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: #59636b;
+}
+
+.export-range-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: #a4b5b3;
+  font: 700 10.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .export-range-tools {
+    align-items: flex-start;
+  }
+
+  .export-range-summary {
+    flex-basis: 100%;
+    padding-left: 1px;
+  }
+}
+
+/* The export range belongs to the export menu, not the editing timeline. */
+#exportMenu .toolbar-menu-popover {
+  width: 286px;
+}
+
+#exportMenu .export-range-tools {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px;
+  border-color: #3b5e59;
+  background: #14211f;
+}
+
+#exportMenu .export-range-tools > strong {
+  font-size: 11.5px;
+}
+
+#exportMenu .export-range-fields {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#exportMenu .export-range-tools .compact-field {
+  display: grid;
+  grid-template-columns: auto 68px auto;
+  flex: 1 1 0;
+}
+
+#exportMenu .export-range-tools .compact-field input {
+  width: 68px;
+}
+
+#exportMenu .export-range-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#exportMenu .export-range-tools button {
+  width: auto;
+  min-height: 28px;
+  flex: 0 0 auto;
+}
+
+#exportMenu .export-range-summary {
+  flex: 1 1 auto;
   text-align: right;
 }

@@ -41,23 +41,33 @@ def main() -> None:
         "app.js",
         "storyboard-core.js",
         "motion-core.js",
+        "scene-blocking-core.js",
+        "prompt-block-core.js",
+        "prompt-motion-core.js",
+        "previs-runtime-core.js",
         "timeline-core.js",
         "project-recovery-core.js",
         "manual-guide-core.js",
         "pose-core.js",
         "camera-drafting-core.js",
         "multi-camera-core.js",
+        "spatial-scale-core.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
     for filename in (
         "tests/motion-core.test.cjs",
+        "tests/scene-blocking-core.test.cjs",
+        "tests/prompt-block-core.test.cjs",
+        "tests/prompt-motion-core.test.cjs",
+        "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
         "tests/project-recovery-core.test.cjs",
         "tests/manual-guide-core.test.cjs",
         "tests/pose-core.test.cjs",
         "tests/camera-drafting.test.cjs",
         "tests/multi-camera-core.test.cjs",
+        "tests/spatial-scale-core.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):

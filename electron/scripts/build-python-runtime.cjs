@@ -79,6 +79,7 @@ const dataFiles = [
   "boot-errors.js",
   "storyboard-core.js",
   "motion-core.js",
+  "scene-blocking-core.js",
   "timeline-core.js",
   "project-recovery-core.js",
   "manual-guide-core.js",

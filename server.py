@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +27,7 @@ JOB_TTL_SECONDS = 15 * 60
 SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+ENCODE_LOCK = threading.Lock()
 ENABLE_LICENSE_CHECK = os.environ.get("ENABLE_LICENSE_CHECK", "False").lower() == "true"
 REQUIRE_ORIGIN = os.environ.get("FRISFRAME_REQUIRE_ORIGIN", "False").lower() == "true"
 SECURE_COOKIES = os.environ.get("FRISFRAME_SECURE_COOKIES", "False").lower() == "true"
@@ -39,17 +41,22 @@ STATIC_FILES = {
     "/boot-errors.js",
     "/storyboard-core.js",
     "/motion-core.js",
+    "/scene-blocking-core.js",
+    "/prompt-block-core.js",
+    "/prompt-motion-core.js",
+    "/previs-runtime-core.js",
     "/timeline-core.js",
     "/project-recovery-core.js",
     "/manual-guide-core.js",
     "/pose-core.js",
     "/camera-drafting-core.js",
     "/multi-camera-core.js",
+    "/spatial-scale-core.js",
     "/vendor/three.min.js",
     "/vendor/lucide.min.js",
 }
 
-SUPPORTED_PROJECT_SCHEMA_VERSION = 6
+SUPPORTED_PROJECT_SCHEMA_VERSION = 11
 APP_VERSION = os.environ.get("FRISFRAME_VERSION", "dev")
 STARTUP_NONCE = os.environ.get("FRISFRAME_STARTUP_NONCE", "")
 
@@ -157,10 +164,24 @@ def validate_managed_document(document):
 
 
 def job_is_expired(job, now=None):
-    if job.get("status") == "encoding":
+    if job.get("status") in {"queued", "encoding"}:
         return False
     current_time = time.time() if now is None else now
     return current_time - float(job.get("last_activity", job.get("created_at", 0))) > JOB_TTL_SECONDS
+
+
+@contextmanager
+def exclusive_mp4_encoder(job_id):
+    with ENCODE_LOCK:
+        with JOBS_LOCK:
+            current = JOBS.get(job_id)
+            if not current:
+                raise ValueError("대기 중이던 영상 작업이 취소되었습니다.")
+            if current.get("status") != "queued":
+                raise ValueError("MP4 인코딩 작업 상태가 올바르지 않습니다.")
+            current["status"] = "encoding"
+            current["last_activity"] = time.time()
+        yield current
 
 
 def cleanup_expired_job_storage():
@@ -707,6 +728,8 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             current = JOBS.get(job_id)
             if not current:
                 raise ValueError("영상 작업이 만료되었습니다.")
+            if current.get("status") != "uploading":
+                raise ValueError("인코딩을 요청한 작업에는 프레임을 추가할 수 없습니다.")
             if index in current["uploading"]:
                 raise ValueError("같은 프레임을 동시에 전송할 수 없습니다.")
             previous_size = current["frame_sizes"].get(index, 0)
@@ -741,18 +764,25 @@ class PrevisHandler(SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, {"received": index})
 
     def finish_mp4_job(self, query):
-        job_id, job = self.get_job(query)
-        missing = sorted(set(range(job["frame_count"])) - job["received"])
-        if missing:
-            raise ValueError(f"MP4 프레임 {len(missing)}개가 누락되었습니다.")
-        output_path = job["directory"] / "preview.mp4"
+        job_id, _ = self.get_job(query)
+        ffmpeg_path = ffmpeg_executable()
         with JOBS_LOCK:
             current = JOBS.get(job_id)
-            if current:
-                current["status"] = "encoding"
-                current["last_activity"] = time.time()
+            if not current:
+                raise ValueError("만료되었거나 존재하지 않는 MP4 작업입니다.")
+            if current.get("status") != "uploading":
+                raise ValueError("이미 MP4 인코딩을 요청한 작업입니다.")
+            if current.get("uploading"):
+                raise ValueError("전송 중인 MP4 프레임이 있습니다.")
+            missing = sorted(set(range(current["frame_count"])) - current["received"])
+            if missing:
+                raise ValueError(f"MP4 프레임 {len(missing)}개가 누락되었습니다.")
+            current["status"] = "queued"
+            current["last_activity"] = time.time()
+            job = current
+        output_path = job["directory"] / "preview.mp4"
         command = [
-            ffmpeg_executable(),
+            ffmpeg_path,
             "-y",
             "-v",
             "error",
@@ -777,7 +807,8 @@ class PrevisHandler(SimpleHTTPRequestHandler):
             str(output_path),
         ]
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=900)
+            with exclusive_mp4_encoder(job_id):
+                result = subprocess.run(command, capture_output=True, text=True, timeout=900)
             if result.returncode != 0 or not output_path.exists():
                 detail = result.stderr.strip() or "FFmpeg가 MP4를 만들지 못했습니다."
                 raise RuntimeError(detail)
@@ -796,6 +827,10 @@ class PrevisHandler(SimpleHTTPRequestHandler):
 
     def cancel_mp4_job(self, query):
         job_id, _ = self.get_job(query)
+        with JOBS_LOCK:
+            current = JOBS.get(job_id)
+            if current and current.get("status") == "encoding":
+                raise ValueError("인코딩 중인 작업은 완료될 때까지 취소할 수 없습니다.")
         self.remove_job(job_id)
         self.send_json(HTTPStatus.OK, {"cancelled": True})
 

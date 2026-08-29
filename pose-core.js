@@ -24,12 +24,6 @@
     armsCrossed: "팔짱",
     handsBack: "뒷짐",
     handsPocket: "주머니",
-    /* 이동 */
-    walk: "걷기",
-    run: "달리기",
-    sneak: "살금살금",
-    backStep: "뒷걸음",
-    kneeWalk: "무릎걷기",
     /* 앉기/눕기 */
     sit: "앉기",
     crossLegs: "다리꼬기",
@@ -57,7 +51,6 @@
 
   const PRESET_CATEGORIES = Object.freeze([
     { id: "basic", label: "기본", emoji: "🧍", presets: ["neutral", "attention", "armsCrossed", "handsBack", "handsPocket"] },
-    { id: "locomotion", label: "이동", emoji: "🚶", presets: ["walk", "run", "sneak", "backStep", "kneeWalk"] },
     { id: "seated", label: "앉기/눕기", emoji: "🪑", presets: ["sit", "crossLegs", "leanSit", "lieDown", "faceDown"] },
     { id: "action", label: "액션", emoji: "🤸", presets: ["crouch", "guard", "punch", "kick", "push"] },
     { id: "emotion", label: "감정/제스처", emoji: "💬", presets: ["wave", "point", "think", "surprise", "sad", "cheer", "bow", "shrug", "stop", "clap"] },
@@ -135,63 +128,6 @@
       pose.lowerArmL.y = 20;
       pose.lowerArmR.y = -20;
       pose.chest.x = -3;
-
-    /* ── 이동 ── */
-    } else if (presetId === "walk") {
-      pose.chest.y = -6;
-      pose.upperArmL.x = -28;
-      pose.upperArmR.x = 28;
-      pose.lowerArmL.x = 20;
-      pose.lowerArmR.x = 20;
-      pose.upperLegL.x = 30;
-      pose.upperLegR.x = -30;
-      pose.lowerLegL.x = 42;
-      pose.lowerLegR.x = 12;
-    } else if (presetId === "run") {
-      pose.chest.x = 14;
-      pose.head.x = -8;
-      pose.upperArmL.x = -58;
-      pose.upperArmR.x = 58;
-      pose.lowerArmL.x = 72;
-      pose.lowerArmR.x = 72;
-      pose.upperLegL.x = 58;
-      pose.upperLegR.x = -52;
-      pose.lowerLegL.x = 82;
-      pose.lowerLegR.x = 24;
-    } else if (presetId === "sneak") {
-      pose.chest.x = 18;
-      pose.head.x = -12;
-      pose.upperArmL.x = 15;
-      pose.upperArmR.x = -15;
-      pose.upperArmL.z = -22;
-      pose.upperArmR.z = 22;
-      pose.lowerArmL.x = 58;
-      pose.lowerArmR.x = 58;
-      pose.upperLegL.x = -35;
-      pose.upperLegR.x = 25;
-      pose.lowerLegL.x = 35;
-      pose.lowerLegR.x = 65;
-    } else if (presetId === "backStep") {
-      pose.chest.x = -6;
-      pose.head.x = 4;
-      pose.upperArmL.x = 16;
-      pose.upperArmR.x = -16;
-      pose.lowerArmL.x = 18;
-      pose.lowerArmR.x = 18;
-      pose.upperLegL.x = -20;
-      pose.upperLegR.x = 30;
-      pose.lowerLegL.x = 38;
-      pose.lowerLegR.x = 12;
-    } else if (presetId === "kneeWalk") {
-      pose.chest.x = 6;
-      pose.upperLegL.x = -85;
-      pose.upperLegR.x = -68;
-      pose.lowerLegL.x = 120;
-      pose.lowerLegR.x = 110;
-      pose.upperArmL.x = -16;
-      pose.upperArmR.x = 16;
-      pose.lowerArmL.x = 32;
-      pose.lowerArmR.x = 32;
 
     /* ── 앉기/눕기 ── */
     } else if (presetId === "sit") {
@@ -457,38 +393,6 @@
     return sanitizeBodyPose(result);
   }
 
-  function proceduralLocomotion(input, mode = "walk", phase = 0, strength = 1) {
-    const pose = sanitizeBodyPose(input);
-    const locomotionMode = mode === "run" ? "run" : mode === "walk" ? "walk" : "pose";
-    const amount = clamp(finite(strength, 0), 0, 1);
-    if (locomotionMode === "pose" || amount <= 0) return { pose, bob: 0 };
-
-    const cycle = finite(phase, 0);
-    const swing = Math.sin(cycle);
-    const lift = 0.5 - 0.5 * Math.cos(cycle * 2);
-    const running = locomotionMode === "run";
-    const legSwing = (running ? 52 : 30) * swing * amount;
-    const armSwing = (running ? 42 : 24) * swing * amount;
-    const kneeBend = (running ? 76 : 38) * amount;
-
-    pose.upperLegL.x += legSwing;
-    pose.upperLegR.x -= legSwing;
-    pose.lowerLegL.x += (running ? 14 : 4) * amount + Math.max(0, -swing) * kneeBend;
-    pose.lowerLegR.x += (running ? 14 : 4) * amount + Math.max(0, swing) * kneeBend;
-    pose.upperArmL.x -= armSwing;
-    pose.upperArmR.x += armSwing;
-    pose.lowerArmL.x += (running ? 58 : 18) * amount;
-    pose.lowerArmR.x += (running ? 58 : 18) * amount;
-    pose.chest.x += (running ? 10 : 2) * amount;
-    pose.chest.y += swing * (running ? 7 : 4) * amount;
-    pose.head.y -= swing * (running ? 3 : 1.5) * amount;
-
-    return {
-      pose: sanitizeBodyPose(pose),
-      bob: lift * (running ? 0.075 : 0.035) * amount,
-    };
-  }
-
   return Object.freeze({
     JOINT_DEFINITIONS,
     PRESET_CATEGORIES,
@@ -497,7 +401,6 @@
     interpolateBodyPose,
     mirrorBodyPose,
     presetBodyPose,
-    proceduralLocomotion,
     sanitizeBodyPose,
   });
 }));

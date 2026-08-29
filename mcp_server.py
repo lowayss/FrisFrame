@@ -33,6 +33,15 @@ except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
     APP_VERSION = "dev"
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 MCP_OWNER_LICENSE_HASH = os.environ.get("FRISFRAME_MCP_OWNER_LICENSE_HASH", "local").strip() or "local"
+MCP_DUMMY_TYPES = {"human", "child", "tall", "wide", "silhouette"}
+MCP_PROP_TYPES = {
+    "generic", "box", "ball", "cylinder", "cone", "capsule", "panel", "classic-salon",
+    "car", "bus", "motorcycle", "bicycle", "tree", "forest", "room",
+    "wall_i", "wall_l", "wall_u", "desk", "blackboard", "partition", "wall",
+    "corridor-wall", "train-wall", "elevator", "door", "window", "sink", "toilet",
+    "bathtub", "train-seat", "stairs", "slope", "sofa", "dining-table", "chair",
+    "bed", "cabinet", "refrigerator", "television", "stove", "washing-machine",
+}
 
 # Helper function to find the database path
 def get_db_path():
@@ -713,6 +722,337 @@ def handle_add_actor(project_id, arguments):
 
     return mutate_project(project_id, arguments.get("revision"), mutation)
 
+
+def _scene_cut(project_obj, arguments):
+    try:
+        scene_idx = int(arguments.get("scene_index", 0))
+        cut_idx = int(arguments.get("cut_index", 0))
+    except (TypeError, ValueError) as error:
+        raise ValueError("scene_index와 cut_index는 정수여야 합니다.") from error
+    if scene_idx < 0 or scene_idx >= len(project_obj["scenes"]):
+        raise ValueError(f"scene_index {scene_idx}가 범위를 벗어났습니다.")
+    scene = project_obj["scenes"][scene_idx]
+    if cut_idx < 0 or cut_idx >= len(scene["cuts"]):
+        raise ValueError(f"cut_index {cut_idx}가 범위를 벗어났습니다.")
+    cut = scene["cuts"][cut_idx]
+    if not isinstance(cut.get("blocking"), dict):
+        raise ValueError("대상 컷에 블로킹 데이터가 없습니다.")
+    cut["blocking"].setdefault("items", [])
+    return scene_idx, cut_idx, cut
+
+
+def _command_color(value, fallback="#4287f5"):
+    color = str(value or fallback)
+    if not HEX_COLOR.fullmatch(color):
+        raise ValueError("color는 #RRGGBB 형식이어야 합니다.")
+    return color.lower()
+
+
+def _command_item_id(value):
+    candidate = str(value or "").strip()
+    if candidate and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", candidate):
+        raise ValueError("dummy_id는 영문, 숫자, _, -만 사용할 수 있습니다.")
+    return candidate or str(uuid.uuid4())[:8]
+
+
+def _stage_dimensions(blocking):
+    aspect = str(blocking.get("aspect", "16:9"))
+    ratios = {"16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "1:1": 1.0, "3:4": 3 / 4}
+    ratio = ratios.get(aspect, 16 / 9)
+    return (36.0, 36.0 / ratio) if ratio >= 1 else (36.0 * ratio, 36.0)
+
+
+def _optional_world_number(value, field_name):
+    if value is None or value == "":
+        return None
+    return clamp_number(value, -1000, 1000, field_name)
+
+
+def _dimensions_from_payload(payload, *, field_prefix="dimensions"):
+    if not isinstance(payload, dict):
+        return None
+    dimensions = payload.get("physical_dimensions_m") or payload.get("dimensions_m") or payload.get("physicalDimensionsM") or payload.get("dimensionsM")
+    source = dimensions if isinstance(dimensions, dict) else payload
+    keys = {
+        "width": ("width", "w", "physical_width_m"),
+        "height": ("height", "h", "physical_height_m"),
+        "depth": ("depth", "d", "physical_depth_m"),
+    }
+    values = {}
+    seen = False
+    for name, aliases in keys.items():
+        for alias in aliases:
+            if alias in source:
+                seen = True
+                values[name] = source[alias]
+                break
+    if not seen:
+        return None
+    if set(values) != set(keys):
+        raise ValueError(f"{field_prefix}에는 width, height, depth를 모두 넣어 주세요.")
+    return {
+        name: clamp_number(value, 0.001, 1000, f"{field_prefix}.{name}")
+        for name, value in values.items()
+    }
+
+
+def _sanitize_spatial_guide(value):
+    if not isinstance(value, dict):
+        raise ValueError("spatial_guide는 객체여야 합니다.")
+    status = str(value.get("status", "applied")).strip().lower()
+    if status not in {"empty", "awaiting-plan", "applied"}:
+        status = "applied"
+    raw_anchors = value.get("anchors", [])
+    if not isinstance(raw_anchors, list):
+        raise ValueError("spatial_guide.anchors는 배열이어야 합니다.")
+    anchors = []
+    for index, raw_anchor in enumerate(raw_anchors[:200]):
+        if not isinstance(raw_anchor, dict):
+            raise ValueError(f"spatial_guide.anchors[{index}]가 객체가 아닙니다.")
+        dimensions = _dimensions_from_payload(raw_anchor, field_prefix=f"spatial_guide.anchors[{index}].dimensions_m")
+        anchor_id = str(raw_anchor.get("id") or f"anchor-{index + 1}").strip()[:64]
+        anchors.append({
+            "id": anchor_id or f"anchor-{index + 1}",
+            "label": str(raw_anchor.get("label") or raw_anchor.get("name") or anchor_id or f"공간 앵커 {index + 1}").strip()[:80],
+            "kind": str(raw_anchor.get("kind") or "structure").strip()[:32],
+            "imageX": clamp_number(raw_anchor.get("image_x", raw_anchor.get("imageX", 0)), 0, 1, f"spatial_guide.anchors[{index}].image_x"),
+            "imageY": clamp_number(raw_anchor.get("image_y", raw_anchor.get("imageY", 0)), 0, 1, f"spatial_guide.anchors[{index}].image_y"),
+            "imageWidth": clamp_number(raw_anchor.get("image_width", raw_anchor.get("imageWidth", 0)), 0, 1, f"spatial_guide.anchors[{index}].image_width"),
+            "imageHeight": clamp_number(raw_anchor.get("image_height", raw_anchor.get("imageHeight", 0)), 0, 1, f"spatial_guide.anchors[{index}].image_height"),
+            "worldX": _optional_world_number(raw_anchor.get("world_x_m", raw_anchor.get("worldX")), f"spatial_guide.anchors[{index}].world_x_m"),
+            "worldZ": _optional_world_number(raw_anchor.get("world_z_m", raw_anchor.get("worldZ")), f"spatial_guide.anchors[{index}].world_z_m"),
+            "dimensionsM": dimensions,
+            "depthLayer": str(raw_anchor.get("depth_layer", raw_anchor.get("depthLayer", "")) or "").strip()[:48],
+            "confidence": clamp_number(raw_anchor.get("confidence", 0), 0, 1, f"spatial_guide.anchors[{index}].confidence"),
+            "attachedItemId": str(raw_anchor.get("attached_item_id", raw_anchor.get("attachedItemId", "")) or "").strip()[:64],
+        })
+    raw_layers = value.get("depth_layers", value.get("depthLayers", []))
+    if not isinstance(raw_layers, list):
+        raise ValueError("spatial_guide.depth_layers는 배열이어야 합니다.")
+    depth_layers = []
+    for index, raw_layer in enumerate(raw_layers[:32]):
+        if not isinstance(raw_layer, dict):
+            raise ValueError(f"spatial_guide.depth_layers[{index}]가 객체가 아닙니다.")
+        depth_layers.append({
+            "id": str(raw_layer.get("id") or f"layer-{index + 1}").strip()[:48],
+            "label": str(raw_layer.get("label") or raw_layer.get("name") or f"깊이층 {index + 1}").strip()[:80],
+            "order": int(clamp_number(raw_layer.get("order", index), -100, 100, f"spatial_guide.depth_layers[{index}].order")),
+            "distanceM": clamp_number(raw_layer.get("distance_m", raw_layer.get("distanceM", 0)), 0, 1000, f"spatial_guide.depth_layers[{index}].distance_m"),
+        })
+    return {
+        "schemaVersion": 1,
+        "sourceName": str(value.get("source_name", value.get("sourceName", "")) or "").strip()[:160],
+        "sourceKind": str(value.get("source_kind", value.get("sourceKind", "image")) or "image").strip()[:32],
+        "status": status,
+        "opacity": clamp_number(value.get("opacity", 0.22), 0.05, 0.8, "spatial_guide.opacity"),
+        "anchors": anchors,
+        "depthLayers": depth_layers,
+        "appliedAt": utc_now() if status == "applied" else "",
+    }
+
+
+def _set_dummy_fields(item, command, blocking=None):
+    if "name" in command:
+        item["name"] = str(command["name"] or item.get("name") or "더미").strip()[:80] or "더미"
+    if "x" in command or "left" in command:
+        item["x"] = clamp_number(command.get("x", command.get("left")), STAGE_COORD_MIN, STAGE_COORD_MAX, "x")
+    if "y" in command or "depth" in command:
+        item["y"] = clamp_number(command.get("y", command.get("depth")), STAGE_COORD_MIN, STAGE_COORD_MAX, "y")
+    position = command.get("world_position_m") or command.get("position_m") or command.get("worldPositionM")
+    world_x = command.get("world_x_m", command.get("worldX"))
+    world_z = command.get("world_z_m", command.get("worldZ"))
+    if isinstance(position, dict):
+        world_x = position.get("x", position.get("world_x_m", world_x))
+        world_z = position.get("z", position.get("world_z_m", world_z))
+    if blocking is not None and (world_x is not None or world_z is not None):
+        stage_width, stage_depth = _stage_dimensions(blocking)
+        if world_x is not None:
+            item["x"] = clamp_number(0.5 + _optional_world_number(world_x, "world_x_m") / stage_width, STAGE_COORD_MIN, STAGE_COORD_MAX, "world_x_m")
+        if world_z is not None:
+            item["y"] = clamp_number(0.5 + _optional_world_number(world_z, "world_z_m") / stage_depth, STAGE_COORD_MIN, STAGE_COORD_MAX, "world_z_m")
+    if "size" in command:
+        item["size"] = clamp_number(command["size"], 0.25, 4, "size")
+    if "color" in command:
+        item["color"] = _command_color(command["color"], item.get("color", "#4287f5"))
+    if "rotation" in command or "facing" in command:
+        item["facing"] = clamp_number(command.get("rotation", command.get("facing")), -360000, 360000, "rotation") % 360
+    if "pitch" in command:
+        item["pitch"] = clamp_number(command["pitch"], -90, 90, "pitch") if item["type"] == "actor" else 0
+    if "height" in command:
+        field = "verticalOffset" if item["type"] == "actor" else "mountedHeight"
+        item[field] = clamp_number(command["height"], -1, 5, "height")
+    if "vertical_offset" in command and item["type"] == "actor":
+        item["verticalOffset"] = clamp_number(command["vertical_offset"], -1, 5, "vertical_offset")
+    if "mounted_height" in command and item["type"] == "prop":
+        item["mountedHeight"] = clamp_number(command["mounted_height"], -1, 5, "mounted_height")
+    for source, target in (("scale_x", "scaleX"), ("scale_y", "scaleY"), ("scale_z", "scaleZ")):
+        if source in command:
+            item[target] = clamp_number(command[source], 0.25, 3.5, source)
+    if "anchor_id" in command or "reference_anchor_id" in command:
+        item["referenceAnchorId"] = str(command.get("anchor_id", command.get("reference_anchor_id")) or "").strip()[:64]
+    dimensions = _dimensions_from_payload(command, field_prefix="physical_dimensions_m")
+    if dimensions is not None:
+        item["referenceDimensionsM"] = dimensions
+    if "visible" in command:
+        item["visible"] = bool(command["visible"])
+    if item["type"] == "prop":
+        if "asset_type" in command or "dummy_type" in command:
+            asset_type = str(command.get("asset_type", command.get("dummy_type")) or "generic")
+            item["assetType"] = asset_type if asset_type in MCP_PROP_TYPES else "generic"
+        item["dummyType"] = str(command.get("dummy_type", item.get("dummyType", item.get("assetType", "generic"))))
+    else:
+        dummy_type = str(command.get("dummy_type", item.get("dummyType", "human")))
+        item["dummyType"] = dummy_type if dummy_type in MCP_DUMMY_TYPES else "human"
+
+
+def _new_command_item(command, index, blocking=None):
+    item_type = str(command.get("type", command.get("target", "actor"))).lower()
+    item_type = "prop" if item_type in {"prop", "object", "소품", "더미소품"} else "actor"
+    dummy_type = str(command.get("dummy_type", command.get("asset_type", "human" if item_type == "actor" else "generic")))
+    if item_type == "prop":
+        asset_type = dummy_type if dummy_type in MCP_PROP_TYPES else "generic"
+        name = str(command.get("name") or asset_type).strip()[:80]
+        item = {
+            "id": _command_item_id(command.get("id") or command.get("dummy_id")),
+            "continuityId": str(uuid.uuid4())[:8],
+            "type": "prop",
+            "name": name,
+            "x": 0.5,
+            "y": 0.5,
+            "size": 1.0,
+            "color": _command_color(command.get("color"), "#82909a"),
+            "shape": str(command.get("shape") or "square"),
+            "facing": 0,
+            "pitch": 0,
+            "mountedHeight": 0,
+            "assetType": asset_type,
+            "dummyType": asset_type,
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleZ": 1,
+            "motionEnabled": False,
+            "visible": True,
+            "editLocked": False,
+            "referenceAnchorId": "",
+            "referenceDimensionsM": None,
+        }
+    else:
+        dummy_type = dummy_type if dummy_type in MCP_DUMMY_TYPES else "human"
+        item = {
+            "id": _command_item_id(command.get("id") or command.get("dummy_id")),
+            "continuityId": str(uuid.uuid4())[:8],
+            "type": "actor",
+            "name": str(command.get("name") or f"더미 {index + 1}").strip()[:80],
+            "x": 0.5,
+            "y": 0.5,
+            "size": 1.0,
+            "color": _command_color(command.get("color"), "#4287f5"),
+            "shape": "circle",
+            "facing": 0,
+            "pitch": 0,
+            "verticalOffset": 0,
+            "dummyType": dummy_type,
+            "assetType": "generic",
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleZ": 1,
+            "motionEnabled": True,
+            "visible": True,
+            "bodyPose": {},
+            "placementMode": "manual",
+            "mountId": "",
+            "seatIndex": 0,
+            "editLocked": False,
+            "referenceAnchorId": "",
+            "referenceDimensionsM": None,
+        }
+    _set_dummy_fields(item, command, blocking)
+    return item
+
+
+def handle_apply_scene_commands(project_id, arguments):
+    operations = arguments.get("operations", [])
+    spatial_guide = arguments.get("spatial_guide")
+    if not isinstance(operations, list):
+        raise ValueError("operations는 배열이어야 합니다.")
+    if not operations and spatial_guide is None:
+        raise ValueError("spatial_guide 또는 operations 중 하나는 넣어 주세요.")
+    if len(operations) > 200:
+        raise ValueError("한 번에 적용할 수 있는 장면 명령은 200개까지입니다.")
+
+    def mutation(project_obj):
+        scene_idx, cut_idx, cut = _scene_cut(project_obj, arguments)
+        blocking = cut["blocking"]
+        changed = []
+        if spatial_guide is not None:
+            existing_guide = blocking.get("spatialGuide") if isinstance(blocking.get("spatialGuide"), dict) else {}
+            blocking["spatialGuide"] = _sanitize_spatial_guide(spatial_guide)
+            for key in ("imageDataUrl", "imageWidthPx", "imageHeightPx", "importedAt"):
+                if key in existing_guide and key not in blocking["spatialGuide"]:
+                    blocking["spatialGuide"][key] = existing_guide[key]
+            changed.append({"op": "set_spatial_guide", "anchors": len(blocking["spatialGuide"]["anchors"])})
+        for index, command in enumerate(operations):
+            if not isinstance(command, dict):
+                raise ValueError(f"operations[{index}]가 객체가 아닙니다.")
+            operation = str(command.get("op", "")).lower()
+            if operation == "add_dummy":
+                item = _new_command_item(command, index, blocking)
+                if any(existing.get("id") == item["id"] for existing in blocking["items"]):
+                    raise ValueError(f"더미 ID가 이미 존재합니다: {item['id']}")
+                blocking["items"].append(item)
+                changed.append({"op": operation, "id": item["id"], "type": item["type"]})
+            elif operation == "update_dummy":
+                item_id = str(command.get("id") or command.get("dummy_id") or "")
+                item = next((entry for entry in blocking["items"] if entry.get("id") == item_id), None)
+                if not item:
+                    raise ValueError(f"수정할 더미를 찾을 수 없습니다: {item_id}")
+                _set_dummy_fields(item, command, blocking)
+                changed.append({"op": operation, "id": item_id, "type": item.get("type")})
+            elif operation == "remove_dummy":
+                item_id = str(command.get("id") or command.get("dummy_id") or "")
+                before = len(blocking["items"])
+                blocking["items"] = [entry for entry in blocking["items"] if entry.get("id") != item_id]
+                if len(blocking["items"]) == before:
+                    raise ValueError(f"삭제할 더미를 찾을 수 없습니다: {item_id}")
+                if blocking.get("camera", {}).get("trackingTargetId") == item_id:
+                    blocking["camera"]["trackingTargetId"] = ""
+                changed.append({"op": operation, "id": item_id})
+            elif operation in {"set_camera", "update_camera"}:
+                camera = blocking["camera"]
+                for key, minimum, maximum, label in (
+                    ("x", STAGE_COORD_MIN, STAGE_COORD_MAX, "camera.x"),
+                    ("y", STAGE_COORD_MIN, STAGE_COORD_MAX, "camera.y"),
+                    ("height", CAMERA_HEIGHT_MIN, CAMERA_HEIGHT_MAX, "camera.height"),
+                    ("tilt_deg", CAMERA_TILT_MIN, CAMERA_TILT_MAX, "camera.tilt_deg"),
+                    ("focal", CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX, "camera.focal"),
+                ):
+                    if key in command:
+                        value = clamp_number(command[key], minimum, maximum, label)
+                        camera[{"tilt_deg": "tiltDeg", "focal": "focal"}.get(key, key)] = int(value) if key == "focal" else value
+                if "pan_deg" in command:
+                    camera["panDeg"] = clamp_number(command["pan_deg"], -360000, 360000, "camera.pan_deg") % 360
+                changed.append({"op": operation, "id": "camera"})
+            elif operation == "set_spatial_guide":
+                guide = command.get("guide", command.get("spatial_guide"))
+                existing_guide = blocking.get("spatialGuide") if isinstance(blocking.get("spatialGuide"), dict) else {}
+                blocking["spatialGuide"] = _sanitize_spatial_guide(guide)
+                for key in ("imageDataUrl", "imageWidthPx", "imageHeightPx", "importedAt"):
+                    if key in existing_guide and key not in blocking["spatialGuide"]:
+                        blocking["spatialGuide"][key] = existing_guide[key]
+                changed.append({"op": operation, "anchors": len(blocking["spatialGuide"]["anchors"])})
+            else:
+                raise ValueError(f"지원하지 않는 장면 명령입니다: {operation}")
+        now_str = utc_now()
+        cut["updatedAt"] = now_str
+        return json.dumps({
+            "scene_index": scene_idx,
+            "cut_index": cut_idx,
+            "changed": changed,
+            "message": f"이미지 기반 장면 명령 {len(changed)}개를 적용했습니다.",
+        }, ensure_ascii=False)
+
+    return mutate_project(project_id, arguments.get("revision"), mutation)
+
 # Stdio JSON-RPC protocol processor
 def write_rpc(payload):
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -868,6 +1208,36 @@ def process_mcp_message(msg_str):
                     },
                     "required": ["project_id", "revision", "name", "x", "y"]
                 }
+            },
+            {
+                "name": "apply_scene_commands",
+                "description": "비전 모델이 레퍼런스 이미지에서 추출한 공간 계획과 장면 명령을 현재 컷에 적용합니다. 외형을 복사하는 대신 세트·인물·소품의 덩어리, 미터 기준 비례, 월드 위치, 깊이층, 카메라 관계를 저장하고 FrisFrame 열린 화면이 변경 revision을 감지해 갱신합니다.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project_id": {"type": "string", "description": "프로젝트 ID"},
+                        "revision": {"type": "integer", "minimum": 1, "description": "get_project에서 확인한 현재 revision"},
+                        "scene_index": {"type": "integer", "minimum": 0, "description": "씬 인덱스 (0-based)"},
+                        "cut_index": {"type": "integer", "minimum": 0, "description": "컷 인덱스 (0-based)"},
+                        "operations": {
+                            "type": "array",
+                            "maxItems": 200,
+                            "description": "add_dummy, update_dummy, remove_dummy, set_camera, set_spatial_guide 명령 배열. world_x_m/world_z_m은 무대 중심 기준 미터 좌표이고 physical_dimensions_m은 width/height/depth 실측 치수입니다.",
+                            "items": {"type": "object"}
+                        },
+                        "spatial_guide": {
+                            "type": "object",
+                            "description": "Codex/Claude 같은 비전 호출자가 레퍼런스 이미지에서 추출한 구조 계획. 이미지 자체를 자동 분석하지 않고 앵커의 화면 위치, 월드 위치(m), W/H/D, 깊이층을 저장합니다.",
+                            "properties": {
+                                "source_name": {"type": "string"},
+                                "status": {"type": "string", "enum": ["awaiting-plan", "applied"]},
+                                "anchors": {"type": "array", "maxItems": 200, "items": {"type": "object"}},
+                                "depth_layers": {"type": "array", "maxItems": 32, "items": {"type": "object"}}
+                            }
+                        }
+                    },
+                    "required": ["project_id", "revision"]
+                }
             }
         ]
         
@@ -905,6 +1275,8 @@ def process_mcp_message(msg_str):
                 result_text = handle_update_camera(args.get("project_id"), args)
             elif tool_name == "add_actor_to_cut":
                 result_text = handle_add_actor(args.get("project_id"), args)
+            elif tool_name == "apply_scene_commands":
+                result_text = handle_apply_scene_commands(args.get("project_id"), args)
             else:
                 raise ValueError(f"Tool '{tool_name}' is not recognized.")
         except Exception as e:
