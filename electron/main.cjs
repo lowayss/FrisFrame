@@ -1,7 +1,7 @@
 "use strict";
 
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, nativeImage, session } = require("electron");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -48,14 +48,16 @@ function packagedRuntimePath(filename) {
 
 function resolveServerLaunch() {
   if (app.isPackaged) {
+    const serverName = process.platform === "win32" ? "frisframe-server.exe" : "frisframe-server";
+    const ffmpegName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
     return {
-      command: packagedRuntimePath(path.join("server", "frisframe-server")),
+      command: packagedRuntimePath(path.join("server", serverName)),
       args: [],
-      ffmpeg: packagedRuntimePath("ffmpeg"),
+      ffmpeg: packagedRuntimePath(ffmpegName),
     };
   }
   return {
-    command: process.env.FRISFRAME_PYTHON || "python3.11",
+    command: process.env.FRISFRAME_PYTHON || (process.platform === "win32" ? "python" : "python3.11"),
     args: [path.join(app.getAppPath(), "server.py")],
     ffmpeg: require("ffmpeg-static"),
   };
@@ -130,6 +132,13 @@ function killServerProcess() {
   const child = serverProcess;
   serverProcess = null;
   if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32") {
+    const result = spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    if (result.status !== 0) {
+      try { child.kill(); } catch { /* Process already ended. */ }
+    }
+    return;
+  }
   try {
     process.kill(-child.pid, "SIGTERM");
   } catch {
@@ -155,7 +164,7 @@ async function startLocalServer() {
       throw new Error(`필수 실행 파일을 찾을 수 없습니다: ${runtimePath}`);
     }
   });
-  if (app.isPackaged) {
+  if (app.isPackaged && process.platform !== "win32") {
     fs.chmodSync(launch.command, 0o755);
     fs.chmodSync(launch.ffmpeg, 0o755);
   }
@@ -175,7 +184,8 @@ async function startLocalServer() {
   serverProcess = spawn(launch.command, args, {
     cwd: app.getPath("userData"),
     env: environment,
-    detached: true,
+    detached: process.platform !== "win32",
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const child = serverProcess;

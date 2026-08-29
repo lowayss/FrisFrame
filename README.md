@@ -24,20 +24,27 @@ python3 quality_check.py
 
 코드 책임, 프로젝트 형식과 Electron 연결 원칙은 [`MAINTENANCE.md`](MAINTENANCE.md)에 정리되어 있습니다.
 
-## macOS 데스크톱 앱
+## 데스크톱 앱 · macOS / Windows
 
-Apple Silicon용 설치 이미지는 버전에 따라 `release/FrisFrame-0.4.0-arm64.dmg` 형태로 생성됩니다. DMG를 열고 FrisFrame을 Applications 폴더로 옮겨 실행합니다. 현재 빌드는 로컬 검증용 미서명 버전이며, 외부 배포 전에는 Apple Developer ID 서명과 notarization이 필요합니다.
+같은 소스에서 두 데스크톱 버전을 빌드합니다. GitHub Actions의 `Desktop builds` 워크플로에는 `macOS · Apple Silicon`과 `Windows · x64` 두 작업이 별도로 표시됩니다. 성공한 빌드는 각각 `FrisFrame-macOS-arm64`, `FrisFrame-Windows-x64` Artifact로 받을 수 있고, `v*` 버전 태그에서는 두 플랫폼 파일을 GitHub Release에 함께 게시합니다.
 
-기존 로컬 서버 프로젝트를 데스크톱 앱으로 처음 옮기고 패키지를 다시 만드는 명령은 다음과 같습니다.
+- macOS Apple Silicon: `release/FrisFrame-0.4.0-arm64.dmg` 및 ZIP
+- Windows x64: `release/FrisFrame-0.4.0-x64.exe` NSIS 설치 파일
+
+현재 데스크톱 빌드는 미서명 개발 빌드입니다. macOS 외부 배포에는 Apple Developer ID 서명/notarization이, Windows에서 SmartScreen 경고를 줄이려면 코드 서명이 필요합니다.
+
+로컬에서 플랫폼별 패키지를 만드는 명령은 다음과 같습니다.
 
 ```bash
 npm install
 npm run check
-npm run desktop:migrate-data
-npm run desktop:build
+# Apple Silicon Mac
+npm run desktop:build:mac
+# Windows x64
+npm run desktop:build:win
 ```
 
-프로젝트와 자동 저장 데이터는 앱 파일 밖의 `~/Library/Application Support/FrisFrame/data/frisframe.db`에 보존됩니다. 앱을 교체하거나 업데이트해도 이 DB는 패키징 과정에서 덮어쓰지 않습니다. Three.js와 Lucide는 앱 안에서 오프라인으로 로드하며, MP4용 FFmpeg도 앱 런타임에 포함됩니다.
+기존 로컬 서버 프로젝트를 데스크톱 앱으로 옮길 때는 `npm run desktop:migrate-data`를 사용할 수 있습니다. 프로젝트와 자동 저장 데이터는 Electron의 플랫폼별 사용자 데이터 폴더에 보존되며 앱을 교체하거나 업데이트해도 패키징 과정에서 덮어쓰지 않습니다. Three.js와 Lucide는 앱 안에서 오프라인으로 로드하고, 플랫폼에 맞는 Python 서버와 FFmpeg도 앱 런타임에 포함합니다.
 
 ## 기본 작업 흐름
 

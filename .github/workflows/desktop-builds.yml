@@ -1,0 +1,123 @@
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "electron/**"
+      - "tests/electron-contract.test.cjs"
+      - "README.md"
+      - ".github/workflows/desktop-builds.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "electron/**"
+      - "tests/electron-contract.test.cjs"
+      - "README.md"
+      - ".github/workflows/desktop-builds.yml"
+
+concurrency:
+  group: desktop-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS · Apple Silicon
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Verify source contracts
+        run: npm run check
+      - name: Build macOS package
+        run: npm run desktop:build:mac
+      - name: Verify macOS package
+        run: npm run desktop:verify
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-macOS-arm64
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+
+  windows:
+    name: Windows · x64
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Verify source contracts
+        run: npm run check
+      - name: Build Windows package
+        run: npm run desktop:build:win
+      - name: Verify Windows package
+        run: npm run desktop:verify
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-Windows-x64
+          if-no-files-found: error
+          path: release/*.exe
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - macos
+      - windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: FrisFrame-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* --generate-notes --title "FrisFrame $GITHUB_REF_NAME"
+          fi

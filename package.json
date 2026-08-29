@@ -11,10 +11,15 @@
     "icon:build": "node electron/scripts/build-icon.cjs",
     "vendor:sync": "node electron/scripts/sync-vendor.cjs",
     "server:bundle": "node electron/scripts/build-python-runtime.cjs",
-    "desktop:prepare": "npm run icon:build && npm run vendor:sync && npm run server:bundle",
+    "runtime:stage": "node electron/scripts/stage-runtime.cjs",
+    "desktop:prepare": "npm run icon:build && npm run vendor:sync && npm run server:bundle && npm run runtime:stage",
     "desktop:dev": "npm run vendor:sync && electron .",
-    "desktop:dir": "npm run desktop:prepare && electron-builder --mac dir --arm64",
-    "desktop:build": "npm run desktop:prepare && electron-builder --mac dmg zip --arm64",
+    "desktop:dir": "npm run desktop:dir:mac",
+    "desktop:build": "npm run desktop:build:mac",
+    "desktop:dir:mac": "npm run desktop:prepare && electron-builder --mac dir --arm64",
+    "desktop:build:mac": "npm run desktop:prepare && electron-builder --mac dmg zip --arm64",
+    "desktop:dir:win": "npm run desktop:prepare && electron-builder --win dir --x64",
+    "desktop:build:win": "npm run desktop:prepare && electron-builder --win nsis --x64",
     "desktop:migrate-data": "node electron/scripts/migrate-local-data.cjs",
     "desktop:verify": "node electron/scripts/verify-package.cjs",
     "check": "python3 quality_check.py && node tests/electron-contract.test.cjs"
@@ -45,12 +50,8 @@
     ],
     "extraResources": [
       {
-        "from": "dist-runtime/frisframe-server",
-        "to": "runtime/server"
-      },
-      {
-        "from": "node_modules/ffmpeg-static/ffmpeg",
-        "to": "runtime/ffmpeg"
+        "from": "dist-runtime/staged-runtime",
+        "to": "runtime"
       },
       {
         "from": "THIRD_PARTY_NOTICES.md",
@@ -86,6 +87,18 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "dmg": {
       "title": "FrisFrame ${version}",
