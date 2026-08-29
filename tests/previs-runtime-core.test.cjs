@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const motionCore = require("../motion-core.js");
+const runtimeCore = require("../previs-runtime-core.js");
 const {
   cameraReferenceProgress,
   detectRenderRuntime,
@@ -10,7 +12,7 @@ const {
   installReferenceFrameSemantics,
   interpolateFocalLength,
   smoothReferenceProgress,
-} = require("../previs-runtime-core.js");
+} = runtimeCore;
 
 const root = path.resolve(__dirname, "..");
 
@@ -20,6 +22,17 @@ function fakeDocument(contexts) {
 
 function near(actual, expected, epsilon = 0.000001) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
+}
+
+for (const name of [
+  "cameraReferenceProgress",
+  "discreteAtDestination",
+  "heldActorBodyPose",
+  "installReferenceFrameSemantics",
+  "interpolateFocalLength",
+  "smoothReferenceProgress",
+]) {
+  assert.equal(runtimeCore[name], motionCore[name], `${name} must be re-exported from motion-core`);
 }
 
 assert.equal(
@@ -138,11 +151,13 @@ const actorArrived = fakeWindow.interpolatePoseFor({}, "actor-1", actorFrom, act
 assert.deepEqual(actorArrived.bodyPose, raisedPose);
 
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const motionScriptIndex = html.indexOf("./motion-core.js");
 const runtimeScriptIndex = html.indexOf("./previs-runtime-core.js");
 const appScriptIndex = html.indexOf("./app.js");
-assert.ok(runtimeScriptIndex >= 0 && appScriptIndex > runtimeScriptIndex,
-  "previs-runtime-core.js must load before app.js so it can install its guard after app globals are declared");
+assert.ok(motionScriptIndex >= 0 && runtimeScriptIndex > motionScriptIndex && appScriptIndex > runtimeScriptIndex,
+  "motion-core.js must load before previs-runtime-core.js, which must load before app.js");
 
+const motionSource = fs.readFileSync(path.join(root, "motion-core.js"), "utf8");
 const runtimeSource = fs.readFileSync(path.join(root, "previs-runtime-core.js"), "utf8");
 const listeners = {};
 const browserContext = {
@@ -151,6 +166,7 @@ const browserContext = {
   addEventListener(name, callback) { listeners[name] = callback; },
 };
 vm.createContext(browserContext);
+vm.runInContext(motionSource, browserContext, { filename: "motion-core.js" });
 vm.runInContext(runtimeSource, browserContext, { filename: "previs-runtime-core.js" });
 assert.equal(typeof listeners.DOMContentLoaded, "function", "runtime core must defer installation until app.js has executed");
 vm.runInContext(`
@@ -172,4 +188,4 @@ const browserActor = browserContext.interpolatePoseFor({}, "actor-1", actorFrom,
 near(browserActor.evaluatedProgress, 0.9995);
 assert.deepEqual(JSON.parse(JSON.stringify(browserActor.bodyPose)), neutralPose);
 
-console.log("previs-runtime-core: runtime detection, load order, camera easing, and reference-frame semantics passed");
+console.log("previs-runtime-core: motion-owned evaluator, load order, camera easing, and reference-frame semantics passed");

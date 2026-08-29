@@ -56,6 +56,7 @@ def main() -> None:
     for filename in (
         "tests/motion-core.test.cjs",
         "tests/retime-precision.test.cjs",
+        "tests/reference-frame-ownership.test.cjs",
         "tests/reference-video-contract.test.cjs",
         "tests/camera-motion-presets.test.cjs",
         "tests/reference-batch-export.test.cjs",
