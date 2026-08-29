@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent
 
 
@@ -68,6 +67,7 @@ def main() -> None:
         "electron/dynamic-prop-cache-ux.js",
         "electron/stage-shell-cache-ux.js",
         "electron/camera-path-cache-ux.js",
+        "electron/helper-raycast-ux.js",
         "electron/preview-cache-ux.js",
         "electron/performance-ux.js",
     ):
@@ -99,6 +99,7 @@ def main() -> None:
         "tests/dynamic-prop-cache-ux-contract.test.cjs",
         "tests/stage-shell-cache-ux-contract.test.cjs",
         "tests/camera-path-cache-ux-contract.test.cjs",
+        "tests/helper-raycast-ux-contract.test.cjs",
         "tests/preview-cache-ux-contract.test.cjs",
         "tests/performance-ux-contract.test.cjs",
         "tests/dom-contract.test.cjs",
