@@ -9,6 +9,7 @@ const app = read("app.js");
 const html = read("index.html");
 const motion = read("motion-core.js");
 const runtime = read("previs-runtime-core.js");
+const workflow = read("reference-workflow-core.js");
 const timeline = read("timeline-core.js");
 const server = read("server.py");
 const maintenance = read("MAINTENANCE.md");
@@ -19,9 +20,10 @@ const maintenance = read("MAINTENANCE.md");
 // same semantics without maintaining two motion engines.
 const motionIndex = html.indexOf("./motion-core.js");
 const runtimeIndex = html.indexOf("./previs-runtime-core.js");
+const workflowIndex = html.indexOf("./reference-workflow-core.js");
 const appIndex = html.indexOf("./app.js");
-assert.ok(motionIndex >= 0 && runtimeIndex > motionIndex && appIndex > runtimeIndex,
-  "motion core must own reference semantics before the runtime adapter and app load");
+assert.ok(motionIndex >= 0 && runtimeIndex > motionIndex && workflowIndex > runtimeIndex && appIndex > workflowIndex,
+  "motion core, runtime adapter, reference workflow, and app must load in dependency order");
 assert.ok(runtime.includes("DOMContentLoaded"),
   "reference runtime must defer evaluator installation until app.js exists");
 assert.ok(runtime.includes('require("./motion-core.js")'),
@@ -29,6 +31,14 @@ assert.ok(runtime.includes('require("./motion-core.js")'),
 assert.ok(runtime.includes("root?.FrisFrameMotionCore"),
   "browser runtime must reuse the already-loaded motion core");
 assert.ok(runtime.includes("installReferenceFrameSemantics(root)"));
+assert.ok(workflow.includes('require("./motion-core.js")'),
+  "Node reference workflow must import the pure planning owner");
+assert.ok(workflow.includes("root?.FrisFrameMotionCore"),
+  "browser reference workflow must reuse the already-loaded motion core");
+assert.ok(workflow.includes("installBatchReferenceExportUi(root)"));
+assert.ok(workflow.includes("installReferenceReadinessUi(root)"));
+assert.equal(runtime.includes("exportReferenceVideoBatch"), false,
+  "runtime adapter must not own reference batch export anymore");
 
 // Camera reference motion is deliberately more constrained than actor motion.
 assert.ok(motion.includes('sourceType === "camera" && options.constantSpeed !== false'),
