@@ -252,6 +252,17 @@
     return "Seedance Video-to-Video 기준입니다. FrisFrame MP4는 카메라·블로킹·타이밍을, 이미지/텍스트 레퍼런스는 인물·장소·스타일을 담당하도록 역할을 분리합니다.";
   }
 
+  function normalizeReferencePromptRole(value) {
+    const normalized = String(value || "previs").trim().toLowerCase();
+    return ["previs", "motion"].includes(normalized) ? normalized : "previs";
+  }
+
+  function referencePromptRoleNote(role = "previs") {
+    const normalized = normalizeReferencePromptRole(role);
+    if (normalized === "motion") return "모션 레퍼런스: 동작 순서, 속도, 타이밍, 배우 Root 경로, 명시한 Pose/카메라 움직임을 기준으로 사용합니다. 외형과 배경은 별도 레퍼런스로 바꿀 수 있습니다.";
+    return "3D 프리비즈 레퍼런스: 공간 구조, 카메라 구도/경로, 피사체 위치, 프레이밍, 렌즈·타이밍을 기준으로 사용합니다. 단순 도형과 색은 최종 디자인이 아닙니다.";
+  }
+
   function referencePromptValue(value, fallback) {
     const normalized = String(value || "").trim();
     return normalized || fallback;
@@ -263,6 +274,7 @@
 
   function buildReferencePromptGuide(entry = {}, platform = "seedance", options = {}) {
     const normalized = normalizeReferencePromptPlatform(platform);
+    const referenceRole = normalizeReferencePromptRole(options.referenceRole);
     const motion = entry?.blocking?.motion || {};
     const duration = Math.max(0.1, Number(entry.duration || motion.duration || 0) || 0.1);
     const fps = Math.max(1, Math.round(Number(entry.fps || motion.fps || 24) || 24));
@@ -271,13 +283,16 @@
     const references = referencePromptValue(options.references, "[예: @char_main = 주인공 외형, @loc_main = 최종 장소/미술 레퍼런스]");
     const style = referencePromptValue(options.style, "[최종 영상의 시대, 장소, 조명, 렌즈 질감, 색감, 의상/미술 스타일을 입력하세요]");
     const audio = referencePromptValue(options.audio, "[선택: 대사, 환경음, Foley, 음악 또는 SFX]");
+    const roleInstruction = referenceRole === "motion"
+      ? "Treat the FrisFrame MP4 as the master motion/timing reference: preserve the authored motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion. Placeholder appearance and background may be replaced by the supplied references."
+      : "Treat the FrisFrame MP4 as the master previs/spatial reference: preserve spatial layout, camera composition and trajectory, subject position, framing, lens progression, camera timing, actor root blocking, and beat timing. Primitive colors/shapes are blocking markers only, not final design.";
 
     if (normalized === "prompt-writer") {
       return [
         `Write a ${duration.toFixed(2)}-second Seedance video-to-video prompt based on the attached FrisFrame blocking MP4.`,
         `The shot is ${cutLabel} at ${fps} FPS. Read the entire input video and write the final generation prompt second-by-second so it matches the authored camera path, framing, lens changes, actor root blocking, spatial relationships, and timing.`,
-        "Treat the FrisFrame MP4 as the master structure/motion reference. Treat primitive colors and shapes as blocking markers only, not final design.",
-        "Treat character/location/style images as appearance references. Keep natural secondary body motion subtle and compatible with the blocking instead of inventing a different camera or root path.",
+        roleInstruction,
+        "Treat character/location/creative references as appearance references: identity, wardrobe, environment, color palette, lighting, materials, and mood. Keep natural secondary body motion subtle and compatible with the authored blocking instead of inventing a different camera or root path.",
         "Return the prompt in these sections: SHOT, ACTIVE REFERENCES, GLOBAL STYLE, SCENE / ACTION, SECOND-BY-SECOND TIMELINE, AUDIO / SFX.",
         "",
         `SCENE / ACTION NOTES: ${story}`,
@@ -291,7 +306,9 @@
       return [
         `RUNWAY REFERENCE STARTER · ${cutLabel} · ${duration.toFixed(2)}s`,
         "",
-        "Transform the FrisFrame previs into the requested final scene while preserving the input video's camera trajectory, timing, framing, subject blocking, and spatial relationships.",
+        referenceRole === "motion"
+          ? "Transform the FrisFrame motion reference into the requested final scene while preserving its motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion."
+          : "Transform the FrisFrame previs into the requested final scene while preserving the input video's spatial layout, camera trajectory, timing, framing, subject position/blocking, and spatial relationships.",
         `Scene/action: ${story}`,
         `Replace placeholder geometry with these final references/subjects: ${references}`,
         `Final visual target: ${style}`,
@@ -309,7 +326,9 @@
       `${heading} · ${cutLabel} · ${duration.toFixed(2)}s · ${fps} FPS`,
       "",
       "ACTIVE REFERENCES",
-      "@video_1 — FrisFrame previs MP4. Master for camera trajectory, framing, lens progression, camera timing, actor root blocking, spatial relationships, and beat timing. Follow this structure beat-for-beat. Primitive colors/shapes are blocking markers only; final appearance comes from the references and text below.",
+      referenceRole === "motion"
+        ? "@video_1 — FrisFrame motion reference MP4. Master for authored motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion. Follow these beats closely. Placeholder appearance/background may be replaced by the references and text below."
+        : "@video_1 — FrisFrame 3D previs MP4. Master for spatial layout, camera composition/trajectory, subject position, framing, lens progression, camera timing, actor root blocking, spatial relationships, and beat timing. Follow this structure beat-for-beat. Primitive colors/shapes are blocking markers only; final appearance comes from the references and text below.",
       references,
       "",
       "SCENE / ACTION",
@@ -322,7 +341,9 @@
       audio,
       "",
       "REFERENCE PRIORITY",
-      "Keep the camera path, framing, timing, and actor root movement tied to @video_1. Use character/location/style references for identity, wardrobe, environment, lighting, materials, and final look. Natural secondary motion may be added only where it supports the authored blocking.",
+      referenceRole === "motion"
+        ? "Keep the authored motion sequence, speed, timing, actor root path, explicit pose changes, and encoded camera motion tied to @video_1. Use character/location/creative references for identity, wardrobe, environment, color palette, lighting, materials, mood, and final look. Natural secondary motion may be added only where it supports the authored motion."
+        : "Keep the spatial layout, camera path, framing, timing, and actor root blocking tied to @video_1. Use character/location/creative references for identity, wardrobe, environment, color palette, lighting, materials, mood, and final look. Natural secondary motion may be added only where it supports the authored blocking.",
     ].join("\n");
   }
 
@@ -416,6 +437,19 @@
     });
     const platformNote = documentObject.createElement("div");
     Object.assign(platformNote.style, { color: "#91a69a", fontSize: "11px", lineHeight: "1.45" });
+    const roleSelect = documentObject.createElement("select");
+    Object.assign(roleSelect.style, fieldStyle);
+    [
+      ["previs", "3D 프리비즈 · 공간/카메라"],
+      ["motion", "모션 레퍼런스 · 동작/타이밍"],
+    ].forEach(([value, label]) => {
+      const option = documentObject.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      roleSelect.appendChild(option);
+    });
+    const roleNote = documentObject.createElement("div");
+    Object.assign(roleNote.style, { color: "#91a69a", fontSize: "11px", lineHeight: "1.45" });
 
     const makeTextarea = (placeholder, rows = 2) => {
       const textarea = documentObject.createElement("textarea");
@@ -452,8 +486,10 @@
       makeLabel("컷", cutSelect),
       makeLabel("대상", platformSelect),
       platformNote,
+      makeLabel("FrisFrame MP4 역할", roleSelect),
+      roleNote,
       makeLabel("장면 / 행동", story),
-      makeLabel("캐릭터 · 장소 · 스타일 레퍼런스 역할", references),
+      makeLabel("외부 레퍼런스 역할 · 캐릭터 / 장소 / 크리에이티브", references),
       makeLabel("최종 비주얼", style),
       makeLabel("오디오 / SFX (선택)", audio),
       makeLabel("복사용 프롬프트", output),
@@ -466,8 +502,10 @@
     const selectedEntry = () => entries[Number(cutSelect.value) || 0] || entries[0] || null;
     const refreshOutput = () => {
       platformNote.textContent = referencePromptPlatformNote(platformSelect.value);
+      roleNote.textContent = referencePromptRoleNote(roleSelect.value);
       const entry = selectedEntry();
       output.value = entry ? buildReferencePromptGuide(entry, platformSelect.value, {
+        referenceRole: roleSelect.value,
         story: story.value,
         references: references.value,
         style: style.value,
@@ -495,6 +533,7 @@
     build.addEventListener("click", refreshOutput);
     cutSelect.addEventListener("change", refreshOutput);
     platformSelect.addEventListener("change", refreshOutput);
+    roleSelect.addEventListener("change", refreshOutput);
     copy.addEventListener("click", async () => {
       refreshOutput();
       const copied = await copyReferencePromptText(target, output.value, documentObject);
@@ -644,8 +683,10 @@
     installReferencePromptGuideUi,
     installReferenceReadinessUi,
     normalizeReferencePromptPlatform,
+    normalizeReferencePromptRole,
     partitionReferenceBatchByReadiness,
     referencePromptPlatformNote,
+    referencePromptRoleNote,
     readinessStatusText,
     referenceEntryKey,
     safeFileSlug,
