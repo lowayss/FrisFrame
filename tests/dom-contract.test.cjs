@@ -112,10 +112,7 @@ assert.ok(app.includes("const spatialScaleCore = window.FrisFrameSpatialScaleCor
 assert.ok(app.includes("function actorPhysicalDimensions("), "actor framing must use physical dimensions");
 assert.ok(app.includes("fitThreeBodyToPhysicalBounds"), "prop meshes must be fitted to physical catalog dimensions");
 assert.ok(ids.has("physicalScaleReadout") && app.includes("실측 스케일"), "properties must expose the resolved metric dimensions");
-assert.ok(app.includes("function cameraPerspectiveForSubject(") && app.includes("Perspective scale check:"), "AI handoff must preserve metric perspective checks");
-assert.ok(app.includes('"vertical_offset", "pitch_deg"'), "CSV export must preserve actor elevation and pitch");
-assert.ok(app.includes("function blenderCameraTarget("), "Blender export must use camera pan and tilt directly");
-assert.ok(app.includes("obj.rotation_euler[0] = math.radians"), "Blender export must preserve actor pitch");
+assert.ok(app.includes("function cameraPerspectiveForSubject("), "metric perspective checks must remain available to the editor");
 assert.ok(app.includes("function updateThreePoseDrag("), "3D actors need direct joint dragging");
 assert.ok(app.includes("function updateExistingSourceKeyframe(sourceId, time"), "pose edits should update an existing key without creating an implicit one");
 assert.equal(app.includes("function autoSaveDraggedPose(sourceId)"), false, "drag edits must not expose an implicit keyframe save path");
@@ -182,7 +179,32 @@ for (const retiredFunction of [
   assert.equal(app.includes(`function ${retiredFunction}(`), false,
     `${retiredFunction} must stay physically removed from shared app source`);
 }
-assert.ok(app.includes('"camera_id"'), "motion CSV must identify the camera that owns each camera key");
+for (const retiredFunction of [
+  "buildProductionPack",
+  "buildProductionPackPreview",
+  "buildAiGenerationBrief",
+  "buildSeedancePrompt",
+  "buildMotionCsv",
+  "buildBlenderPrevisScript",
+  "buildBackgroundSheetManifest",
+  "buildBackgroundSheetReadme",
+  "renderBackgroundStageOverviewBlob",
+  "renderBackgroundPlanBlob",
+]) {
+  assert.equal(app.includes(`function ${retiredFunction}(`), false,
+    `${retiredFunction} must stay physically removed from shared app source`);
+}
+for (const retiredSpatialId of [
+  "spatialReferenceStatus",
+  "spatialReferenceImageInput",
+  "spatialReferencePreview",
+  "clearSpatialReferenceBtn",
+]) {
+  assert.equal(ids.has(retiredSpatialId), false,
+    `${retiredSpatialId} must stay physically removed from shared HTML`);
+}
+assert.equal(html.includes("spatial-reference-panel"), false,
+  "in-app background-image reference panel must stay removed");
 assert.equal(app.includes("function downloadUrl("), false, "exports must not bypass the preview dialog");
 assert.equal(app.includes("function downloadBlob("), false, "blob exports must not bypass the preview dialog");
 const retiredMotionPanelId = ["prompt", "Block", "Panel"].join("");
