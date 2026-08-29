@@ -2,11 +2,18 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { buildTutorialSteps } = require("../manual-guide-core.js");
+const manualGuideCore = require("../manual-guide-core.js");
+const { buildTutorialSteps } = manualGuideCore;
 
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const manualSource = fs.readFileSync(path.join(root, "manual-guide-core.js"), "utf8");
 const steps = buildTutorialSteps("FrisFrame Test");
+
+assert.deepEqual(Object.keys(manualGuideCore), ["buildTutorialSteps"],
+  "manual guide core must not own reference export/readiness policy");
+assert.equal(manualSource.includes("exportReferenceBatchSafely"), false);
+assert.equal(manualSource.includes("partitionReferenceBatchByReadiness"), false);
 
 assert.equal(steps.length, 12);
 assert.equal(steps[0].title, "FrisFrame Test 시작하기");
@@ -25,4 +32,4 @@ const joined = JSON.stringify(steps);
 assert.equal(joined.includes("에펙식"), false);
 assert.equal(joined.includes("포커스 100%"), false);
 
-console.log("manual-guide-core: tutorial flow and target contract passed");
+console.log("manual-guide-core: tutorial-only responsibility and target contract passed");

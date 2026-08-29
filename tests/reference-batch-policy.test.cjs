@@ -3,7 +3,7 @@ const runtime = require("../previs-runtime-core.js");
 const {
   exportReferenceBatchSafely,
   partitionReferenceBatchByReadiness,
-} = require("../manual-guide-core.js");
+} = runtime;
 
 function readyBlocking() {
   return {
@@ -42,7 +42,7 @@ const project = {
   }],
 };
 
-const partition = partitionReferenceBatchByReadiness(project, runtime);
+const partition = partitionReferenceBatchByReadiness(project);
 assert.equal(partition.allowed.length, 2);
 assert.equal(partition.blocked.length, 1);
 assert.deepEqual(partition.allowed.map((entry) => entry.title), ["Ready", "Review"]);
@@ -83,7 +83,7 @@ const originalManagedProjectDocument = target.managedProjectDocument;
 const originalCreateZip = target.createZip;
 
 (async () => {
-  const result = await exportReferenceBatchSafely(target, runtime);
+  const result = await exportReferenceBatchSafely(target);
   assert.equal(result.cancelled, false);
   assert.equal(result.skippedBlocked.length, 1);
   assert.equal(encoded.length, 2, "BLOCKED cut must never reach the existing MP4 encoder");
@@ -114,7 +114,7 @@ const originalCreateZip = target.createZip;
     async exportVideoForDocument() { cancelEncoded += 1; },
     confirm() { return false; },
   };
-  const cancelled = await exportReferenceBatchSafely(cancelledTarget, runtime);
+  const cancelled = await exportReferenceBatchSafely(cancelledTarget);
   assert.equal(cancelled.cancelled, true);
   assert.equal(cancelEncoded, 0);
 
@@ -127,11 +127,11 @@ const originalCreateZip = target.createZip;
     managedProjectDocument() { return { project: allBlockedProject }; },
   };
   await assert.rejects(
-    () => exportReferenceBatchSafely(allBlockedTarget, runtime, { confirmBeforeStart: false }),
+    () => exportReferenceBatchSafely(allBlockedTarget, { confirmBeforeStart: false }),
     /출력 가능한 컷이 없습니다/,
   );
 
-  console.log("reference-batch-policy: BLOCKED cuts are excluded before MP4 encoding");
+  console.log("reference-batch-policy: runtime-owned policy excludes BLOCKED cuts before MP4 encoding");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
