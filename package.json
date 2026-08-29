@@ -48,6 +48,7 @@
       "electron/workspace-ux.js",
       "electron/hud-export-ux.js",
       "electron/interaction-ux.js",
+      "electron/selection-ux.js",
       "electron/startup.html",
       "package.json"
     ],
