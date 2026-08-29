@@ -21,19 +21,38 @@
     return `${(second >>> 0).toString(16).padStart(8, "0")}${(first >>> 0).toString(16).padStart(8, "0")}:${text.length}`;
   }
 
+  function normalizeRevision(value) {
+    const numeric = Number(value ?? 0);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.trunc(numeric));
+  }
+
+  function isValidRevision(value) {
+    return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+  }
+
+  function snapshotDocument(document) {
+    if (!document?.project) throw new Error("복구 기록에 프로젝트 정보가 없습니다.");
+    const serialized = JSON.stringify(document);
+    const snapshot = JSON.parse(serialized);
+    if (!snapshot?.project) throw new Error("복구 기록에 프로젝트 정보가 없습니다.");
+    return snapshot;
+  }
+
   function projectFingerprint(document) {
     return hashString(JSON.stringify(document?.project ?? null));
   }
 
   function createRecoveryRecord({ projectId, revision, document, savedAt = new Date().toISOString() }) {
     if (!projectId || !document?.project) throw new Error("복구 기록에 프로젝트 정보가 없습니다.");
+    const snapshot = snapshotDocument(document);
     return {
       version: RECOVERY_VERSION,
       projectId: String(projectId),
-      revision: Math.max(0, Number(revision || 0)),
+      revision: normalizeRevision(revision),
       savedAt: String(savedAt),
-      fingerprint: projectFingerprint(document),
-      document,
+      fingerprint: projectFingerprint(snapshot),
+      document: snapshot,
     };
   }
 
@@ -41,15 +60,19 @@
     try {
       const record = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (!record || ![1, RECOVERY_VERSION].includes(record.version) || !record.projectId || !record.document?.project) return null;
-      const currentFingerprint = projectFingerprint(record.document);
+      if (!isValidRevision(record.revision)) return null;
+      const snapshot = snapshotDocument(record.document);
+      const currentFingerprint = projectFingerprint(snapshot);
       const validFingerprint = record.version === 1
-        ? record.fingerprint === JSON.stringify(record.document.project)
+        ? record.fingerprint === JSON.stringify(snapshot.project)
         : record.fingerprint === currentFingerprint;
       if (!validFingerprint) return null;
-      return record.version === RECOVERY_VERSION ? record : {
+      return {
         ...record,
         version: RECOVERY_VERSION,
+        revision: record.revision,
         fingerprint: currentFingerprint,
+        document: snapshot,
       };
     } catch {
       return null;
@@ -59,7 +82,7 @@
   function classifyRecovery(record, { projectId, revision, document }) {
     if (!record || record.projectId !== String(projectId || "")) return "none";
     if (record.fingerprint === projectFingerprint(document)) return "same";
-    if (Number(record.revision) === Number(revision || 0)) return "restore";
+    if (record.revision === normalizeRevision(revision)) return "restore";
     return "conflict";
   }
 
@@ -68,7 +91,10 @@
     classifyRecovery,
     createRecoveryRecord,
     hashString,
+    isValidRevision,
+    normalizeRevision,
     parseRecoveryRecord,
     projectFingerprint,
+    snapshotDocument,
   };
 });
