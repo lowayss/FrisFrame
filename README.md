@@ -1,186 +1,189 @@
 # FrisFrame
 
-**Keyframe-driven previs for AI video reference.**
+**한국어** | [English](README.en.md)
 
-FrisFrame is a browser/Electron previsualization tool for designing **camera movement, actor blocking, timing, framing, lens changes, and spatial relationships** before generating the final shot with an AI video model such as Seedance.
+**AI 영상 레퍼런스를 위한 키프레임 기반 프리비즈 도구**
 
-The main goal is not to make the previs itself look natural. The goal is to produce a **clean, controllable reference MP4** that tells the downstream model exactly what it needs to follow — and no more.
+FrisFrame은 Seedance 같은 AI 영상 모델에 최종 영상을 생성하기 전에 **카메라 움직임, 배우 블로킹, 타이밍, 프레이밍, 렌즈 변화, 공간 관계**를 설계하는 브라우저/Electron 기반 프리비즈 도구입니다.
+
+목표는 프리비즈 자체를 자연스럽고 화려하게 만드는 것이 아닙니다. 핵심은 AI가 따라야 할 정보만 정확하게 담은 **깨끗하고 제어 가능한 레퍼런스 MP4**를 만드는 것입니다.
 
 [![Quality and security](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml)
 [![Desktop builds](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml)
 
-## What FrisFrame is for
+## FrisFrame은 무엇을 위한 프로그램인가요?
 
 ```text
-Storyboard / Shot Plan
+스토리보드 / 샷 계획
         ↓
-2D + 3D Blocking
+2D + 3D 블로킹
         ↓
-Camera + Actor Keyframes
+카메라 + 배우 키프레임
         ↓
-Reference Readiness Check
+Reference Readiness 검사
         ↓
-Frame-accurate H.264 MP4 Previs
+프레임 정확 H.264 MP4 프리비즈
         ↓
 Seedance / AI Video Reference
         ↓
-Final Generated Shot
+최종 AI 생성 영상
 ```
 
-FrisFrame is built around a simple principle:
+FrisFrame의 가장 중요한 원칙은 단순합니다.
 
-> **Show only the motion the AI needs to follow. Leave the rest to the model.**
+> **AI가 따라야 하는 움직임만 보여주고, 나머지는 AI 모델에 맡긴다.**
 
-That means camera motion can be authored precisely, while actor movement stays intentionally sparse. FrisFrame does **not** automatically add walk cycles, arm swing, body bounce, breathing, or other secondary animation unless that motion is explicitly authored.
+그래서 카메라 움직임은 정밀하게 설계할 수 있지만 배우 움직임은 의도적으로 최소한만 전달합니다. 사용자가 직접 작성하지 않은 **자동 걷기 사이클, 팔 흔들기, 몸 바운스, 호흡, 불필요한 보조 움직임**을 자동으로 추가하지 않습니다.
 
-## Desktop builds
+## 다운로드 / 데스크톱 빌드
 
-FrisFrame is built from the same source for both desktop platforms.
+FrisFrame은 하나의 소스에서 macOS와 Windows 두 플랫폼을 빌드합니다.
 
-| Platform | Build | Output |
+| 플랫폼 | 지원 환경 | 설치 파일 |
 | --- | --- | --- |
 | macOS | Apple Silicon | `FrisFrame-0.4.0-arm64.dmg` + ZIP |
 | Windows | x64 | `FrisFrame-0.4.0-x64.exe` |
 
-GitHub Actions shows two separate native jobs:
+GitHub Actions에서는 두 개의 네이티브 빌드가 따로 실행됩니다.
 
 - **macOS · Apple Silicon**
 - **Windows · x64**
 
-Successful development builds are uploaded as:
+개발 빌드가 성공하면 Artifact로 다음 파일이 생성됩니다.
 
 - `FrisFrame-macOS-arm64`
 - `FrisFrame-Windows-x64`
 
-Version tags such as `v0.4.0` publish both platforms together through GitHub Releases. Future versions keep the same naming pattern with the version number changed.
+`v0.4.0` 같은 버전 태그를 만들면 GitHub Releases를 통해 Mac/Windows 버전을 함께 배포할 수 있습니다. 이후 버전도 버전 번호만 바뀌고 같은 이름 규칙을 사용합니다.
 
-Production tagged releases are configured to require:
+정식 태그 릴리스는 다음 서명 절차를 사용할 수 있도록 구성되어 있습니다.
 
-- **macOS:** Developer ID signing + Hardened Runtime + Apple notarization
-- **Windows:** Authenticode code signing
+- **macOS:** Developer ID 서명 + Hardened Runtime + Apple notarization
+- **Windows:** Authenticode 코드 서명
 
-Release signing setup is documented in [`SIGNING.md`](SIGNING.md).
+배포 서명 설정은 [`SIGNING.md`](SIGNING.md)에 정리되어 있습니다.
 
-## Core features
+## 핵심 기능
 
-### Storyboard and shot planning
+### 스토리보드 / 샷 계획
 
-- Scene and cut organization
-- Action, dialogue, directing notes, and review state
-- A/B shot versions
-- Continuity checks between cuts
+- 씬과 컷 구성
+- 액션, 대사, 연출 메모, 검토 상태 관리
+- A/B 샷 버전
+- 컷 사이 연속성 확인
 
-### 2D / 3D blocking
+### 2D / 3D 블로킹
 
-- Camera, actor, prop, and environment placement
-- Metric world scale
-- 3D camera framing preview
-- Multi-camera setup and comparison
-- Actor / camera spatial relationship checks
+- 카메라, 배우, 소품, 환경 배치
+- 미터 기반 월드 스케일
+- 3D 카메라 프레이밍 미리보기
+- 멀티 카메라 설정 및 비교
+- 배우와 카메라의 공간 관계 확인
 
-### Keyframe timeline
+### 키프레임 타임라인
 
-- Camera, actor, and prop tracks
-- Frame / 0.1s / 0.5s / 1s snapping
-- Copy / paste / multi-select / range retiming
-- `Smooth`, `Linear`, `Hold`, and `Cut` transitions
-- Frame-accurate timestamp precision
+- 카메라 / 배우 / 소품 트랙
+- 프레임 / 0.1초 / 0.5초 / 1초 스냅
+- 복사 / 붙여넣기 / 다중 선택 / 구간 리타이밍
+- `Smooth`, `Linear`, `Hold`, `Cut` 전환
+- 프레임 단위 타임스탬프 정밀도
 
-### Camera reference control
+### 카메라 레퍼런스 제어
 
 - Dolly In / Out
 - Truck Left / Right
 - Pedestal Up / Down
 - Arc Left / Right
 - Follow Actor
-- Free-curve camera paths with near-constant travel speed
-- Continuous focal-length interpolation
-- Destination-boundary tracking target changes
-- Smooth multi-key camera runs without braking at every internal key
+- 거의 일정한 이동 속도를 유지하는 Free-curve 카메라 경로
+- 연속적인 초점거리(focal length) 보간
+- 목적지 키 경계에서만 Tracking 대상 전환
+- 연속 Smooth 카메라 키 사이에서 불필요하게 멈추지 않는 움직임
 
-Camera presets are **keyframe macros**, not a separate animation system. The generated keys behave exactly like manually authored camera keys.
+카메라 프리셋은 별도의 자동 애니메이션 시스템이 아니라 **일반 키프레임을 생성하는 매크로**입니다. 생성된 키는 직접 만든 카메라 키와 동일하게 편집할 수 있습니다.
 
-### Actor reference control
+### 배우 레퍼런스 제어
 
-- Root position, height, facing, and timing
-- Explicit authored pose states
-- Smooth or linear root-motion timing
-- Pose hold until the authored destination key
+- Root 위치, 높이, 바라보는 방향, 이동 타이밍
+- 사용자가 직접 작성한 Pose 상태
+- Smooth / Linear root-motion 타이밍
+- 목적지 키에 도달하기 전까지 Pose 유지
 
-FrisFrame intentionally avoids inventing secondary body motion. This is important because AI video models can follow extra motion too literally and produce robotic results.
+FrisFrame은 배우의 보조 움직임을 임의로 만들어내지 않습니다. AI 영상 모델이 불필요한 움직임까지 지나치게 정확하게 따라가면 로봇처럼 보일 수 있기 때문입니다.
 
-### AI reference export
+### AI 레퍼런스 MP4 출력
 
-- Clean H.264 MP4 previs
-- CFR frame sampling at exact `1 / fps` intervals
-- H.264 / `yuv420p` / fast-start output
-- Selected export range
-- Batch reference export for multiple cuts
-- ZIP package with per-cut MP4 files and manifest
+- H.264 MP4 프리비즈
+- 정확한 `1 / fps` 간격의 CFR 프레임 샘플링
+- H.264 / `yuv420p` / fast-start 출력
+- 선택 구간 Export
+- 여러 컷 Batch Reference Export
+- 컷별 MP4 + manifest를 포함한 ZIP 패키지
+- 중복 컷 이름이나 특수문자가 있어도 안전한 파일명 생성
 
 ### Reference Readiness
 
-Before batch export, each cut is classified as:
+Batch Export 전에 각 컷을 검사해 다음 상태로 분류합니다.
 
-- **READY** — safe to export
-- **REVIEW** — exportable, but worth checking
-- **BLOCKED** — excluded from batch encoding until fixed
+- **READY** — 바로 출력해도 안전
+- **REVIEW** — 출력 가능하지만 한 번 확인 권장
+- **BLOCKED** — 문제를 수정하기 전까지 Batch 인코딩에서 제외
 
-Checks include invalid tracking targets, duplicate/out-of-range keys, broken export ranges, camera value errors, frame-grid timing, long reference duration, and authored discrete events that would otherwise fall after the final CFR sample.
+검사 항목에는 잘못된 Tracking 대상, 중복/범위 밖 키, 잘못된 Export 구간, 카메라 값 오류, 프레임 그리드 타이밍, 지나치게 긴 레퍼런스 길이, 마지막 CFR 샘플 뒤에 숨어버리는 discrete 이벤트 등이 포함됩니다.
 
-## Reference-video philosophy
+## AI 레퍼런스 설계 철학
 
-FrisFrame treats the MP4 as a **control signal**, not a finished animation.
+FrisFrame에서 MP4는 완성 애니메이션이 아니라 **AI에게 전달하는 제어 신호**입니다.
 
-Priority order:
+우선순위는 다음과 같습니다.
 
-1. **Camera motion** — most precise
-2. **Actor root motion** — position, height, facing, speed
-3. **Explicit intentional action / pose**
-4. **Secondary motion** — normally omitted
+1. **카메라 움직임** — 가장 정밀하게 전달
+2. **배우 Root Motion** — 위치, 높이, 방향, 속도
+3. **사용자가 직접 지정한 Action / Pose**
+4. **Secondary Motion** — 기본적으로 생략
 
-This is why a FrisFrame previs can look deliberately simple while still being a better AI reference.
+그래서 FrisFrame 프리비즈 화면은 일부러 단순하고 딱딱해 보일 수 있습니다. 하지만 Seedance 같은 AI 모델에는 오히려 불필요한 신호가 적어 더 명확한 레퍼런스가 될 수 있습니다.
 
-See [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) for the full contract.
+전체 원칙은 [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md)를 참고하세요.
 
-## Preview and export consistency
+## Preview와 MP4의 일관성
 
-Preview playback and exported MP4 frames share the same reference evaluation rules.
+화면에서 보는 Preview와 Export되는 MP4 프레임은 같은 Reference Evaluation 규칙을 사용합니다.
 
-Regression tests protect:
+회귀 테스트로 다음 항목을 보호합니다.
 
-- camera position / height
+- 카메라 위치 / 높이
 - pan / tilt
 - focal length
-- tracking target timing
-- actor root position / facing
-- authored pose hold
-- 24 / 60 fps timing
-- preview ↔ export numerical parity
+- Tracking 대상 전환 시점
+- 배우 Root 위치 / 방향
+- 작성한 Pose Hold
+- 24 / 60fps 타이밍
+- Preview ↔ Export 수치 일치
 
-The goal is simple: **what you author at time `t` should be what the exported reference frame represents at time `t`.**
+목표는 간단합니다. **시간 `t`에서 사용자가 작성한 상태가 Export된 레퍼런스에서도 같은 시간 `t`의 상태로 나타나야 합니다.**
 
-## Run locally
+## 로컬에서 실행하기
 
-FrisFrame can also run as a local browser app with MP4 encoding support.
+MP4 인코딩을 포함한 로컬 브라우저 앱으로도 실행할 수 있습니다.
 
 ```bash
 python3 server.py --port 8766
 ```
 
-Open:
+브라우저에서 다음 주소를 엽니다.
 
 ```text
 http://127.0.0.1:8766/
 ```
 
-Run the full project validation suite with:
+전체 프로젝트 검사를 실행하려면:
 
 ```bash
 python3 quality_check.py
 ```
 
-## Build the desktop app
+## 데스크톱 앱 빌드
 
 ```bash
 npm install
@@ -199,22 +202,33 @@ Windows x64:
 npm run desktop:build:win
 ```
 
-The packaged app includes its local Python server runtime and FFmpeg, so users do not need to install them separately.
+패키징된 앱에는 로컬 Python 서버 런타임과 FFmpeg가 포함되므로 일반 사용자가 별도로 Python이나 FFmpeg를 설치할 필요가 없습니다.
 
-## Documentation
+## 문서
 
-- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — detailed original usage guide
-- [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — AI reference-video design contract
-- [`MAINTENANCE.md`](MAINTENANCE.md) — code ownership, runtime boundaries, and maintenance notes
-- [`SIGNING.md`](SIGNING.md) — macOS / Windows production signing setup
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — bundled third-party software notices
+- [English README](README.en.md) — 영문 프로젝트 소개
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — 상세 사용 설명서
+- [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — AI 레퍼런스 영상 설계 원칙
+- [`MAINTENANCE.md`](MAINTENANCE.md) — 코드 구조와 유지보수 경계
+- [`SIGNING.md`](SIGNING.md) — macOS / Windows 정식 배포 서명 설정
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — 포함된 외부 소프트웨어 고지
 
-## Project status
+## 현재 상태
 
-FrisFrame is under active development. Current work is focused on improving **reference-video fidelity, timing predictability, camera control, batch export safety, and cross-platform desktop distribution**.
+FrisFrame은 현재 **AI 영상 레퍼런스의 정확도와 안정성을 높이는 방향**으로 개발하고 있습니다.
 
-External video analysis and arbitrary external 3D asset importing are not part of the current core scope.
+현재 우선순위는 새 기능을 계속 늘리는 것이 아니라 다음 항목을 보완하는 것입니다.
 
-## License
+- Reference MP4 타이밍 정확도
+- 카메라 움직임의 예측 가능성
+- 배우 Root Motion 전달 정확도
+- 저장 / 복구 안정성
+- Batch Export 안전성
+- Windows / macOS 데스크톱 안정성
+- 보안 및 회귀 테스트 강화
 
-MIT License. See [`LICENSE`](LICENSE).
+외부 영상 자동 분석이나 임의의 외부 3D 에셋 Import는 현재 핵심 범위에 포함하지 않습니다.
+
+## 라이선스
+
+MIT License. 자세한 내용은 [`LICENSE`](LICENSE)를 참고하세요.
