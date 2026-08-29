@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -98,6 +99,23 @@ class ServerSecurityTests(unittest.TestCase):
         self.assertIn("/project-recovery-core.js", server.STATIC_FILES)
         self.assertIn("/manual-guide-core.js", server.STATIC_FILES)
         self.assertNotIn("/video-analysis-core.js", server.STATIC_FILES)
+
+    def test_atomic_frame_write_preserves_previous_file_on_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "frame_000001.jpg"
+            destination.write_bytes(b"old-frame")
+
+            server.atomic_write_bytes(destination, b"new-frame")
+            self.assertEqual(destination.read_bytes(), b"new-frame")
+
+            destination.write_bytes(b"stable-frame")
+            with mock.patch.object(server.os, "replace", side_effect=OSError("simulated replace failure")):
+                with self.assertRaises(OSError):
+                    server.atomic_write_bytes(destination, b"broken-retry")
+
+            self.assertEqual(destination.read_bytes(), b"stable-frame")
+            temporary_files = [entry for entry in Path(directory).iterdir() if entry.name.endswith(".tmp")]
+            self.assertEqual(temporary_files, [])
 
 
 class ProjectManagementApiTests(unittest.TestCase):
