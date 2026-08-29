@@ -45,6 +45,7 @@
       "electron/clipboard.cjs",
       "electron/file-save.cjs",
       "electron/preload.cjs",
+      "electron/workspace-ux.js",
       "electron/startup.html",
       "package.json"
     ],
