@@ -55,6 +55,7 @@
       "electron/dynamic-prop-cache-ux.js",
       "electron/stage-shell-cache-ux.js",
       "electron/camera-path-cache-ux.js",
+      "electron/helper-raycast-ux.js",
       "electron/preview-cache-ux.js",
       "electron/performance-ux.js",
       "electron/startup.html",
