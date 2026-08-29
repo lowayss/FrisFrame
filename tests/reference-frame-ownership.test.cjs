@@ -75,6 +75,24 @@ const actorAlmost = fakeWindow.interpolatePoseFor(
 );
 assert.deepEqual(actorAlmost.bodyPose, neutralPose, "actor pose must remain authored/held until destination");
 
+const smoothRunKeys = [
+  { id: "cam-run-0", time: 0, pose: { focal: 24, trackingTargetId: "actor-a" } },
+  { id: "cam-run-1", time: 1, transition: "smooth", pose: { focal: 47, trackingTargetId: "actor-a" } },
+  { id: "cam-run-2", time: 2, transition: "smooth", pose: { focal: 70, trackingTargetId: "actor-a" } },
+];
+const firstRunPlan = motionCore.sourceKeyframeEvaluationPlan(smoothRunKeys, 0.5);
+const secondRunPlan = motionCore.sourceKeyframeEvaluationPlan(smoothRunKeys, 1.5);
+const firstRunFrame = fakeWindow.interpolatePoseFor(
+  {}, "camera", firstRunPlan.start.pose, firstRunPlan.end.pose, firstRunPlan.progress, {}, firstRunPlan.end,
+  { referenceProgress: firstRunPlan.referenceProgress },
+);
+const secondRunFrame = fakeWindow.interpolatePoseFor(
+  {}, "camera", secondRunPlan.start.pose, secondRunPlan.end.pose, secondRunPlan.progress, {}, secondRunPlan.end,
+  { referenceProgress: secondRunPlan.referenceProgress },
+);
+assert.equal(firstRunFrame.evaluatedProgress, 0.375, "smooth run must ease in only at its outer start");
+assert.equal(secondRunFrame.evaluatedProgress, 0.625, "smooth run must ease out only at its outer end");
+
 // Numerical fixture for the full authored-frame semantics used by both preview
 // and MP4 export. App-level contract tests ensure both surfaces enter the same
 // render-state evaluator; this fixture locks the resulting numeric semantics.
@@ -170,6 +188,7 @@ function fixtureSourceEvaluator(renderState, sourceId, time, fallbackPose) {
     plan.progress,
     fallbackPose,
     plan.end,
+    sourceId === "camera" ? { referenceProgress: plan.referenceProgress } : null,
   );
 }
 
