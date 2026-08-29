@@ -5,6 +5,7 @@ const {
   cameraDirectionVector,
   circularArcPoint,
   constrainPathEndpoint,
+  composeBaseInterpolatedPose,
   finiteNumber,
   motionSegments,
   normalizePathMode,
@@ -172,4 +173,50 @@ assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 12).map((key) => key.ti
 assert.deepEqual(rescaleKeyframeTimes(originalTiming, 6, 0).map((key) => key.time), [0, 3, 6]);
 assert.deepEqual(originalTiming.map((key) => key.time), [0, 3, 6], "rescaling must not mutate the source array");
 
-console.log("motion-core: transitions, path constraints, and camera reference speed passed");
+const baseCameraPose = composeBaseInterpolatedPose({
+  sourceId: "camera",
+  from: { x: 0.2, y: 0.3, height: 1.5, panDeg: 350, tiltDeg: -10, focal: 24, focusDistanceM: 3, trackingTargetId: "actor-a" },
+  to: { x: 0.8, y: 0.7, height: 2.5, panDeg: 10, tiltDeg: 10, focal: 70, focusDistanceM: 7, trackingTargetId: "actor-b" },
+  progress: 0.25,
+  spatial: { x: 0.35, y: 0.4, height: 1.75 },
+});
+near(baseCameraPose.x, 0.35);
+near(baseCameraPose.height, 1.75);
+near(baseCameraPose.panDeg, 355);
+near(baseCameraPose.tiltDeg, -5);
+assert.equal(baseCameraPose.focal, 36, "base app-compatible focal composition remains rounded before reference semantics correct it");
+assert.equal(baseCameraPose.trackingTargetId, "actor-a");
+const baseCameraLate = composeBaseInterpolatedPose({
+  sourceId: "camera",
+  from: { trackingTargetId: "actor-a" },
+  to: { trackingTargetId: "actor-b" },
+  progress: 0.75,
+  spatial: {},
+});
+assert.equal(baseCameraLate.trackingTargetId, "actor-b", "base compatibility layer keeps the old midpoint switch that the reference guard overrides");
+
+const neutralBodyPose = { torso: { x: 0 } };
+const destinationBodyPose = { torso: { x: 20 } };
+const baseActorBefore = composeBaseInterpolatedPose({
+  sourceId: "actor-1",
+  from: { type: "actor", x: 0.2, y: 0.3, verticalOffset: 0, pitch: 0, facing: 350, bodyPose: neutralBodyPose, visible: true },
+  to: { type: "actor", x: 0.8, y: 0.7, verticalOffset: 1, pitch: 20, facing: 10, bodyPose: destinationBodyPose, visible: false },
+  progress: 0.998,
+  spatial: { x: 0.5, y: 0.5, height: 0.5 },
+  transformed: { size: 1.2, scaleX: 1, scaleY: 1.1, scaleZ: 0.9 },
+});
+assert.equal(baseActorBefore.bodyPose, neutralBodyPose);
+near(baseActorBefore.facing, 9.96, 0.001);
+near(baseActorBefore.verticalOffset, 0.5);
+const baseActorAtLegacyThreshold = composeBaseInterpolatedPose({
+  sourceId: "actor-1",
+  from: { type: "actor", bodyPose: neutralBodyPose },
+  to: { type: "actor", bodyPose: destinationBodyPose },
+  progress: 0.999,
+  spatial: {},
+  transformed: {},
+});
+assert.equal(baseActorAtLegacyThreshold.bodyPose, destinationBodyPose,
+  "base compatibility layer keeps the old 0.999 switch while the reference guard holds until the authored destination");
+
+console.log("motion-core: transitions, path constraints, camera reference speed, and base pose composition passed");

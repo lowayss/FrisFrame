@@ -53,6 +53,64 @@
     return clamp(from + (finiteNumber(toFocal, from) - from) * t, minimum, maximum);
   }
 
+  function composeBaseInterpolatedPose({
+    sourceId = "",
+    from = {},
+    to = {},
+    progress = 0,
+    spatial = {},
+    transformed = null,
+  } = {}) {
+    const t = clamp(progress, 0, 1);
+    const lerpValue = (start, end) => finiteNumber(start, 0) + (finiteNumber(end, finiteNumber(start, 0)) - finiteNumber(start, 0)) * t;
+    const lerpAngleDegrees = (start, end) => {
+      const fromAngle = finiteNumber(start, 0);
+      const toAngle = finiteNumber(end, fromAngle);
+      const delta = ((toAngle - fromAngle + 540) % 360) - 180;
+      return (fromAngle + delta * t + 360) % 360;
+    };
+
+    if (sourceId === "camera") {
+      return {
+        ...from,
+        x: finiteNumber(spatial.x, from.x),
+        y: finiteNumber(spatial.y, from.y),
+        height: finiteNumber(spatial.height, from.height),
+        panDeg: lerpAngleDegrees(from.panDeg, to.panDeg),
+        tiltDeg: lerpValue(from.tiltDeg, to.tiltDeg),
+        focal: Math.round(lerpValue(from.focal, to.focal)),
+        focusDistanceM: lerpValue(from.focusDistanceM, to.focusDistanceM),
+        trackingTargetId: t < 0.5 ? from.trackingTargetId : to.trackingTargetId,
+      };
+    }
+
+    const resolvedTransform = transformed || from;
+    const keyedBodyPose = from.type === "actor"
+      ? (t >= 0.999 ? to.bodyPose : from.bodyPose)
+      : null;
+    return {
+      ...from,
+      x: finiteNumber(spatial.x, from.x),
+      y: finiteNumber(spatial.y, from.y),
+      size: resolvedTransform.size,
+      scaleX: resolvedTransform.scaleX,
+      scaleY: resolvedTransform.scaleY,
+      scaleZ: resolvedTransform.scaleZ,
+      verticalOffset: from.type === "actor" ? finiteNumber(spatial.height, from.verticalOffset) : from.verticalOffset,
+      mountedHeight: from.type === "prop" ? finiteNumber(spatial.height, from.mountedHeight) : from.mountedHeight,
+      pitch: lerpValue(Number(from.pitch || 0), Number(to.pitch || 0)),
+      facing: lerpAngleDegrees(from.facing, to.facing),
+      bodyPose: keyedBodyPose,
+      color: to.color,
+      shape: to.shape,
+      assetType: to.assetType,
+      mountId: t < 0.5 ? from.mountId : to.mountId,
+      seatIndex: t < 0.5 ? from.seatIndex : to.seatIndex,
+      name: to.name,
+      visible: t < 0.5 ? from.visible !== false : to.visible !== false,
+    };
+  }
+
   function smoothReferenceProgress(progress) {
     const t = clamp(progress, 0, 1);
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -673,6 +731,7 @@
     clamp,
     cloneValue,
     collectReferenceBatchCuts,
+    composeBaseInterpolatedPose,
     constrainPathEndpoint,
     discreteAtDestination,
     evaluateProjectReferenceReadiness,
