@@ -51,7 +51,7 @@ jobs:
               r'  function safeFileSlug\(value, fallback = "cut"\) \{.*?\n  \}\n\n(?=  function collectReferenceBatchCuts)',
               re.S,
           )
-          text, slug_count = slug_pattern.subn(new_slug, text, count=1)
+          text, slug_count = slug_pattern.subn(lambda _match: new_slug, text, count=1)
           if slug_count != 1:
             raise SystemExit(f'safeFileSlug patch count: {slug_count}')
 
@@ -98,7 +98,7 @@ jobs:
               r'  function collectReferenceBatchCuts\(project = \{\}\) \{.*?\n  \}\n\n(?=  function addReadinessIssue)',
               re.S,
           )
-          text, collect_count = collect_pattern.subn(new_collect, text, count=1)
+          text, collect_count = collect_pattern.subn(lambda _match: new_collect, text, count=1)
           if collect_count != 1:
             raise SystemExit(f'collectReferenceBatchCuts patch count: {collect_count}')
           motion.write_text(text, encoding='utf-8')
