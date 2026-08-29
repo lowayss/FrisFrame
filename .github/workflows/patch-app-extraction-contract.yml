@@ -1,0 +1,59 @@
+name: Patch app extraction contract
+
+on:
+  push:
+    branches:
+      - refactor/app-base-pose-evaluator-20260829
+    paths:
+      - .github/workflows/patch-app-extraction-contract.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/app-base-pose-evaluator-20260829
+          fetch-depth: 0
+      - name: Add DOM ownership migration to extraction workflow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('.github/workflows/refactor-app-base-pose.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()
+          Path('.github/workflows/refactor-app-base-pose.yml').unlink()
+'''
+          new = '''          replace_once(
+              'tests/dom-contract.test.cjs',
+              'const app = fs.readFileSync(path.join(root, "app.js"), "utf8");\\n',
+              'const app = fs.readFileSync(path.join(root, "app.js"), "utf8");\\n'
+              'const motion = fs.readFileSync(path.join(root, "motion-core.js"), "utf8");\\n',
+          )
+          replace_once(
+              'tests/dom-contract.test.cjs',
+              'assert.ok(app.includes("focusDistanceM: lerp("), "camera focus distance must interpolate between keys");\\n',
+              'assert.ok(motion.includes("focusDistanceM: lerpValue("), "motion-core must interpolate camera focus distance between keys");\\n'
+              'assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"), "app must delegate base camera pose composition to motion-core");\\n',
+          )
+
+          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()
+          Path('.github/workflows/refactor-app-base-pose.yml').unlink()
+'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one workflow insertion marker, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          Path('.github/workflows/patch-app-extraction-contract.yml').unlink()
+      - name: Commit workflow contract fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Update extraction contract for motion-core ownership"
+          git push origin HEAD:refactor/app-base-pose-evaluator-20260829
