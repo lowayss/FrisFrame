@@ -4,12 +4,13 @@
   if (root) root.FrisFramePrevisRuntimeCore = api;
 
   // This core loads before app.js in the browser. Install reference-video
-  // semantics and lightweight authored-camera helpers only after app.js has
-  // declared its global frame and keyframe functions.
+  // semantics and lightweight authored-camera/export helpers only after app.js
+  // has declared its global frame, keyframe, and exporter functions.
   if (root?.document && typeof root.addEventListener === "function") {
     const install = () => {
       api.installReferenceFrameSemantics(root);
       api.installCameraMotionPresetUi(root);
+      api.installBatchReferenceExportUi(root);
     };
     if (root.document.readyState === "loading") root.addEventListener("DOMContentLoaded", install, { once: true });
     else root.setTimeout?.(install, 0);
@@ -83,15 +84,10 @@
     return result;
   }
 
-  // A tracking target, visibility flag, mount relation, or keyed body pose is
-  // discrete reference information. Switching halfway through a segment makes
-  // Seedance reproduce an action/camera jump that was never authored.
   function discreteAtDestination(fromValue, toValue, progress) {
     return clamp(progress, 0, 1) >= 1 ? toValue : fromValue;
   }
 
-  // Keep focal length continuous in evaluated frames. Rounding belongs in UI
-  // labels, not in the previs video that Seedance follows frame by frame.
   function interpolateFocalLength(fromFocal, toFocal, progress, minimum = CAMERA_FOCAL_MIN, maximum = CAMERA_FOCAL_MAX) {
     return clamp(lerp(fromFocal, toFocal, progress), minimum, maximum);
   }
@@ -121,9 +117,6 @@
     const original = target.interpolatePoseFor;
     const patched = function patchedInterpolatePoseFor(renderState, sourceId, startPose, endPose, progress, fallbackPose, endKeyframe = null) {
       const inputProgress = clamp(progress, 0, 1);
-      // app.js intentionally keeps actor/root blocking linear across ordinary
-      // keys. Only camera "smooth" restores the UI-promised ease-in/out so
-      // Seedance receives authored camera rhythm without extra actor motion.
       const evaluatedProgress = sourceId === "camera"
         ? cameraReferenceProgress(inputProgress, endKeyframe?.transition || "smooth")
         : inputProgress;
@@ -159,9 +152,7 @@
       }
 
       const itemType = from.type || to.type || result.type;
-      if (itemType === "actor") {
-        result.bodyPose = heldActorBodyPose(from.bodyPose, to.bodyPose, inputProgress);
-      }
+      if (itemType === "actor") result.bodyPose = heldActorBodyPose(from.bodyPose, to.bodyPose, inputProgress);
       return result;
     };
     Object.defineProperty(patched, "__frisFrameReferenceSemantics", { value: true });
@@ -214,10 +205,8 @@
     const relativeZ = cameraZ - pivotZ;
     const rotatedX = relativeX * Math.cos(radians) - relativeZ * Math.sin(radians);
     const rotatedZ = relativeX * Math.sin(radians) + relativeZ * Math.cos(radians);
-    const unclampedX = (pivotX + rotatedX) / stage.width;
-    const unclampedY = (pivotZ + rotatedZ) / stage.depth;
-    const endX = clamp(unclampedX, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
-    const endY = clamp(unclampedY, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
+    const endX = clamp((pivotX + rotatedX) / stage.width, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
+    const endY = clamp((pivotZ + rotatedZ) / stage.depth, CAMERA_PRESET_MIN_COORD, CAMERA_PRESET_MAX_COORD);
     const worldEndX = endX * stage.width;
     const worldEndZ = endY * stage.depth;
     const panDeg = ((Math.atan2(pivotZ - worldEndZ, pivotX - worldEndX) * 180 / Math.PI) % 360 + 360) % 360;
@@ -268,29 +257,17 @@
       const angle = clamp(Math.abs(requestedAmount), 5, 90) * (presetId === "arc-left" ? 1 : -1);
       endPose = orbitCameraPose(startPose, stageWidthM, stageDepthM, angle);
     } else if (presetId === "follow-selected") {
-      if (!actorId || !actorStartPose || !actorEndPose) {
-        throw new Error("Follow Actor에는 기준 배우와 다음 배우 키가 필요합니다.");
-      }
+      if (!actorId || !actorStartPose || !actorEndPose) throw new Error("Follow Actor에는 기준 배우와 다음 배우 키가 필요합니다.");
       const dx = finiteNumber(actorEndPose.x, finiteNumber(actorStartPose.x, 0.5)) - finiteNumber(actorStartPose.x, 0.5);
       const dy = finiteNumber(actorEndPose.y, finiteNumber(actorStartPose.y, 0.5)) - finiteNumber(actorStartPose.y, 0.5);
       const stage = normalizedStage(stageWidthM, stageDepthM);
       endPose = translateCameraPose(startPose, stage.width, stage.depth, dx * stage.width, dy * stage.depth, { translateAim: true });
       startPose.trackingTargetId = actorId;
       endPose.trackingTargetId = actorId;
-      pathMode = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"].includes(followPathMode)
-        ? followPathMode
-        : "straight";
+      pathMode = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"].includes(followPathMode) ? followPathMode : "straight";
     }
 
-    return {
-      presetId,
-      label: definition.label,
-      unit: definition.unit,
-      requestedAmount,
-      startPose,
-      endPose,
-      pathMode,
-    };
+    return { presetId, label: definition.label, unit: definition.unit, requestedAmount, startPose, endPose, pathMode };
   }
 
   function cameraPresetActorContext(target, frame, startTime) {
@@ -315,12 +292,7 @@
     return (keys || []).find((keyframe) => Math.abs(finiteNumber(keyframe.time, -999) - time) <= epsilon) || null;
   }
 
-  function applyCameraMotionPreset(target, {
-    presetId = "dolly-in",
-    amount,
-    duration = 2,
-    transition = "smooth",
-  } = {}) {
+  function applyCameraMotionPreset(target, { presetId = "dolly-in", amount, duration = 2, transition = "smooth" } = {}) {
     const required = ["currentInteractionFrame", "displayPlayhead", "stageWorldSize", "applySourcePose", "createSourceKeyframe", "keysForSource", "commit"];
     const missing = required.filter((name) => typeof target?.[name] !== "function");
     if (missing.length) throw new Error(`카메라 프리셋 연결 함수가 없습니다: ${missing.join(", ")}`);
@@ -330,13 +302,7 @@
     const stage = target.stageWorldSize(frame) || {};
     let actualDuration = clamp(finiteNumber(duration, 2), 0.25, 20);
     let actorContext = null;
-    let planOptions = {
-      presetId,
-      amount,
-      camera: frame.camera,
-      stageWidthM: stage.width,
-      stageDepthM: stage.depth,
-    };
+    let planOptions = { presetId, amount, camera: frame.camera, stageWidthM: stage.width, stageDepthM: stage.depth };
 
     if (presetId === "follow-selected") {
       actorContext = cameraPresetActorContext(target, frame, startTime);
@@ -362,11 +328,8 @@
     const cameraKeysBefore = target.keysForSource("camera") || [];
     let startKey = findKeyAtTime(cameraKeysBefore, startTime);
     target.applySourcePose("camera", plan.startPose);
-    if (startKey) {
-      startKey.pose = { ...cloneValue(startKey.pose || {}), ...cloneValue(plan.startPose) };
-    } else {
-      startKey = target.createSourceKeyframe("camera", startTime, "straight");
-    }
+    if (startKey) startKey.pose = { ...cloneValue(startKey.pose || {}), ...cloneValue(plan.startPose) };
+    else startKey = target.createSourceKeyframe("camera", startTime, "straight");
     if (!startKey) throw new Error("프리셋 시작 카메라 키를 만들지 못했습니다.");
 
     if (typeof target.ensureDurationCovers === "function") target.ensureDurationCovers(requestedEndTime);
@@ -428,7 +391,6 @@
     const form = documentObject.createElement("form");
     form.method = "dialog";
     Object.assign(form.style, { padding: "20px", display: "grid", gap: "14px" });
-
     const title = documentObject.createElement("strong");
     title.textContent = "카메라 모션 프리셋";
     Object.assign(title.style, { fontSize: "18px" });
@@ -444,7 +406,6 @@
       option.textContent = definition.label;
       presetSelect.appendChild(option);
     });
-
     const amountLabel = documentObject.createElement("label");
     amountLabel.textContent = "이동량";
     const amountInput = documentObject.createElement("input");
@@ -453,7 +414,6 @@
     amountInput.step = "0.1";
     amountInput.value = "2";
     amountLabel.appendChild(amountInput);
-
     const durationLabel = documentObject.createElement("label");
     durationLabel.textContent = "구간 길이 (초)";
     const durationInput = documentObject.createElement("input");
@@ -464,7 +424,6 @@
     durationInput.step = "0.25";
     durationInput.value = "2";
     durationLabel.appendChild(durationInput);
-
     const transitionLabel = documentObject.createElement("label");
     transitionLabel.textContent = "카메라 속도";
     const transitionSelect = documentObject.createElement("select");
@@ -476,7 +435,6 @@
       transitionSelect.appendChild(option);
     });
     transitionLabel.appendChild(transitionSelect);
-
     [presetSelect, amountInput, durationInput, transitionSelect].forEach((input) => {
       Object.assign(input.style, {
         width: "100%",
@@ -490,11 +448,9 @@
       });
     });
     [amountLabel, durationLabel, transitionLabel].forEach((label) => Object.assign(label.style, { fontSize: "13px", color: "#c7d2cc" }));
-
     const status = documentObject.createElement("div");
     status.id = "cameraMotionPresetStatus";
     Object.assign(status.style, { minHeight: "18px", color: "#ffad8f", fontSize: "12px" });
-
     const actions = documentObject.createElement("div");
     Object.assign(actions.style, { display: "flex", justifyContent: "flex-end", gap: "8px" });
     const cancel = documentObject.createElement("button");
@@ -518,7 +474,6 @@
       durationInput.disabled = definition.unit === "key";
       status.textContent = definition.unit === "key" ? "선택한 배우(없으면 현재 Tracking/첫 배우)의 다음 동작 키를 카메라가 따라갑니다." : "";
     }
-
     presetSelect.addEventListener("change", syncPresetInputs);
     button.addEventListener("click", () => {
       status.textContent = "";
@@ -545,23 +500,200 @@
     return true;
   }
 
+  function safeFileSlug(value, fallback = "cut") {
+    const normalized = String(value || "")
+      .normalize("NFKC")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[.-]+|[.-]+$/g, "")
+      .slice(0, 80);
+    return normalized || fallback;
+  }
+
+  function collectReferenceBatchCuts(project = {}) {
+    const entries = [];
+    (project.scenes || []).forEach((scene, sceneIndex) => {
+      (scene.cuts || []).forEach((cut, cutIndex) => {
+        const blocking = cut?.blocking;
+        const duration = finiteNumber(blocking?.motion?.duration, 0);
+        if (!blocking || duration <= 0) return;
+        const sceneNumber = Number(scene.number || sceneIndex + 1);
+        const cutNumber = Number(cut.number || cutIndex + 1);
+        const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
+        entries.push({
+          sceneId: scene.id || "",
+          cutId: cut.id || "",
+          sceneNumber,
+          cutNumber,
+          sceneHeading: scene.heading || "",
+          title: cut.title || "",
+          status: cut.status || "",
+          filename: `${base}_reference.mp4`,
+          blocking: cloneValue(blocking),
+          duration,
+          fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
+        });
+      });
+    });
+    return entries;
+  }
+
+  async function collectSingleReferenceVideo(target, entry) {
+    if (typeof target.exportVideoForDocument !== "function") throw new Error("기존 MP4 내보내기 함수를 찾을 수 없습니다.");
+    const originalPresentExport = target.presentExport;
+    const originalPresentExportError = target.presentExportError;
+    let captured = null;
+    target.presentExport = (data, filename, label, preview) => {
+      captured = { data, filename, label, preview };
+    };
+    target.presentExportError = (message) => {
+      throw new Error(String(message || "MP4 내보내기에 실패했습니다."));
+    };
+    try {
+      await target.exportVideoForDocument(cloneValue(entry.blocking), {
+        progressOwner: "",
+        filename: entry.filename,
+        exportLabel: "Seedance 레퍼런스 H.264 MP4",
+        cutLabel: `S${String(entry.sceneNumber).padStart(2, "0")} C${String(entry.cutNumber).padStart(2, "0")}`,
+      });
+      if (!captured?.data) throw new Error(`${entry.filename} 결과를 수집하지 못했습니다.`);
+      return captured;
+    } finally {
+      target.presentExport = originalPresentExport;
+      target.presentExportError = originalPresentExportError;
+    }
+  }
+
+  function buildReferenceBatchManifest(project = {}, entries = []) {
+    return {
+      app: "FrisFrame",
+      type: "seedance-reference-video-batch",
+      projectTitle: project.title || "FrisFrame",
+      generatedAt: new Date().toISOString(),
+      policy: {
+        previewExportEvaluator: "shared",
+        actorSecondaryMotion: "authored-only",
+        cameraPresets: "keyframe-macros-only",
+      },
+      cuts: entries.map((entry) => ({
+        sceneId: entry.sceneId,
+        cutId: entry.cutId,
+        sceneNumber: entry.sceneNumber,
+        cutNumber: entry.cutNumber,
+        sceneHeading: entry.sceneHeading,
+        title: entry.title,
+        status: entry.status,
+        file: `videos/${entry.filename}`,
+        durationSeconds: entry.duration,
+        fps: entry.fps,
+      })),
+    };
+  }
+
+  async function exportReferenceVideoBatch(target, { confirmBeforeStart = true } = {}) {
+    const required = ["managedProjectDocument", "exportVideoForDocument", "createZip", "presentExport"];
+    const missing = required.filter((name) => typeof target?.[name] !== "function");
+    if (missing.length) throw new Error(`일괄 출력 연결 함수가 없습니다: ${missing.join(", ")}`);
+    const documentPayload = target.managedProjectDocument();
+    const project = cloneValue(documentPayload?.project || {});
+    const entries = collectReferenceBatchCuts(project);
+    if (!entries.length) throw new Error("MP4로 출력할 컷이 없습니다.");
+    if (confirmBeforeStart && typeof target.confirm === "function") {
+      const totalSeconds = entries.reduce((sum, entry) => sum + entry.duration, 0);
+      const accepted = target.confirm(`${entries.length}개 컷(${totalSeconds.toFixed(1)}초)을 순서대로 MP4로 만들고 ZIP으로 묶습니다. 계속할까요?`);
+      if (!accepted) return { cancelled: true, entries: [] };
+    }
+
+    const files = [];
+    const completedEntries = [];
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      if (typeof target.notifyApp === "function") target.notifyApp(`레퍼런스 MP4 ${index + 1}/${entries.length} · ${entry.filename}`);
+      const captured = await collectSingleReferenceVideo(target, entry);
+      files.push({ path: `videos/${entry.filename}`, blob: captured.data });
+      completedEntries.push(entry);
+    }
+
+    const manifest = buildReferenceBatchManifest(project, completedEntries);
+    files.push({ path: "manifest.json", content: JSON.stringify(manifest, null, 2) });
+    files.push({
+      path: "README.md",
+      content: [
+        "# FrisFrame Seedance Reference Video Batch",
+        "",
+        "- `videos/`의 각 MP4는 컷별 키프레임 프리비즈 레퍼런스입니다.",
+        "- 배우의 자동 보행·팔 흔들기·바운스 등 secondary motion은 추가하지 않습니다.",
+        "- 카메라와 배우 root의 관계, 키 타이밍, 렌즈와 Tracking 의도를 레퍼런스로 사용합니다.",
+        "- 컷 순서와 FPS/길이는 `manifest.json`을 확인합니다.",
+        "",
+      ].join("\n"),
+    });
+    const zip = await target.createZip(files);
+    const zipName = `${safeFileSlug(project.title || "frisframe", "frisframe")}_seedance_reference_videos.zip`;
+    const summary = `${completedEntries.length}개 컷 · 개별 H.264 MP4 · manifest.json`;
+    target.presentExport(zip, zipName, "Seedance 레퍼런스 MP4 ZIP", {
+      type: "text",
+      text: `${summary}\n\n${completedEntries.map((entry) => `S${String(entry.sceneNumber).padStart(2, "0")} C${String(entry.cutNumber).padStart(2, "0")} · ${entry.title || "컷"} · ${entry.duration.toFixed(2)}초 · ${entry.fps}FPS`).join("\n")}`,
+    });
+    if (typeof target.notifyApp === "function") target.notifyApp(`전체 레퍼런스 MP4 ${completedEntries.length}개를 ZIP으로 준비했습니다.`);
+    return { cancelled: false, entries: completedEntries, manifest, zip, filename: zipName };
+  }
+
+  function installBatchReferenceExportUi(target) {
+    const documentObject = target?.document;
+    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
+    if (documentObject.querySelector("#batchReferenceVideoBtn")) return true;
+    const anchor = documentObject.querySelector("#videoPanelBtn") || documentObject.querySelector("#videoBtn");
+    if (!anchor?.parentNode) return false;
+    const button = documentObject.createElement("button");
+    button.type = "button";
+    button.id = "batchReferenceVideoBtn";
+    button.className = anchor.className;
+    button.textContent = "전체 컷 MP4 ZIP";
+    button.title = "프로젝트의 모든 컷을 개별 Seedance 레퍼런스 MP4로 만든 뒤 ZIP으로 묶습니다.";
+    anchor.insertAdjacentElement?.("afterend", button) || anchor.parentNode.appendChild(button);
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "일괄 출력 중…";
+      try {
+        await exportReferenceVideoBatch(target, { confirmBeforeStart: true });
+      } catch (error) {
+        if (typeof target.notifyApp === "function") target.notifyApp(error?.message || "전체 컷 MP4 출력에 실패했습니다.");
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    });
+    return true;
+  }
+
   return {
     CAMERA_FOCAL_MAX,
     CAMERA_FOCAL_MIN,
     CAMERA_MOTION_PRESETS,
     applyCameraMotionPreset,
     buildCameraMotionPreset,
+    buildReferenceBatchManifest,
     cameraGroundDirection,
     cameraMotionPresetDefinition,
     cameraReferenceProgress,
     cloneValue,
+    collectReferenceBatchCuts,
+    collectSingleReferenceVideo,
     detectRenderRuntime,
     discreteAtDestination,
+    exportReferenceVideoBatch,
     heldActorBodyPose,
+    installBatchReferenceExportUi,
     installCameraMotionPresetUi,
     installReferenceFrameSemantics,
     interpolateFocalLength,
     orbitCameraPose,
+    safeFileSlug,
     smoothReferenceProgress,
     translateCameraPose,
   };
