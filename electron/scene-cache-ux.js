@@ -11,12 +11,17 @@
     actorRigBuilds: 0,
     actorRigReuses: 0,
     actorRigTransformUpdates: 0,
+    actorJointTransformSkips: 0,
+    actorScaleSkips: 0,
+    actorGroundingReuses: 0,
+    actorGroundingRecomputes: 0,
     actorRigInvalidations: 0,
     protectedWorldClears: 0,
   };
 
   const staticItems = new Map();
   const actorRigs = new Map();
+  const actorRigRuntime = new WeakMap();
   let mainRenderDepth = 0;
   let previewRenderDepth = 0;
 
@@ -72,6 +77,18 @@
     ]);
   }
 
+  function actorPoseTransformSignature(renderItem) {
+    return JSON.stringify(actorBodyPoseForRender(renderItem));
+  }
+
+  function actorScaleSignature(dimensions) {
+    return JSON.stringify([
+      Number(dimensions.width || 0),
+      Number(dimensions.height || 0),
+      Number(dimensions.depth || 0),
+    ]);
+  }
+
   function disposeDetached(group) {
     if (!group) return;
     try {
@@ -93,6 +110,7 @@
     const entry = actorRigs.get(itemId);
     if (!entry) return;
     actorRigs.delete(itemId);
+    actorRigRuntime.delete(entry.group);
     if (dispose && !entry.group.parent) disposeDetached(entry.group);
     stats.actorRigInvalidations += 1;
   }
@@ -125,6 +143,7 @@
     for (const [itemId, entry] of cache) {
       const attached = entry.group.parent === threeView?.world;
       cache.delete(itemId);
+      if (cache === actorRigs) actorRigRuntime.delete(entry.group);
       if (!attached) disposeDetached(entry.group);
       stats[invalidationStat] += 1;
     }
@@ -134,8 +153,7 @@
     return group?.children?.find((child) => child.name === "humanoid-rig-v2") || null;
   }
 
-  function applyActorJointTransforms(body, renderItem) {
-    const pose = actorBodyPoseForRender(renderItem);
+  function applyActorJointTransforms(body, pose) {
     body.traverse((object) => {
       if (!object.isGroup || !object.userData?.jointId) return;
       const jointId = object.userData.jointId;
@@ -158,24 +176,56 @@
     const renderItem = resolvedItemPose(item, renderState);
     const dimensions = actorPhysicalDimensions(renderItem);
     const rigScale = dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M;
+    const pose = actorBodyPoseForRender(renderItem);
+    const poseSignature = JSON.stringify(pose);
+    const scaleSignature = actorScaleSignature(dimensions);
+    const runtime = actorRigRuntime.get(group) || {};
 
-    // Reapply only the authored/evaluated transforms. The expensive actor
-    // geometry, materials, editor metadata and helper objects stay allocated.
-    applyActorJointTransforms(body, renderItem);
-    body.scale.set(
-      dimensions.width / spatialScaleCore.ACTOR_RIG_WIDTH_M,
-      dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M,
-      dimensions.depth / spatialScaleCore.ACTOR_RIG_DEPTH_M,
-    );
+    if (runtime.poseSignature !== poseSignature) {
+      applyActorJointTransforms(body, pose);
+      runtime.poseSignature = poseSignature;
+    } else {
+      stats.actorJointTransformSkips += 1;
+    }
 
-    // Match makeThreeItem's grounding behavior. Bounds are measured before
-    // actor facing/pitch and before the stage/world translation are applied.
-    group.position.set(0, 0, 0);
-    body.position.y = 0;
-    body.rotation.set(0, 0, 0);
-    group.updateMatrixWorld(true);
-    const actorBounds = new THREE.Box3().setFromObject(body);
-    body.position.y = renderItem.autoMounted ? -0.79 * rigScale : Math.max(0, -actorBounds.min.y);
+    if (runtime.scaleSignature !== scaleSignature) {
+      body.scale.set(
+        dimensions.width / spatialScaleCore.ACTOR_RIG_WIDTH_M,
+        dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M,
+        dimensions.depth / spatialScaleCore.ACTOR_RIG_DEPTH_M,
+      );
+      runtime.scaleSignature = scaleSignature;
+    } else {
+      stats.actorScaleSkips += 1;
+    }
+
+    const groundingSignature = JSON.stringify([
+      poseSignature,
+      scaleSignature,
+      Boolean(renderItem.autoMounted),
+    ]);
+    if (renderItem.autoMounted) {
+      runtime.groundY = -0.79 * rigScale;
+      runtime.groundingSignature = groundingSignature;
+      body.position.y = runtime.groundY;
+      stats.actorGroundingReuses += 1;
+    } else if (runtime.groundingSignature !== groundingSignature || !Number.isFinite(runtime.groundY)) {
+      // Match makeThreeItem's grounding behavior. Bounds only need to be
+      // recalculated when pose/physical scale changes, not while the actor is
+      // simply translating or rotating across the stage.
+      group.position.set(0, 0, 0);
+      body.position.y = 0;
+      body.rotation.set(0, 0, 0);
+      group.updateMatrixWorld(true);
+      const actorBounds = new THREE.Box3().setFromObject(body);
+      runtime.groundY = Math.max(0, -actorBounds.min.y);
+      runtime.groundingSignature = groundingSignature;
+      body.position.y = runtime.groundY;
+      stats.actorGroundingRecomputes += 1;
+    } else {
+      body.position.y = runtime.groundY;
+      stats.actorGroundingReuses += 1;
+    }
 
     const angle = degToRad(Number(renderItem.facing || 0));
     const pitch = degToRad(Number(renderItem.pitch || 0));
@@ -197,6 +247,7 @@
       arrow.setLength(arrowLength, arrowLength * 0.28, arrowLength * 0.17);
     }
 
+    actorRigRuntime.set(group, runtime);
     group.updateMatrixWorld(true);
     stats.actorRigTransformUpdates += 1;
     return true;
@@ -207,6 +258,8 @@
     staticItemSignature,
     actorRigEligible,
     actorRigSignature,
+    actorPoseTransformSignature,
+    actorScaleSignature,
     syncActorRig,
     stats,
   };
@@ -271,6 +324,7 @@
         }
         const attached = entry.group.parent === threeView.world;
         actorRigs.delete(itemId);
+        actorRigRuntime.delete(entry.group);
         if (!attached) disposeDetached(entry.group);
         stats.actorRigInvalidations += 1;
       }
@@ -322,6 +376,7 @@
   window.addEventListener("beforeunload", () => {
     for (const cache of [staticItems, actorRigs]) {
       for (const [itemId, entry] of cache) {
+        if (cache === actorRigs) actorRigRuntime.delete(entry.group);
         if (!entry.group.parent) disposeDetached(entry.group);
         cache.delete(itemId);
       }
