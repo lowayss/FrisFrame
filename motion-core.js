@@ -376,6 +376,64 @@
     return Math.abs(safeTime - frame / safeFps) <= Math.max(0.000001, toleranceSeconds);
   }
 
+  function referenceTailDiscreteEvents(blocking = {}, exportRange = {}, fps = 24) {
+    const motion = blocking?.motion || {};
+    const duration = Math.max(0, finiteNumber(motion.duration, 0));
+    const rangeStart = clamp(finiteNumber(exportRange.start, 0), 0, duration);
+    const rangeEnd = clamp(finiteNumber(exportRange.end, duration), 0, duration);
+    if (!(rangeEnd > rangeStart)) return { lastSampleTime: rangeStart, events: [] };
+
+    const schedule = referenceExportFrameSchedule({ start: rangeStart, end: rangeEnd, fps });
+    const lastSampleTime = schedule.times.length ? schedule.times[schedule.times.length - 1] : rangeStart;
+    if (lastSampleTime >= rangeEnd - 0.0000005) return { lastSampleTime, events: [] };
+
+    const keyframes = [...(Array.isArray(motion.keyframes) ? motion.keyframes : [])]
+      .filter((keyframe) => Number.isFinite(Number(keyframe?.time)))
+      .sort((a, b) => Number(a.time) - Number(b.time));
+    const items = Array.isArray(blocking?.items) ? blocking.items : [];
+    const camera = blocking?.camera || {};
+    const events = [];
+
+    keyframes.forEach((keyframe, index) => {
+      const time = finiteNumber(keyframe?.time, -1);
+      if (time <= lastSampleTime + 0.0000005 || time > rangeEnd + 0.0000005 || time < rangeStart - 0.0000005) return;
+      const source = keyframe?.source || "";
+      const fallbackPose = source === "camera"
+        ? camera
+        : (items.find((item) => item?.id === source) || {});
+      let previousPose = { ...fallbackPose };
+      for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
+        const candidate = keyframes[previousIndex];
+        if (candidate?.source !== source) continue;
+        if (finiteNumber(candidate?.time, time) >= time - 0.0000005) continue;
+        previousPose = { ...fallbackPose, ...(candidate?.pose || {}) };
+        break;
+      }
+      const currentPose = { ...fallbackPose, ...(keyframe?.pose || {}) };
+      const reasons = [];
+      const transition = normalizeTransition(keyframe?.transition);
+      if (transition === "hold" || transition === "cut") reasons.push(transition);
+      if (source === "camera") {
+        if (String(previousPose.trackingTargetId || "") !== String(currentPose.trackingTargetId || "")) {
+          reasons.push("tracking");
+        }
+      } else if (fallbackPose?.type === "actor") {
+        const previousBodyPose = JSON.stringify(previousPose.bodyPose ?? null);
+        const currentBodyPose = JSON.stringify(currentPose.bodyPose ?? null);
+        if (previousBodyPose !== currentBodyPose) reasons.push("actor-pose");
+      }
+      if (!reasons.length) return;
+      events.push({
+        id: keyframe?.id || "",
+        source,
+        time,
+        reasons,
+      });
+    });
+
+    return { lastSampleTime, events };
+  }
+
   function evaluateReferenceReadiness(blocking = {}, metadata = {}) {
     const issues = [];
     const motion = blocking?.motion || {};
@@ -436,6 +494,23 @@
     if (invalidPoseCount) addReadinessIssue(issues, "error", "key-pose-invalid", `숫자 값이 깨진 키가 ${invalidPoseCount}개 있습니다.`);
     if (offFrameGrid) addReadinessIssue(issues, "warning", "keys-off-frame-grid", `${offFrameGrid}개 키가 ${Math.round(fps)}FPS 프레임 틱에서 벗어나 있습니다.`);
 
+    let tailDiscrete = { lastSampleTime: rangeStart, events: [] };
+    const validRangeForSampling = rangeStart >= 0
+      && rangeEnd <= duration + 0.0005
+      && rangeEnd > rangeStart;
+    const validFpsForSampling = Number.isFinite(Number(fps)) && fps >= 12 && fps <= 60;
+    if (validRangeForSampling && validFpsForSampling) {
+      tailDiscrete = referenceTailDiscreteEvents(blocking, { start: rangeStart, end: rangeEnd }, fps);
+      if (tailDiscrete.events.length) {
+        addReadinessIssue(
+          issues,
+          "warning",
+          "tail-discrete-event-unsampled",
+          `${tailDiscrete.events.length}개 도착 전환이 마지막 CFR 샘플(${tailDiscrete.lastSampleTime.toFixed(3)}초) 뒤에 있어 MP4에 직접 나타나지 않습니다. 키를 최소 1프레임 앞당기거나 출력 구간을 늘리세요.`,
+        );
+      }
+    }
+
     const errorCount = issues.filter((issue) => issue.severity === "error").length;
     const warningCount = issues.filter((issue) => issue.severity === "warning").length;
     const score = clamp(100 - errorCount * 25 - warningCount * 8, 0, 100);
@@ -452,6 +527,7 @@
         keyCount: keyframes.length,
         actorCount: actors.length,
         cameraKeyCount: keyframes.filter((keyframe) => keyframe.source === "camera").length,
+        tailDiscreteEventCount: tailDiscrete.events.length,
       },
       metadata: {
         sceneNumber: metadata.sceneNumber || 0,
@@ -819,6 +895,7 @@
     quadraticBezierPoint,
     referenceEntryKey,
     referenceExportFrameSchedule,
+    referenceTailDiscreteEvents,
     rescaleKeyframeTimes,
     safeFileSlug,
     samplePlanarPath,
