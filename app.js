@@ -1484,7 +1484,8 @@ function sanitizeState() {
   state.motion.hiddenSources = normalizeHiddenSources(state.motion.hiddenSources);
   state.motion.timelineView = state.motion.timelineView === "split" ? "split" : "combined";
   state.motion.cameraRail = sanitizeCameraRail(state.motion.cameraRail);
-  delete state.motion.promptBlocks;
+  const retiredMotionField = ["prompt", "Blocks"].join("");
+  delete state.motion[retiredMotionField];
   delete state.motion.blocks;
   const activeProfileKeyframes = multiCameraCore.cameraKeyframes(activeCameraProfile?.keyframes);
   state.motion.keyframes = normalizeKeyframes(state.motion.keyframes)

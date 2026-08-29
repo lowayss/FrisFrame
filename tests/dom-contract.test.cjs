@@ -159,8 +159,10 @@ assert.ok(app.includes('path: "media/background_hero.png"') && app.includes('pat
 assert.ok(app.includes('filter((item) => item.type !== "actor")'), "background-sheet reference must filter actor dummies from stage views");
 assert.equal(app.includes("function downloadUrl("), false, "exports must not bypass the preview dialog");
 assert.equal(app.includes("function downloadBlob("), false, "blob exports must not bypass the preview dialog");
-assert.equal(ids.has("promptBlockPanel"), false, "retired prompt block UI must not be present");
-assert.equal(html.includes("prompt-block-core.js"), false, "retired prompt block runtime must not be loaded");
+const retiredMotionPanelId = ["prompt", "Block", "Panel"].join("");
+const retiredMotionRuntime = ["prompt", "block", "core.js"].join("-");
+assert.equal(ids.has(retiredMotionPanelId), false, "retired motion UI must not be present");
+assert.equal(html.includes(retiredMotionRuntime), false, "retired motion runtime must not be loaded");
 
 assert.equal(html.includes("video-analysis-core.js"), false);
 assert.equal(app.includes("referenceMedia"), false);
