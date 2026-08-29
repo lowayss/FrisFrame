@@ -26,7 +26,12 @@ def run(label: str, command: list[str]) -> None:
 
 def check_python_syntax() -> None:
     print("\n[검사] Python 문법")
-    for path in (ROOT / "server.py", ROOT / "mcp_server.py", ROOT / "add_license.py"):
+    for path in (
+        ROOT / "server.py",
+        ROOT / "mcp_server.py",
+        ROOT / "mcp_previs_server.py",
+        ROOT / "add_license.py",
+    ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         print(f"  확인: {path.name}")
 
@@ -81,6 +86,7 @@ def main() -> None:
     run("스토리보드 코어", [node, "--test", "tests/storyboard-core.test.cjs"])
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
+    run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
