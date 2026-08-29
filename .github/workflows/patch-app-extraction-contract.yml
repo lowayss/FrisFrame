@@ -25,25 +25,26 @@ jobs:
 
           path = Path('.github/workflows/refactor-app-base-pose.yml')
           text = path.read_text(encoding='utf-8')
-          old = '''          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()
-          Path('.github/workflows/refactor-app-base-pose.yml').unlink()
-'''
-          new = '''          replace_once(
-              'tests/dom-contract.test.cjs',
-              'const app = fs.readFileSync(path.join(root, "app.js"), "utf8");\\n',
-              'const app = fs.readFileSync(path.join(root, "app.js"), "utf8");\\n'
-              'const motion = fs.readFileSync(path.join(root, "motion-core.js"), "utf8");\\n',
+          old = (
+              "          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()\n"
+              "          Path('.github/workflows/refactor-app-base-pose.yml').unlink()\n"
           )
-          replace_once(
-              'tests/dom-contract.test.cjs',
-              'assert.ok(app.includes("focusDistanceM: lerp("), "camera focus distance must interpolate between keys");\\n',
-              'assert.ok(motion.includes("focusDistanceM: lerpValue("), "motion-core must interpolate camera focus distance between keys");\\n'
-              'assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"), "app must delegate base camera pose composition to motion-core");\\n',
+          new = (
+              "          replace_once(\n"
+              "              'tests/dom-contract.test.cjs',\n"
+              "              'const app = fs.readFileSync(path.join(root, \\\"app.js\\\"), \\\"utf8\\\");\\\\n',\n"
+              "              'const app = fs.readFileSync(path.join(root, \\\"app.js\\\"), \\\"utf8\\\");\\\\n'\n"
+              "              'const motion = fs.readFileSync(path.join(root, \\\"motion-core.js\\\"), \\\"utf8\\\");\\\\n',\n"
+              "          )\n"
+              "          replace_once(\n"
+              "              'tests/dom-contract.test.cjs',\n"
+              "              'assert.ok(app.includes(\\\"focusDistanceM: lerp(\\\"), \\\"camera focus distance must interpolate between keys\\\");\\\\n',\n"
+              "              'assert.ok(motion.includes(\\\"focusDistanceM: lerpValue(\\\"), \\\"motion-core must interpolate camera focus distance between keys\\\");\\\\n'\n"
+              "              'assert.ok(app.includes(\\\"window.FrisFrameMotionCore?.composeBaseInterpolatedPose\\\"), \\\"app must delegate base camera pose composition to motion-core\\\");\\\\n',\n"
+              "          )\n\n"
+              "          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()\n"
+              "          Path('.github/workflows/refactor-app-base-pose.yml').unlink()\n"
           )
-
-          Path('.github/workflows/diagnose-app-evaluator.yml').unlink()
-          Path('.github/workflows/refactor-app-base-pose.yml').unlink()
-'''
           count = text.count(old)
           if count != 1:
               raise SystemExit(f'expected one workflow insertion marker, found {count}')
