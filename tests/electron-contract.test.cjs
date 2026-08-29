@@ -37,8 +37,20 @@ assert.match(main, /app\.getPath\("userData"\)/);
 assert.match(main, /runtime\.json/);
 assert.match(main, /\/api\/health/);
 assert.match(main, /FRISFRAME_STARTUP_NONCE/);
+assert.match(main, /setPermissionCheckHandler\(\(\) => false\)/,
+  "renderer permission checks must fail closed");
 assert.match(main, /setPermissionRequestHandler/);
+assert.match(main, /setDevicePermissionHandler\?\.\(\(\) => false\)/,
+  "device permissions must be denied when supported by Electron");
 assert.match(main, /setWindowOpenHandler/);
+assert.match(main, /function rendererUrlMatchesOrigin/);
+assert.match(main, /new URL\(value\)\.origin === allowedOrigin/,
+  "navigation checks must compare parsed origins instead of trusting string prefixes");
+assert.match(main, /will-navigate/);
+assert.match(main, /will-redirect/,
+  "cross-origin redirects must be guarded as well as direct navigation");
+assert.equal(/url\.startsWith\(\`\$\{origin\}\//.test(main), false,
+  "renderer navigation must not rely on prefix matching");
 assert.match(main, /registerClipboardImageHandler/);
 assert.match(main, /registerFileSaveHandler/);
 assert.match(clipboardBridge, /ipcMain\.handle\("clipboard:write-image"/);
@@ -82,4 +94,4 @@ assert.ok(server.includes("FRISFRAME_FFMPEG"));
 assert.equal(/https:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(server), false,
   "server CSP must not allow remote renderer assets");
 
-console.log("electron-contract: runtime, security, offline assets, and persistent data path passed");
+console.log("electron-contract: runtime, security, navigation, permissions, offline assets, and persistent data path passed");
