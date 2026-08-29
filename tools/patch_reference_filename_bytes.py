@@ -50,10 +50,10 @@ replacement = r'''  function utf8CodePointByteLength(character) {
 
 '''
 pattern = re.compile(
-    r'  function safeFileSlug\(value, fallback = \\"cut\\"\) \{.*?(?=  function collectReferenceBatchCuts\(project = \{\}\) \{)',
+    r'\s*function safeFileSlug\(value, fallback = "cut"\) \{.*?(?=\s*function collectReferenceBatchCuts\(project = \{\}\) \{)',
     re.S,
 )
-text, count = pattern.subn(lambda _match: replacement, text, count=1)
+text, count = pattern.subn(lambda _match: "\n" + replacement, text, count=1)
 if count != 1:
     raise SystemExit(f"safeFileSlug patch count: {count}")
 motion.write_text(text, encoding="utf-8")
