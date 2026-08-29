@@ -12264,7 +12264,19 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
   const plan = sourceKeyframeEvaluationPlan(keyframes, time);
   if (plan.kind === "fallback") return clone(fallbackPose);
   if (plan.kind === "key") return mergePoseWithFallbackFor(renderState, sourceId, plan.keyframe.pose, fallbackPose);
-  return interpolatePoseFor(renderState, sourceId, plan.start.pose, plan.end.pose, plan.progress, fallbackPose, plan.end);
+  const evaluationOptions = sourceId === "camera"
+    ? { referenceProgress: plan.referenceProgress }
+    : null;
+  return interpolatePoseFor(
+    renderState,
+    sourceId,
+    plan.start.pose,
+    plan.end.pose,
+    plan.progress,
+    fallbackPose,
+    plan.end,
+    evaluationOptions,
+  );
 }
 
 function mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose) {

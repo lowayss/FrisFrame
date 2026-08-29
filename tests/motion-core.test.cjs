@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   activeMotionSegment,
   cameraDirectionVector,
+  cameraReferenceProgress,
   circularArcPoint,
   constrainPathEndpoint,
   composeBaseInterpolatedPose,
@@ -60,6 +61,40 @@ assert.equal(sourcePlanSmooth.transition, "smooth");
 near(sourcePlanSmooth.rawProgress, 0.25);
 near(sourcePlanSmooth.easedProgress, 0.125);
 near(sourcePlanSmooth.progress, 0.25, 0.000001);
+near(sourcePlanSmooth.referenceProgress, 0.125, 0.000001);
+
+// A smooth camera run eases only at the run boundaries. Interior keys must
+// retain non-zero travel speed instead of receiving a fresh ease-in/out.
+const twoSegmentSmoothRun = [
+  { id: "s0", time: 0, pose: { x: 0 } },
+  { id: "s1", time: 1, transition: "smooth", pose: { x: 1 } },
+  { id: "s2", time: 2, transition: "smooth", pose: { x: 2 } },
+];
+const smoothRunFirstHalf = sourceKeyframeEvaluationPlan(twoSegmentSmoothRun, 0.5);
+const smoothRunSecondHalf = sourceKeyframeEvaluationPlan(twoSegmentSmoothRun, 1.5);
+near(smoothRunFirstHalf.referenceProgress, 0.375, 0.000001);
+near(smoothRunSecondHalf.referenceProgress, 0.625, 0.000001);
+assert.equal(smoothRunFirstHalf.hasSmoothBefore, false);
+assert.equal(smoothRunFirstHalf.hasSmoothAfter, true);
+assert.equal(smoothRunSecondHalf.hasSmoothBefore, true);
+assert.equal(smoothRunSecondHalf.hasSmoothAfter, false);
+near(cameraReferenceProgress(0.5, "smooth", { hasSmoothAfter: true }), 0.375);
+near(cameraReferenceProgress(0.5, "smooth", { hasSmoothBefore: true }), 0.625);
+
+const threeSegmentSmoothRun = [
+  { id: "m0", time: 0, pose: { x: 0 } },
+  { id: "m1", time: 1, transition: "smooth", pose: { x: 1 } },
+  { id: "m2", time: 2, transition: "smooth", pose: { x: 2 } },
+  { id: "m3", time: 3, transition: "smooth", pose: { x: 3 } },
+];
+const smoothRunMiddle = sourceKeyframeEvaluationPlan(threeSegmentSmoothRun, 1.5);
+near(smoothRunMiddle.referenceProgress, 0.5, 0.000001);
+assert.equal(smoothRunMiddle.hasSmoothBefore, true);
+assert.equal(smoothRunMiddle.hasSmoothAfter, true);
+near(cameraReferenceProgress(0.5, "smooth", { hasSmoothBefore: true, hasSmoothAfter: true }), 0.5);
+near(cameraReferenceProgress(0.25, "smooth"), 0.125, 0.000001);
+near(cameraReferenceProgress(0.25, "linear", { hasSmoothBefore: true, hasSmoothAfter: true }), 0.25, 0.000001);
+
 const sourcePlanHold = sourceKeyframeEvaluationPlan(sourcePlanKeys, 3);
 assert.equal(sourcePlanHold.end.id, "k2");
 assert.equal(sourcePlanHold.progress, 0, "hold must remain on the source key before arrival");
