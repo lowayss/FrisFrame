@@ -11336,16 +11336,10 @@ $("#cameraFrameModeBtn").addEventListener("click", () => {
 });
 $("#selectedCutFrameBtn").addEventListener("click", exportSelectedCutFrame);
 $("#selectedCutVideoBtn").addEventListener("click", exportSelectedCutVideo);
-$("#blockingPlanBtn").addEventListener("click", exportBlockingPlanImage);
-$("#blockingPlanPanelBtn").addEventListener("click", exportBlockingPlanImage);
 $("#frameBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePanelBtn").addEventListener("click", exportCurrentCameraFrame);
-$("#backgroundSheetBtn").addEventListener("click", exportBackgroundSheetReference);
-$("#backgroundSheetPanelBtn").addEventListener("click", exportBackgroundSheetReference);
 $("#framePairBtn").addEventListener("click", exportStartEndCameraFrames);
 $("#framePairPanelBtn").addEventListener("click", exportStartEndCameraFrames);
-$("#productionPackBtn").addEventListener("click", exportProductionPack);
-$("#productionPackPanelBtn").addEventListener("click", exportProductionPack);
 $("#addKeyBtn").addEventListener("click", addMotionKey);
 $("#updateKeyBtn").addEventListener("click", updateSelectedKey);
 $("#deleteKeyBtn").addEventListener("click", deleteSelectedKey);
@@ -12419,23 +12413,6 @@ function sanitizeCameraPoseFor(renderState, camera) {
   return syncCameraDerivedAim(sanitized, renderState);
 }
 
-async function exportProductionPack() {
-  if (!beginMediaExport()) return;
-  try {
-    syncPlayheadFromTimeInput();
-    notifyApp("촬영 자료 프리뷰를 준비하고 있습니다.");
-    const pack = await buildProductionPack();
-    const zip = await createZip(pack.files);
-    presentExport(zip, `${slug(project?.title || state.sceneTitle)}_production_pack.zip`, "촬영 자료 ZIP", buildProductionPackPreview(pack));
-  } catch (error) {
-    console.error("production pack export failed", error);
-    presentExportError("촬영 자료를 준비하지 못했습니다. 3D 프리뷰가 정상적으로 보이는지 확인한 뒤 다시 시도하세요.");
-  } finally {
-    mediaExportProgress = "";
-    endMediaExport();
-  }
-}
-
 async function buildProductionPack() {
   syncActiveCutDocument(false);
   syncActiveCameraProfile();
@@ -13370,52 +13347,6 @@ async function renderTopdownPngBlob() {
   return canvasToBlob(offscreen, "image/png");
 }
 
-async function exportBlockingPlanImage() {
-  if (!beginMediaExport()) return;
-  const exportDocument = clone(state);
-  const time = clamp(Number(displayPlayhead() || 0), 0, exportDocument.motion.duration);
-  const exportState = interpolateRenderStateAtTime(exportDocument, time);
-  exportState.showGrid = true;
-  exportState.showCamera = true;
-  exportState.showNames = true;
-  exportState.cleanExport = false;
-  exportState.planReferenceExport = true;
-  exportState.motion.selectedKeyId = "";
-  const size = exportSize(exportState);
-  const offscreen = document.createElement("canvas");
-  offscreen.width = size.width;
-  offscreen.height = size.height;
-  const previousSelection = selected;
-  const previousSnapGuide = pathSnapGuide;
-  try {
-    selected = null;
-    pathSnapGuide = null;
-    renderToCanvas(offscreen, exportState, { clean: true });
-    const blob = await canvasToBlob(offscreen, "image/png");
-    presentExport(
-      blob,
-      `${slug(exportState.sceneTitle)}_blocking_plan_${formatFrameTime(time)}.png`,
-      "2D 블로킹 가이드 PNG",
-      {
-        type: "image",
-        blob,
-        caption: `@plan · ${time.toFixed(1)}초 배치 · 전체 동선과 키 포함`,
-        notes: [
-          "3D 가이드 영상과 함께 첨부하면 카메라와 피사체의 월드 공간 이동을 구분하는 데 도움이 됩니다.",
-          "최종 영상에는 평면도와 표식을 그리지 않고, 배치와 이동 의미만 적용하도록 사용합니다.",
-        ],
-      },
-    );
-  } catch (error) {
-    presentExportError(error?.message || "2D 블로킹 이미지를 준비하지 못했습니다.");
-  } finally {
-    selected = previousSelection;
-    pathSnapGuide = previousSnapGuide;
-    endMediaExport();
-    draw();
-  }
-}
-
 async function renderCameraFrameBlobAtTime(time, documentState, size = exportSize(documentState)) {
   if (!initThreeView()) throw new Error("3D 카메라 프레임을 준비하지 못했습니다.");
   const renderState = interpolateRenderStateAtTime(
@@ -13661,68 +13592,6 @@ function buildBackgroundSheetReadme(manifest) {
     `현재 장면: ${manifest.project.sceneTitle}`,
     `현재 프레임: ${manifest.project.frameTimeSeconds}초 · ${manifest.stage.aspect}`,
   ].join("\n");
-}
-
-async function exportBackgroundSheetReference() {
-  if (!beginMediaExport()) return;
-  try {
-    syncActiveCutDocument(false);
-    syncActiveCameraProfile();
-    const exportState = clone(state);
-    const time = clamp(Number(displayPlayhead() || 0), 0, exportState.motion.duration);
-    const views = [
-      { id: "hero", label: "세트 전체 정면 개요", file: "background_hero.png", position: [0, 5.6, 11.5], target: [0, 2.0, -0.6], fovDeg: 42 },
-      { id: "left-three-quarter", label: "세트 전체 좌측 개요", file: "background_left_3q.png", position: [-8.5, 5.0, 9.2], target: [0, 2.0, -0.7], fovDeg: 46 },
-      { id: "right-three-quarter", label: "세트 전체 우측 개요", file: "background_right_3q.png", position: [8.5, 5.0, 9.2], target: [0, 2.0, -0.7], fovDeg: 46 },
-    ];
-    notifyApp("배경시트 레퍼런스 프레임을 준비하고 있습니다.");
-    const renderedViews = [];
-    for (const view of views) {
-      const blob = await renderBackgroundStageOverviewBlob(time, exportState, view);
-      renderedViews.push({ ...view, blob });
-    }
-    const topdown = await renderBackgroundPlanBlob(exportState, time);
-    const contactSheet = await renderMultiCameraContactSheet(
-      renderedViews.map((view) => ({ blob: view.blob, caption: view.label })),
-      exportState,
-      time,
-    );
-    const manifest = buildBackgroundSheetManifest(exportState, time, views);
-    const zip = await createZip([
-      { path: "README.md", content: buildBackgroundSheetReadme(manifest) },
-      { path: "scene_manifest.json", content: JSON.stringify(manifest, null, 2) },
-      { path: "camera.json", content: JSON.stringify(manifest.camera, null, 2) },
-      { path: "project/frisframe_state.json", content: JSON.stringify({ app: SERVICE_NAME, state: exportState }, null, 2) },
-      { path: "media/background_hero.png", blob: renderedViews[0].blob },
-      { path: "media/background_left_3q.png", blob: renderedViews[1].blob },
-      { path: "media/background_right_3q.png", blob: renderedViews[2].blob },
-      { path: "media/background_contact_sheet.png", blob: contactSheet },
-      { path: "media/topdown_plan.png", blob: topdown },
-    ]);
-    presentExport(
-      zip,
-      `${slug(exportState.sceneTitle)}_background_sheet_reference_${formatFrameTime(time)}.zip`,
-      "배경시트 레퍼런스 ZIP",
-      {
-        type: "images",
-        summary: `Codex handoff · ${views.length}개 3D 구조 프레임 · 2D 평면도 · scene_manifest.json`,
-        items: [
-          ...renderedViews.map((view) => ({ blob: view.blob, caption: view.label })),
-          { blob: topdown, caption: "2D 평면도 · 구조 좌표 기준" },
-        ],
-        notes: [
-          "세 3D 이미지는 현재 샷 카메라와 무관한 세트 전체 개요 렌더입니다.",
-          "정면·좌측·우측 개요는 계단·발코니·벽체·가구의 전체 관계를 Codex가 확인하기 위한 구조 레퍼런스입니다.",
-          "저장 후 ZIP 전체를 Codex에 전달하면 이미지와 구조 JSON을 함께 읽을 수 있습니다.",
-        ],
-      },
-    );
-  } catch (error) {
-    console.error("background sheet reference export failed", error);
-    presentExportError(error?.message || "배경시트 레퍼런스를 준비하지 못했습니다.");
-  } finally {
-    endMediaExport();
-  }
 }
 
 async function exportMultiCameraPreview() {
@@ -15063,16 +14932,10 @@ function endMediaExport() {
 
 function renderMediaExportBusy() {
   const labels = {
-    "#blockingPlanBtn": "2D 블로킹 이미지",
-    "#blockingPlanPanelBtn": "2D 블로킹",
     "#frameBtn": "현재 프레임",
     "#framePanelBtn": "현재 프레임",
-    "#backgroundSheetBtn": "배경시트 레퍼런스",
-    "#backgroundSheetPanelBtn": "배경시트",
     "#framePairBtn": "시작·끝 프레임",
     "#framePairPanelBtn": "시작·끝",
-    "#productionPackBtn": "촬영 자료 ZIP",
-    "#productionPackPanelBtn": "촬영 자료",
     "#multiCamPreviewBtn": "멀티캠 프리뷰",
     "#multiCamPreviewPanelBtn": "멀티캠 보기",
     "#multiCamPreviewPanelBtnSecondary": "멀티캠",
