@@ -59,6 +59,16 @@
   overlay.append(guideX, guideY, badge);
   canvasWrap.append(overlay);
 
+  const shortcuts = document.querySelector(".three-shortcuts");
+  if (shortcuts && shortcuts.dataset.frisframeAlignmentHelp !== "1") {
+    shortcuts.dataset.frisframeAlignmentHelp = "1";
+    const overlapHelp = document.createElement("span");
+    overlapHelp.textContent = "Alt/Option+클릭 · 겹친 대상 순환";
+    const snapHelp = document.createElement("span");
+    snapHelp.textContent = "Alt+드래그 · 정렬 스냅 해제";
+    shortcuts.append(overlapHelp, snapHelp);
+  }
+
   let renderFrame = 0;
   let pendingRenderMode = "2d";
   let targetCache = null;
@@ -247,7 +257,7 @@
       || threeDrag.pending
       || threeDrag.pointerId !== event.pointerId
       || threeDrag.editor?.kind !== "item"
-      || threeEditMode !== "move") {
+      || (threeEditMode !== "move" && threeDrag.editor?.forceMode !== "move")) {
       if (!event.buttons) {
         clearGuides();
         clearTargetCache();
