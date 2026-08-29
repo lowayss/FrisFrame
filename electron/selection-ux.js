@@ -204,8 +204,6 @@
       });
     });
 
-    // Cameras do not have a stable top-level name, so collect their editor-tagged
-    // meshes and keep the closest projected center for each rig.
     const cameraCandidates = new Map();
     threeView.world.traverse((object) => {
       const editor = object.userData?.editor;
@@ -229,9 +227,6 @@
 
   pickThreeEditor = function adaptivePickThreeEditor(event) {
     const exact = originalPickThreeEditor(event);
-
-    // Exact pose handles/gizmo rings must always win; their semantics are more
-    // specific than an object-level proximity fallback.
     if (exact?.kind === "poseJoint" || exact?.forceMode === "move") return exact;
 
     const fallback = fallbackThreeItemCandidate(event);
@@ -242,20 +237,14 @@
     if (exact.id === fallback.editor.id) return exact;
 
     const exactItem = editorItem(exact, threeView.lastState || state);
-    // A room/wall/set mesh may sit behind every small object in the viewport.
-    // When the pointer is clearly near a real actor/small prop, let that nearby
-    // target beat the broad architecture surface. Direct hits on ordinary props
-    // and actors still win over the fallback, so selection stays predictable.
     if (itemIsArchitecture(exactItem) && fallback.pixelDistance <= 20 + (event.pointerType === "touch" ? 6 : 0)) {
       return fallback.editor;
     }
     return exact;
   };
 
-  // Three.js creates the raycaster lazily with the 3D viewport. Retune its line
-  // and point thresholds both immediately and after a view-button activation.
   const tuneRaycaster = () => {
-    if (!threeView?.raycaster) return;
+    if (typeof threeView === "undefined" || !threeView?.raycaster) return;
     threeView.raycaster.params.Line.threshold = Math.max(0.09, Number(threeView.raycaster.params.Line.threshold || 0));
     threeView.raycaster.params.Points.threshold = Math.max(0.11, Number(threeView.raycaster.params.Points.threshold || 0));
   };
