@@ -5,18 +5,47 @@ const vm = require("node:vm");
 
 const source = fs.readFileSync(path.resolve(__dirname, "../electron/selection-ux.js"), "utf8");
 
+function mockElement() {
+  return {
+    className: "",
+    textContent: "",
+    isConnected: false,
+    style: {},
+    classList: {
+      add() {},
+      remove() {},
+      toggle() {},
+    },
+    setAttribute() {},
+    append() {},
+    addEventListener() {},
+  };
+}
+
 function makeContext(items, selectedItem = null) {
   const renderState = {
     items,
     camera: {},
+    activeCameraId: "camera-main",
+  };
+  const documentMock = {
+    documentElement: { dataset: {} },
+    head: { append() {} },
+    createElement() { return mockElement(); },
+    querySelector() { return null; },
+    getElementById() { return null; },
+    addEventListener() {},
   };
   const context = {
     console,
-    document: {
-      documentElement: { dataset: {} },
-      getElementById() { return null; },
+    document: documentMock,
+    performance: { now: () => 1000 },
+    requestAnimationFrame(callback) { callback(); return 1; },
+    window: {
+      THREE: null,
+      clearTimeout() {},
+      setTimeout() { return 1; },
     },
-    window: { THREE: null },
     state: renderState,
     evaluatedViewState: renderState,
     stageRect: { x: 0, y: 0, w: 1000, h: 1000 },
@@ -145,4 +174,15 @@ function makeContext(items, selectedItem = null) {
     "the selected item should remain slightly sticky while the pointer is still clearly inside it");
 }
 
-console.log("selection-ux: adaptive 2D hit areas, overlap priority, and selected-target stickiness passed");
+{
+  const context = makeContext([]);
+  const { resolveCycleIndex } = context.window.FrisFrameSelectionUxTest;
+  assert.equal(resolveCycleIndex(3, 0, -1, false), 1,
+    "the first overlap-cycle click should advance from the currently selected candidate");
+  assert.equal(resolveCycleIndex(3, 1, 1, true), 2,
+    "repeated overlap-cycle clicks should advance in stable order");
+  assert.equal(resolveCycleIndex(3, 2, 2, true), 0,
+    "overlap-cycle selection should wrap after the last candidate");
+}
+
+console.log("selection-ux: adaptive hit areas, overlap priority, stickiness, and cycling passed");
