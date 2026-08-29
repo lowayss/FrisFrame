@@ -1,0 +1,35 @@
+name: Patch platform model taxonomy
+
+on:
+  push:
+    branches:
+      - feature/reference-role-modes-20260829
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply platform/model taxonomy
+        run: python3 tools/patch_platform_model_taxonomy.py
+      - name: Run full quality checks
+        run: python3 quality_check.py
+      - name: Commit validated taxonomy
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add reference-workflow-core.js tests/reference-prompt-guide.test.cjs REFERENCE_PROMPT_GUIDE.md
+          git commit -m "Separate platform model and prompt roles"
+          git push
