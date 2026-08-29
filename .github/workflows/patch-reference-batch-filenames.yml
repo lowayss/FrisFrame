@@ -1,0 +1,173 @@
+name: Patch reference batch filenames
+
+on:
+  push:
+    branches:
+      - hardening/reference-batch-filenames-20260829
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch filename planner and tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          motion = Path('motion-core.js')
+          text = motion.read_text(encoding='utf-8')
+          old_slug = '''  function safeFileSlug(value, fallback = "cut") {
+            const normalized = String(value || "")
+              .normalize("NFKC")
+              .trim()
+              .replace(/[\\\\/:*?"<>|]+/g, "-")
+              .replace(/\\s+/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^[.-]+|[.-]+$/g, "")
+              .slice(0, 80);
+            return normalized || fallback;
+          }
+          '''
+          new_slug = '''  function safeFileSlug(value, fallback = "cut") {
+            const clean = (input) => String(input || "")
+              .normalize("NFKC")
+              .trim()
+              .replace(/[\\u0000-\\u001f\\u007f]+/g, "-")
+              .replace(/[\\\\/:*?"<>|]+/g, "-")
+              .replace(/\\s+/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^[.-]+|[.-]+$/g, "")
+              .slice(0, 80);
+            const normalized = clean(value) || clean(fallback) || "cut";
+            return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)/i.test(normalized)
+              ? `_${normalized}`
+              : normalized;
+          }
+          '''
+          if old_slug not in text:
+            raise SystemExit('safeFileSlug block not found')
+          text = text.replace(old_slug, new_slug, 1)
+
+          old_collect = '''  function collectReferenceBatchCuts(project = {}) {
+            const entries = [];
+            (project.scenes || []).forEach((scene, sceneIndex) => {
+              (scene.cuts || []).forEach((cut, cutIndex) => {
+                const blocking = cut?.blocking;
+                const duration = finiteNumber(blocking?.motion?.duration, 0);
+                if (!blocking || duration <= 0) return;
+                const sceneNumber = Number(scene.number || sceneIndex + 1);
+                const cutNumber = Number(cut.number || cutIndex + 1);
+                const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
+                entries.push({
+                  sceneId: scene.id || "",
+                  cutId: cut.id || "",
+                  sceneNumber,
+                  cutNumber,
+                  sceneHeading: scene.heading || "",
+                  title: cut.title || "",
+                  status: cut.status || "",
+                  filename: `${base}_reference.mp4`,
+                  blocking: cloneValue(blocking),
+                  duration,
+                  fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
+                });
+              });
+            });
+            return entries;
+          }
+          '''
+          new_collect = '''  function collectReferenceBatchCuts(project = {}) {
+            const entries = [];
+            const usedFilenames = new Set();
+            const uniqueFilename = (base) => {
+              let suffix = 1;
+              let filename = `${base}_reference.mp4`;
+              while (usedFilenames.has(filename.toLowerCase())) {
+                suffix += 1;
+                filename = `${base}_${suffix}_reference.mp4`;
+              }
+              usedFilenames.add(filename.toLowerCase());
+              return filename;
+            };
+            (project.scenes || []).forEach((scene, sceneIndex) => {
+              (scene.cuts || []).forEach((cut, cutIndex) => {
+                const blocking = cut?.blocking;
+                const duration = finiteNumber(blocking?.motion?.duration, 0);
+                if (!blocking || duration <= 0) return;
+                const sceneNumber = Number(scene.number || sceneIndex + 1);
+                const cutNumber = Number(cut.number || cutIndex + 1);
+                const base = `S${String(sceneNumber).padStart(2, "0")}_C${String(cutNumber).padStart(2, "0")}_${safeFileSlug(cut.title || "cut")}`;
+                entries.push({
+                  sceneId: scene.id || "",
+                  cutId: cut.id || "",
+                  sceneNumber,
+                  cutNumber,
+                  sceneHeading: scene.heading || "",
+                  title: cut.title || "",
+                  status: cut.status || "",
+                  filename: uniqueFilename(base),
+                  blocking: cloneValue(blocking),
+                  duration,
+                  fps: clamp(Math.round(finiteNumber(blocking.motion?.fps, 24)), 12, 60),
+                });
+              });
+            });
+            return entries;
+          }
+          '''
+          if old_collect not in text:
+            raise SystemExit('collectReferenceBatchCuts block not found')
+          motion.write_text(text.replace(old_collect, new_collect, 1), encoding='utf-8')
+
+          test = Path('tests/reference-batch-export.test.cjs')
+          test_text = test.read_text(encoding='utf-8')
+          marker = 'assert.equal(safeFileSlug(""), "cut");\n'
+          addition = '''assert.equal(safeFileSlug(""), "cut");
+          assert.equal(safeFileSlug("../CON"), "CON");
+          assert.equal(safeFileSlug("CON"), "_CON");
+          assert.equal(safeFileSlug("bad\\u0000name"), "bad-name");
+
+          const duplicateFilenameProject = {
+            scenes: [{
+              number: 1,
+              cuts: [
+                { id: "a", number: 1, title: "Same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+                { id: "b", number: 1, title: "Same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+                { id: "c", number: 1, title: "same", blocking: { motion: { duration: 1, fps: 24, keyframes: [] } } },
+              ],
+            }],
+          };
+          const duplicateFilenameEntries = collectReferenceBatchCuts(duplicateFilenameProject);
+          assert.deepEqual(duplicateFilenameEntries.map((entry) => entry.filename), [
+            "S01_C01_Same_reference.mp4",
+            "S01_C01_Same_2_reference.mp4",
+            "S01_C01_same_3_reference.mp4",
+          ]);
+          assert.equal(new Set(duplicateFilenameEntries.map((entry) => entry.filename.toLowerCase())).size, 3);
+          assert.ok(duplicateFilenameEntries.every((entry) => !entry.filename.includes("/")));
+          '''
+          if marker not in test_text:
+            raise SystemExit('test insertion marker not found')
+          test.write_text(test_text.replace(marker, addition, 1), encoding='utf-8')
+      - name: Run full quality checks
+        run: python3 quality_check.py
+      - name: Commit validated hardening
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add motion-core.js tests/reference-batch-export.test.cjs
+          git commit -m "Harden reference batch filenames"
+          git push
