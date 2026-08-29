@@ -1,0 +1,51 @@
+name: Diagnose app evaluator boundary
+
+on:
+  push:
+    branches:
+      - refactor/app-base-pose-evaluator-20260829
+    paths:
+      - .github/workflows/diagnose-app-evaluator.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/app-base-pose-evaluator-20260829
+      - name: Print evaluator neighborhoods
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          text = Path('app.js').read_text(encoding='utf-8')
+          lines = text.splitlines()
+          names = [
+              'mergePoseWithFallbackFor',
+              'sanitizeTrackingTargetId',
+              'interpolatePoseFor',
+              'interpolateSourceAtTimeFor',
+              'interpolateRenderStateAtTime',
+          ]
+          for name in names:
+              matches = [i for i, line in enumerate(lines) if re.search(rf'\b{name}\b', line)]
+              print(f'\n===== {name} matches: {[i + 1 for i in matches]} =====')
+              for index in matches[:4]:
+                  start = max(0, index - 18)
+                  end = min(len(lines), index + 90)
+                  print(f'--- context {start + 1}-{end} ---')
+                  for n in range(start, end):
+                      print(f'{n + 1:05d}: {lines[n]}')
+
+          print('\n===== direct helper candidates inside interpolatePoseFor neighborhood =====')
+          matches = [i for i, line in enumerate(lines) if re.search(r'\bfunction\s+interpolatePoseFor\b', line)]
+          if matches:
+              index = matches[0]
+              snippet = '\n'.join(lines[index:index + 180])
+              calls = sorted(set(re.findall(r'\b([A-Za-z_$][\w$]*)\s*\(', snippet)))
+              print(calls)
