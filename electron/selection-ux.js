@@ -89,10 +89,14 @@
     };
   }
 
+  // Replace the 2D hit region only. Drawing geometry remains untouched.
   isPointInItem = function adaptiveIsPointInItem(point, item, renderState, rect = stageRect) {
     return itemHitMetrics(point, item, renderState, rect).inside;
   };
 
+  // Resolve overlaps by pointer proximity instead of the old absolute actor-first
+  // rule. Large room/wall/set pieces get a mild penalty, while the currently
+  // selected object gets only a small amount of stickiness.
   hitTest = function adaptiveHitTest(point, renderState = evaluatedViewState || state) {
     const selectedItemForHandle = selected?.id
       ? renderState.items.find((entry) => entry.id === selected.id)
@@ -128,9 +132,6 @@
       const architecture = itemIsArchitecture(item);
       const selectedNow = selected?.id === item.id && ["item", "facing"].includes(selected?.kind);
       let score = metrics.normalizedDistance;
-
-      // Distance is the main rule. These are deliberately small tie-breakers,
-      // unlike the previous absolute actor-first ordering.
       if (architecture) score += 0.34;
       if (item.type === "actor") score -= 0.045;
       if (item.type === "prop" && !architecture && metrics.shortSide < 28) score -= 0.035;
@@ -225,6 +226,9 @@
     return candidates[0] || null;
   }
 
+  // Keep precise mesh hits for actors, props, cameras, pose joints, and move
+  // handles. Screen-space proximity is only a fallback, or a way for a nearby
+  // small object to beat a broad architecture surface behind it.
   pickThreeEditor = function adaptivePickThreeEditor(event) {
     const exact = originalPickThreeEditor(event);
     if (exact?.kind === "poseJoint" || exact?.forceMode === "move") return exact;
