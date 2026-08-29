@@ -468,6 +468,41 @@
     return collectReferenceBatchCuts(project).map((entry) => ({ ...entry, readiness: evaluateReferenceReadiness(entry.blocking, entry) }));
   }
 
+  function referenceEntryKey(entry = {}) {
+    if (entry.sceneId || entry.cutId) return `${entry.sceneId || ""}::${entry.cutId || ""}`;
+    return `n:${Number(entry.sceneNumber || 0)}:${Number(entry.cutNumber || 0)}`;
+  }
+
+  function cutReferenceKey(scene = {}, cut = {}, sceneIndex = 0, cutIndex = 0) {
+    if (scene.id || cut.id) return `${scene.id || ""}::${cut.id || ""}`;
+    return `n:${Number(scene.number || sceneIndex + 1)}:${Number(cut.number || cutIndex + 1)}`;
+  }
+
+  function partitionReferenceBatchByReadiness(project = {}) {
+    const results = evaluateProjectReferenceReadiness(project) || [];
+    const allowed = results.filter((entry) => entry?.readiness?.status !== "blocked");
+    const blocked = results.filter((entry) => entry?.readiness?.status === "blocked");
+    const allowedKeys = new Set(allowed.map(referenceEntryKey));
+    const filteredProject = cloneValue(project);
+    filteredProject.scenes = (filteredProject.scenes || []).map((scene, sceneIndex) => ({
+      ...scene,
+      cuts: (scene.cuts || []).filter((cut, cutIndex) => allowedKeys.has(cutReferenceKey(scene, cut, sceneIndex, cutIndex))),
+    }));
+    const skippedBlocked = blocked.map((entry) => ({
+      sceneId: entry.sceneId || "",
+      cutId: entry.cutId || "",
+      sceneNumber: Number(entry.sceneNumber || 0),
+      cutNumber: Number(entry.cutNumber || 0),
+      title: entry.title || "",
+      readiness: {
+        status: "blocked",
+        score: Number(entry.readiness?.score || 0),
+        issues: cloneValue(entry.readiness?.issues || []),
+      },
+    }));
+    return { results, allowed, blocked, filteredProject, skippedBlocked };
+  }
+
   async function collectSingleReferenceVideo(target, entry) {
     if (typeof target.exportVideoForDocument !== "function") throw new Error("기존 MP4 내보내기 함수를 찾을 수 없습니다.");
     const originalPresentExport = target.presentExport;
@@ -545,6 +580,65 @@
     return { cancelled: false, entries: completedEntries, manifest, zip, filename: zipName };
   }
 
+  async function exportReferenceBatchSafely(target, { confirmBeforeStart = true } = {}) {
+    if (!target || typeof target.managedProjectDocument !== "function") throw new Error("프로젝트 문서를 읽을 수 없습니다.");
+    if (typeof target.createZip !== "function") throw new Error("ZIP 생성 함수를 찾을 수 없습니다.");
+
+    const documentPayload = cloneValue(target.managedProjectDocument());
+    const project = documentPayload?.project || {};
+    const partition = partitionReferenceBatchByReadiness(project);
+    if (!partition.allowed.length) {
+      if (partition.blocked.length) throw new Error(`출력 가능한 컷이 없습니다. BLOCKED ${partition.blocked.length}개를 Reference Readiness에서 먼저 수정하세요.`);
+      throw new Error("MP4로 출력할 컷이 없습니다.");
+    }
+
+    if (confirmBeforeStart && typeof target.confirm === "function") {
+      const reviewCount = partition.allowed.filter((entry) => entry.readiness?.status === "review").length;
+      const message = [
+        `READY/REVIEW ${partition.allowed.length}개 컷을 MP4 ZIP으로 만듭니다.`,
+        reviewCount ? `REVIEW ${reviewCount}개는 경고를 유지한 채 포함됩니다.` : "",
+        partition.blocked.length ? `BLOCKED ${partition.blocked.length}개는 자동 제외되고 제외 사유가 ZIP에 기록됩니다.` : "",
+        "계속할까요?",
+      ].filter(Boolean).join("\n");
+      if (!target.confirm(message)) return { cancelled: true, entries: [], skippedBlocked: partition.skippedBlocked };
+    }
+
+    const originalManagedProjectDocument = target.managedProjectDocument;
+    const originalCreateZip = target.createZip;
+    target.managedProjectDocument = () => ({ ...cloneValue(documentPayload), project: cloneValue(partition.filteredProject) });
+    target.createZip = async (files) => {
+      const nextFiles = (files || []).map((file) => {
+        if (file?.path !== "manifest.json" || typeof file.content !== "string") return file;
+        try {
+          const manifest = JSON.parse(file.content);
+          manifest.batchPolicy = { blockedCuts: "skipped-by-default" };
+          manifest.skippedBlocked = cloneValue(partition.skippedBlocked);
+          return { ...file, content: JSON.stringify(manifest, null, 2) };
+        } catch {
+          return file;
+        }
+      });
+      if (partition.skippedBlocked.length) {
+        nextFiles.push({
+          path: "skipped_blocked.json",
+          content: JSON.stringify({ skippedBlocked: partition.skippedBlocked }, null, 2),
+        });
+      }
+      return originalCreateZip.call(target, nextFiles);
+    };
+
+    try {
+      const result = await exportReferenceVideoBatch(target, { confirmBeforeStart: false });
+      if (typeof target.notifyApp === "function" && partition.skippedBlocked.length) {
+        target.notifyApp(`레퍼런스 ZIP에서 BLOCKED ${partition.skippedBlocked.length}개 컷을 제외했습니다. skipped_blocked.json에서 사유를 확인하세요.`);
+      }
+      return { ...result, skippedBlocked: partition.skippedBlocked };
+    } finally {
+      target.managedProjectDocument = originalManagedProjectDocument;
+      target.createZip = originalCreateZip;
+    }
+  }
+
   function installBatchReferenceExportUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -556,14 +650,14 @@
     button.id = "batchReferenceVideoBtn";
     button.className = anchor.className;
     button.textContent = "전체 컷 MP4 ZIP";
-    button.title = "프로젝트의 모든 컷을 개별 Seedance 레퍼런스 MP4로 만든 뒤 ZIP으로 묶습니다.";
+    button.title = "READY/REVIEW 컷만 개별 Seedance 레퍼런스 MP4로 만들고 BLOCKED 컷은 제외합니다.";
     anchor.insertAdjacentElement?.("afterend", button) || anchor.parentNode.appendChild(button);
     button.addEventListener("click", async () => {
       if (button.disabled) return;
       button.disabled = true;
       const originalText = button.textContent;
-      button.textContent = "일괄 출력 중…";
-      try { await exportReferenceVideoBatch(target, { confirmBeforeStart: true }); }
+      button.textContent = "안전 일괄 출력 중…";
+      try { await exportReferenceBatchSafely(target, { confirmBeforeStart: true }); }
       catch (error) { if (typeof target.notifyApp === "function") target.notifyApp(error?.message || "전체 컷 MP4 출력에 실패했습니다."); }
       finally { button.disabled = false; button.textContent = originalText; }
     });
@@ -679,6 +773,7 @@
     discreteAtDestination,
     evaluateProjectReferenceReadiness,
     evaluateReferenceReadiness,
+    exportReferenceBatchSafely,
     exportReferenceVideoBatch,
     heldActorBodyPose,
     installBatchReferenceExportUi,
@@ -688,6 +783,8 @@
     interpolateFocalLength,
     isFrameAligned,
     orbitCameraPose,
+    partitionReferenceBatchByReadiness,
+    referenceEntryKey,
     safeFileSlug,
     smoothReferenceProgress,
     translateCameraPose,
