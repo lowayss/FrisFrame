@@ -7,6 +7,8 @@
   const stats = {
     fastSyncs: 0,
     fastTimelineUpdates: 0,
+    fastPoseSyncs: 0,
+    coalescedPoseUi: 0,
     coalescedThreeRenders: 0,
     coalescedCameraPreviews: 0,
   };
@@ -30,6 +32,7 @@
   window.FrisFramePerformanceUxTest = {
     activeDirectEdit,
     activeTimelineDrag,
+    activePoseDrag,
     stats,
   };
 
@@ -172,6 +175,87 @@
       if (root?.hidden) return;
       return originalRenderSourceTimelines(keyframes, cutTimes);
     };
+  }
+
+  let poseUiFrame = 0;
+  let poseUiNeedsInputRefresh = false;
+  let poseSessionActive = false;
+
+  function currentPoseActor() {
+    if (typeof selectedPoseActor === "function") {
+      const actor = selectedPoseActor();
+      if (actor?.type === "actor") return actor;
+    }
+    const actorId = typeof selectedPoseActorId !== "undefined" ? selectedPoseActorId : selected?.id;
+    return state.items.find((item) => item.id === actorId && item.type === "actor") || null;
+  }
+
+  function flushFastPoseControls(updateInputs = false) {
+    const actor = currentPoseActor();
+    if (!actor || typeof selectedPoseJoint === "undefined" || typeof JOINT_DEFINITIONS === "undefined") return false;
+    const definition = JOINT_DEFINITIONS[selectedPoseJoint];
+    const rotation = actor.bodyPose?.[selectedPoseJoint];
+    if (!definition || !rotation) return false;
+    const locked = typeof sourceEditLocked === "function" ? sourceEditLocked(actor.id) : false;
+    const jointSelect = document.getElementById("actorPoseJointSelect");
+    if (jointSelect) {
+      if (updateInputs || document.activeElement !== jointSelect) jointSelect.value = selectedPoseJoint;
+      jointSelect.disabled = locked;
+    }
+    ["X", "Y", "Z"].forEach((axisName) => {
+      const axis = axisName.toLowerCase();
+      const slider = document.getElementById(`actorPoseAxis${axisName}`);
+      const value = document.getElementById(`actorPoseAxis${axisName}Value`);
+      if (!slider || !value || !definition[axis]) return;
+      const [minimum, maximum] = definition[axis];
+      if (Number(slider.min) !== Number(minimum)) slider.min = minimum;
+      if (Number(slider.max) !== Number(maximum)) slider.max = maximum;
+      if (Number(value.min) !== Number(minimum)) value.min = minimum;
+      if (Number(value.max) !== Number(maximum)) value.max = maximum;
+      if (updateInputs || document.activeElement !== slider) slider.value = rotation[axis];
+      if (updateInputs || document.activeElement !== value) value.value = Math.round(rotation[axis]);
+      slider.disabled = locked;
+      value.disabled = locked;
+    });
+    stats.fastPoseSyncs += 1;
+    return true;
+  }
+
+  function scheduleFastPoseControls(updateInputs = false) {
+    if (!activePoseDrag() || !currentPoseActor()) return false;
+    poseSessionActive = true;
+    poseUiNeedsInputRefresh = poseUiNeedsInputRefresh || updateInputs;
+    if (poseUiFrame) {
+      stats.coalescedPoseUi += 1;
+      return true;
+    }
+    poseUiFrame = requestAnimationFrame(() => {
+      poseUiFrame = 0;
+      const refreshInputs = poseUiNeedsInputRefresh;
+      poseUiNeedsInputRefresh = false;
+      flushFastPoseControls(refreshInputs);
+    });
+    return true;
+  }
+
+  if (typeof renderProperties === "function") {
+    const originalRenderProperties = renderProperties;
+    renderProperties = function optimizedRenderProperties(updateInputs = true) {
+      if (activePoseDrag() && scheduleFastPoseControls(updateInputs)) return;
+      return originalRenderProperties(updateInputs);
+    };
+
+    const finishPoseSession = () => {
+      if (!poseSessionActive) return;
+      poseSessionActive = false;
+      requestAnimationFrame(() => {
+        if (!activePoseDrag()) renderProperties(true);
+      });
+    };
+    document.addEventListener("pointerup", finishPoseSession, true);
+    document.addEventListener("pointercancel", finishPoseSession, true);
+    document.addEventListener("frisframe:drag-cancelled", finishPoseSession);
+    window.addEventListener("blur", finishPoseSession);
   }
 
   if (typeof syncUi === "function") {
