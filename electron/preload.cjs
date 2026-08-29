@@ -54,6 +54,39 @@ function installMcpFirstWorkflowUi() {
         font-size: 11px;
         line-height: 1.45;
       }
+
+      /* Annotation is an optional helper, not part of the core previs workflow. */
+      #annotationToolbar[hidden] {
+        display: none !important;
+      }
+      .frisframe-annotation-toggle {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        z-index: 36;
+        min-width: 0;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid rgba(255,255,255,.18);
+        border-radius: 9px;
+        background: rgba(24, 29, 34, .92);
+        color: #d8dee7;
+        box-shadow: 0 5px 14px rgba(0,0,0,.22);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .frisframe-annotation-toggle:hover,
+      .frisframe-annotation-toggle[aria-pressed="true"] {
+        border-color: rgba(255,255,255,.36);
+        background: rgba(42, 49, 56, .98);
+      }
+      .app.is-storyboard .frisframe-annotation-toggle {
+        display: none;
+      }
     `;
     document.head.append(style);
 
@@ -126,6 +159,45 @@ function installMcpFirstWorkflowUi() {
       note.className = "frisframe-export-note";
       note.textContent = "배경·인물·소품 이미지는 외부 생성형 이미지 도구에서 만들고, 최종 영상 설명과 프롬프트 조립은 MCP 대화에서 처리합니다.";
       exportActions.prepend(note);
+    }
+
+    // The vertical annotation toolbar is optional. Start with it hidden so the
+    // canvas stays clean, and expose one compact toggle when the user needs it.
+    const annotationToolbar = document.getElementById("annotationToolbar");
+    const canvasWrap = document.querySelector(".canvas-wrap");
+    if (annotationToolbar && canvasWrap) {
+      annotationToolbar.hidden = true;
+      annotationToolbar.setAttribute("aria-hidden", "true");
+
+      const annotationToggle = document.createElement("button");
+      annotationToggle.type = "button";
+      annotationToggle.className = "frisframe-annotation-toggle";
+      annotationToggle.textContent = "✎";
+      annotationToggle.title = "주석 도구 열기 (Shift+A)";
+      annotationToggle.setAttribute("aria-label", "주석 도구 열기");
+      annotationToggle.setAttribute("aria-controls", "annotationToolbar");
+      annotationToggle.setAttribute("aria-pressed", "false");
+      canvasWrap.append(annotationToggle);
+
+      const setAnnotationVisible = (visible) => {
+        annotationToolbar.hidden = !visible;
+        annotationToolbar.setAttribute("aria-hidden", visible ? "false" : "true");
+        annotationToggle.setAttribute("aria-pressed", visible ? "true" : "false");
+        annotationToggle.title = visible ? "주석 도구 숨기기 (Shift+A)" : "주석 도구 열기 (Shift+A)";
+        annotationToggle.setAttribute("aria-label", visible ? "주석 도구 숨기기" : "주석 도구 열기");
+      };
+
+      annotationToggle.addEventListener("click", () => {
+        setAnnotationVisible(annotationToolbar.hidden);
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (!event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.key.toLowerCase() !== "a") return;
+        const target = event.target;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return;
+        event.preventDefault();
+        setAnnotationVisible(annotationToolbar.hidden);
+      });
     }
 
     removeRetiredExportControls();
