@@ -59,6 +59,7 @@ def main() -> None:
         "electron/preload.cjs",
         "electron/main.cjs",
         "electron/workspace-ux.js",
+        "electron/hud-export-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
