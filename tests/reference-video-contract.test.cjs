@@ -62,6 +62,10 @@ assert.ok(app.includes("const renderState = interpolateRenderStateAtTime(exportS
   "MP4 export must evaluate authored state at each render time");
 assert.ok(app.includes("return interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallbackPose, end);"),
   "render-state interpolation must reach the guarded pose evaluator");
+assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"),
+  "the app evaluator must delegate base pose composition to motion-core");
+assert.ok(motion.includes("function composeBaseInterpolatedPose"),
+  "motion-core must own base pose composition");
 
 // Keep exact-frame timeline storage precise enough for 24/60 FPS workflows.
 assert.match(timeline, /const TIME_PRECISION = 6;/,

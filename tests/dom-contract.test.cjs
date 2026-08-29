@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const motion = fs.readFileSync(path.join(root, "motion-core.js"), "utf8");
 const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map((match) => match[1]));
 const selectors = [...app.matchAll(/\$\(\s*["'`]([^"'`]+)["'`]\s*\)/g)].map((match) => match[1]);
 const referencedIds = new Set(selectors.flatMap((selector) => (
@@ -76,7 +77,8 @@ assert.equal(ids.has("cameraSensorFormat"), false, "advanced physical camera con
 assert.equal(ids.has("cameraSensorWidth"), false, "sensor width control should stay out of the blocking sidebar");
 assert.equal(ids.has("cameraAperture"), false, "aperture control should stay out of the blocking sidebar");
 assert.equal(ids.has("cameraFocusDistance"), false, "focus distance control should stay out of the blocking sidebar");
-assert.ok(app.includes("focusDistanceM: lerp("), "camera focus distance must interpolate between keys");
+assert.ok(motion.includes("focusDistanceM: lerpValue("), "motion-core must interpolate camera focus distance between keys");
+assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"), "app must delegate base camera pose composition to motion-core");
 assert.ok(html.includes('id="compareCutVersionsBtn"'), "storyboard inspector needs A/B cut comparison");
 assert.ok(html.includes('id="cutVersionCompareDialog"'), "cut version comparison needs a dedicated dialog");
 assert.ok(app.includes("function continuityFindings("), "structured continuity analysis adapter is required");
@@ -130,8 +132,8 @@ assert.match(app, /const progress = transition === "smooth" \|\| transition === 
 assert.equal(app.includes("proceduralLocomotion"), false, "preview playback must not synthesize walking or running");
 assert.ok(app.includes("keyframe.posePreset"), "MCP pose presets must remain attached to authored keyframes");
 assert.ok(app.includes("bodyPose: presetBodyPose(posePreset)"), "MCP pose presets must resolve through the existing pose core");
-assert.match(app, /bodyPose: keyedBodyPose/, "actor playback must use only authored pose keys");
-assert.match(app, /facing: lerpAngle\(from\.facing, to\.facing, t\)/, "actor rotation must interpolate only keyed facing values");
+assert.match(motion, /bodyPose: keyedBodyPose/, "motion-core actor playback must use only authored pose keys");
+assert.match(motion, /facing: lerpAngleDegrees\(from\.facing, to\.facing\)/, "motion-core actor rotation must interpolate only keyed facing values");
 assert.match(app, /function rememberLiveSourceEdit\(sourceId\)[\s\S]*?liveSourceEdits\.set\(sourceId, \{ time, pose: currentPose \}\)/, "scene edits must remain independent even when a key exists at the playhead");
 assert.ok(app.includes("function selectedPoseActor("), "pose actions must resolve an actor even after 3D selection changes");
 assert.ok(app.includes("function applyActiveCameraTracking("), "camera tracking must survive keyed interpolation");

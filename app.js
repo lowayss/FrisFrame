@@ -12296,53 +12296,29 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
   const to = mergePoseWithFallbackFor(renderState, sourceId, endPose, fallbackPose);
   const segment = sanitizeMotionSegment(endKeyframe?.segment, sourceId);
   const spatial = evaluateMotionSegment(renderState, sourceId, from, to, t, segment);
-  if (sourceId === "camera") {
-    return syncCameraDerivedAim({
-      ...from,
-      x: spatial.x,
-      y: spatial.y,
-      height: spatial.height,
-      panDeg: lerpAngle(from.panDeg, to.panDeg, t),
-      tiltDeg: lerp(from.tiltDeg, to.tiltDeg, t),
-      focal: Math.round(lerp(from.focal, to.focal, t)),
-      focusDistanceM: lerp(from.focusDistanceM, to.focusDistanceM, t),
-      trackingTargetId: sanitizeTrackingTargetId(t < 0.5 ? from.trackingTargetId : to.trackingTargetId, renderState),
-    }, renderState);
-  }
-  // Actor blocking is a position/orientation guide, not a walk-cycle
-  // generator. Hold the keyed pose throughout the move and apply the next
-  // pose only when the actor reaches the destination key.
-  const keyedBodyPose = from.type === "actor"
-    ? (t >= 0.999 ? to.bodyPose : from.bodyPose)
-    : null;
   const heightField = from.type === "prop" ? "mountedHeight" : "verticalOffset";
-  const transformed = sceneBlockingCore.interpolateSceneObject(
+  const transformed = sourceId === "camera" ? null : sceneBlockingCore.interpolateSceneObject(
     { ...from, elevation: Number(from[heightField] || 0) },
     { ...to, elevation: Number(to[heightField] || 0) },
     t,
   );
-
-  return {
-    ...from,
-    x: spatial.x,
-    y: spatial.y,
-    size: transformed.size,
-    scaleX: transformed.scaleX,
-    scaleY: transformed.scaleY,
-    scaleZ: transformed.scaleZ,
-    verticalOffset: from.type === "actor" ? spatial.height : from.verticalOffset,
-    mountedHeight: from.type === "prop" ? spatial.height : from.mountedHeight,
-    pitch: lerp(Number(from.pitch || 0), Number(to.pitch || 0), t),
-    facing: lerpAngle(from.facing, to.facing, t),
-    bodyPose: keyedBodyPose,
-    color: to.color,
-    shape: to.shape,
-    assetType: to.assetType,
-    mountId: t < 0.5 ? from.mountId : to.mountId,
-    seatIndex: t < 0.5 ? from.seatIndex : to.seatIndex,
-    name: to.name,
-    visible: t < 0.5 ? from.visible !== false : to.visible !== false,
-  };
+  const composeBaseInterpolatedPose = window.FrisFrameMotionCore?.composeBaseInterpolatedPose;
+  if (typeof composeBaseInterpolatedPose !== "function") {
+    throw new Error("모션 코어의 기본 포즈 평가기를 불러오지 못했습니다.");
+  }
+  const result = composeBaseInterpolatedPose({
+    sourceId,
+    from,
+    to,
+    progress: t,
+    spatial,
+    transformed,
+  });
+  if (sourceId === "camera") {
+    result.trackingTargetId = sanitizeTrackingTargetId(result.trackingTargetId, renderState);
+    return syncCameraDerivedAim(result, renderState);
+  }
+  return result;
 }
 
 function evaluateMotionSegment(renderState, sourceId, from, to, progress, segment) {
