@@ -1,9 +1,13 @@
 const assert = require("node:assert/strict");
-const runtime = require("../previs-runtime-core.js");
+const motion = require("../motion-core.js");
+const workflow = require("../reference-workflow-core.js");
 const {
   exportReferenceBatchSafely,
   partitionReferenceBatchByReadiness,
-} = runtime;
+} = workflow;
+
+assert.equal(partitionReferenceBatchByReadiness, motion.partitionReferenceBatchByReadiness,
+  "workflow must reuse the motion-core READY/REVIEW/BLOCKED partitioner");
 
 function readyBlocking() {
   return {

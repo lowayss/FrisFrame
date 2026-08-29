@@ -5,7 +5,7 @@ const {
   collectReferenceBatchCuts,
   exportReferenceVideoBatch,
   safeFileSlug,
-} = require("../previs-runtime-core.js");
+} = require("../reference-workflow-core.js");
 
 assert.equal(safeFileSlug(' Scene 01 / Close:Up? '), "Scene-01-Close-Up");
 assert.equal(safeFileSlug(""), "cut");

@@ -80,12 +80,15 @@ const dataFiles = [
   "storyboard-core.js",
   "motion-core.js",
   "scene-blocking-core.js",
+  "previs-runtime-core.js",
+  "reference-workflow-core.js",
   "timeline-core.js",
   "project-recovery-core.js",
   "manual-guide-core.js",
   "pose-core.js",
   "camera-drafting-core.js",
   "multi-camera-core.js",
+  "spatial-scale-core.js",
   "license_activation.html",
 ];
 const args = [
