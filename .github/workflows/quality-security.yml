@@ -1,0 +1,44 @@
+name: Quality and security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reject tracked local data and backup files
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden="$(git ls-files | grep -Ei '(^|/)([^/]+\.(db|db-[^/]+|bak|sqlite|sqlite3|sqlite-[^/]+))$' || true)"
+          if [ -n "$forbidden" ]; then
+            echo "Tracked local database/backup files are forbidden:"
+            echo "$forbidden"
+            exit 1
+          fi
+
+      - name: Run project quality checks
+        run: python3 quality_check.py
+
+      - name: Run Electron security contract
+        run: node tests/electron-contract.test.cjs

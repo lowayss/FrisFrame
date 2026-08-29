@@ -1,4 +1,9 @@
 *.db
+*.db-*
+*.bak
+*.sqlite
+*.sqlite3
+*.sqlite-*
 __pycache__/
 *.pyc
 .DS_Store
