@@ -70,8 +70,12 @@ assert.ok(motion.includes("function composeEvaluatedFrameBase"),
   "motion-core must own base frame assembly");
 assert.ok(app.includes("referenceProgress: plan.referenceProgress"),
   "camera render-state interpolation must pass the motion-core smooth-run reference progress into the guarded evaluator");
-assert.match(app, /interpolatePoseFor\([\s\S]*?plan\.progress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
-  "render-state interpolation must reach the guarded pose evaluator through the core timing plan and camera reference options");
+assert.ok(app.includes('fallbackPose?.type === "actor"') && app.includes("? plan.referenceProgress"),
+  "authored actor root motion must consume smooth-run timing without adding secondary motion");
+assert.ok(motion.includes("smoothRunReferenceProgress"),
+  "motion-core must own smooth-run timing shared by camera and authored actor root motion");
+assert.match(app, /interpolatePoseFor\([\s\S]*?interpolationProgress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
+  "render-state interpolation must reach the guarded pose evaluator through authored actor timing and camera reference options");
 assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"),
   "the app source evaluator must delegate keyframe timing to motion-core");
 assert.ok(motion.includes("function sourceKeyframeEvaluationPlan"),
