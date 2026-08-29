@@ -5,27 +5,63 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "../..");
-const appPath = path.join(root, "release", "mac-arm64", "FrisFrame.app");
-const resources = path.join(appPath, "Contents", "Resources", "runtime");
-const licenses = path.join(appPath, "Contents", "Resources", "licenses");
-const required = [
-  path.join(appPath, "Contents", "MacOS", "FrisFrame"),
-  path.join(resources, "server", "frisframe-server"),
-  path.join(resources, "server", "_internal", "pose-core.js"),
-  path.join(resources, "server", "_internal", "camera-drafting-core.js"),
-  path.join(resources, "ffmpeg"),
-  path.join(resources, "server", "_internal", "timeline-core.js"),
-  path.join(licenses, "FrisFrame-LICENSE.txt"),
-  path.join(licenses, "THIRD_PARTY_NOTICES.md"),
-];
-for (const target of required) {
-  if (!fs.existsSync(target)) throw new Error(`패키지 파일이 없습니다: ${target}`);
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+
+function requireFiles(files) {
+  for (const target of files) {
+    if (!fs.existsSync(target)) throw new Error(`패키지 파일이 없습니다: ${target}`);
+  }
 }
-fs.accessSync(required[0], fs.constants.X_OK);
-fs.accessSync(required[1], fs.constants.X_OK);
-fs.accessSync(path.join(resources, "ffmpeg"), fs.constants.X_OK);
-const plistCheck = spawnSync("/usr/bin/plutil", ["-extract", "NSAppTransportSecurity.NSAllowsArbitraryLoads", "raw", path.join(appPath, "Contents", "Info.plist")], { encoding: "utf8" });
-if (plistCheck.status !== 0 || plistCheck.stdout.trim() !== "false") {
-  throw new Error("앱 전역 네트워크 허용이 꺼져 있지 않습니다.");
+
+function verifyWindows() {
+  const appPath = path.join(root, "release", "win-unpacked");
+  const resources = path.join(appPath, "resources", "runtime");
+  const licenses = path.join(appPath, "resources", "licenses");
+  const required = [
+    path.join(appPath, "FrisFrame.exe"),
+    path.join(resources, "server", "frisframe-server.exe"),
+    path.join(resources, "server", "_internal", "pose-core.js"),
+    path.join(resources, "server", "_internal", "camera-drafting-core.js"),
+    path.join(resources, "server", "_internal", "timeline-core.js"),
+    path.join(resources, "ffmpeg.exe"),
+    path.join(licenses, "FrisFrame-LICENSE.txt"),
+    path.join(licenses, "THIRD_PARTY_NOTICES.md"),
+  ];
+  requireFiles(required);
+  const installer = path.join(root, "release", `FrisFrame-${packageJson.version}-x64.exe`);
+  if (!fs.existsSync(installer)) throw new Error(`Windows NSIS 설치 파일이 없습니다: ${installer}`);
+  console.log(`FrisFrame Windows 패키지 확인: ${installer}`);
 }
-console.log(`FrisFrame 앱 패키지 확인: ${appPath}`);
+
+function verifyMac() {
+  const appPath = path.join(root, "release", "mac-arm64", "FrisFrame.app");
+  const resources = path.join(appPath, "Contents", "Resources", "runtime");
+  const licenses = path.join(appPath, "Contents", "Resources", "licenses");
+  const required = [
+    path.join(appPath, "Contents", "MacOS", "FrisFrame"),
+    path.join(resources, "server", "frisframe-server"),
+    path.join(resources, "server", "_internal", "pose-core.js"),
+    path.join(resources, "server", "_internal", "camera-drafting-core.js"),
+    path.join(resources, "server", "_internal", "timeline-core.js"),
+    path.join(resources, "ffmpeg"),
+    path.join(licenses, "FrisFrame-LICENSE.txt"),
+    path.join(licenses, "THIRD_PARTY_NOTICES.md"),
+  ];
+  requireFiles(required);
+  fs.accessSync(required[0], fs.constants.X_OK);
+  fs.accessSync(required[1], fs.constants.X_OK);
+  fs.accessSync(path.join(resources, "ffmpeg"), fs.constants.X_OK);
+  const plistCheck = spawnSync(
+    "/usr/bin/plutil",
+    ["-extract", "NSAppTransportSecurity.NSAllowsArbitraryLoads", "raw", path.join(appPath, "Contents", "Info.plist")],
+    { encoding: "utf8" },
+  );
+  if (plistCheck.status !== 0 || plistCheck.stdout.trim() !== "false") {
+    throw new Error("앱 전역 네트워크 허용이 꺼져 있지 않습니다.");
+  }
+  console.log(`FrisFrame macOS 앱 패키지 확인: ${appPath}`);
+}
+
+if (process.platform === "win32") verifyWindows();
+else if (process.platform === "darwin") verifyMac();
+else throw new Error(`패키지 검증을 지원하지 않는 플랫폼입니다: ${process.platform}`);
