@@ -20,8 +20,8 @@ const keys = [
 ];
 
 assert.equal(snapTime(1.02, "frame", 24), 1);
-assert.equal(snapTime(1.03, "frame", 24), 1.0417);
-assert.equal(snapTime(1.01, "frame", 60), 1.0167);
+assert.equal(snapTime(1.03, "frame", 24), 1.041667);
+assert.equal(snapTime(1.01, "frame", 60), 1.016667);
 assert.equal(snapTime(1.24, "0.5", 24), 1);
 assert.equal(sameTime(1, 1.0004), true);
 
@@ -49,13 +49,13 @@ const offGridKeys = [
 const frameMoved = moveSelection(offGridKeys, ["off-a", "off-b"], "off-a", 1, { mode: "frame", fps: 24, maximum: 10 });
 assert.equal(frameMoved.ok, true);
 frameMoved.keyframes.forEach((keyframe) => {
-  assert.ok(Math.abs(keyframe.time * 24 - Math.round(keyframe.time * 24)) < 0.001, "every moved key must land on a frame tick");
+  assert.ok(Math.abs(keyframe.time * 24 - Math.round(keyframe.time * 24)) < 0.00002, "every moved key must land on a 24 FPS frame tick");
 });
 
 const sixtyFpsMoved = moveSelection(offGridKeys, ["off-a", "off-b"], "off-a", 1.01, { mode: "frame", fps: 60, maximum: 10 });
 assert.equal(sixtyFpsMoved.ok, true);
 sixtyFpsMoved.keyframes.forEach((keyframe) => {
-  assert.ok(Math.abs(keyframe.time * 60 - Math.round(keyframe.time * 60)) < 0.0021, "60 FPS moves must remain on frame ticks");
+  assert.ok(Math.abs(keyframe.time * 60 - Math.round(keyframe.time * 60)) < 0.00003, "60 FPS moves must remain on frame ticks");
 });
 
 const scaled = scaleSelection(keys, ["a", "d"], 8, { mode: "0.1", maximum: 12 });
@@ -72,6 +72,6 @@ const pasted = pasteTimes(keys, [
 ], 0, { mode: "0.1", maximum: 10 });
 assert.equal(pasted.ok, true);
 assert.ok(pasted.baseTime > 0, "paste should move as a group when the requested slot is occupied");
-assert.equal(Number((pasted.times[1] - pasted.times[0]).toFixed(4)), 1);
+assert.equal(Number((pasted.times[1] - pasted.times[0]).toFixed(6)), 1);
 
-console.log("timeline-core: selection, snapping, retiming, and paste constraints passed");
+console.log("timeline-core: selection, frame-accurate snapping, retiming, and paste constraints passed");
