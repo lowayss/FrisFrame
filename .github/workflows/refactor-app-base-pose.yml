@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
       - name: Apply exact base pose extraction
         run: python3 tools/refactor_app_base_pose.py
+      - name: Migrate DOM ownership contracts
+        run: python3 tools/patch_dom_contract_pose.py
       - name: Run full project checks
         run: python3 quality_check.py
       - name: Commit extracted evaluator composition
