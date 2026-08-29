@@ -2,11 +2,23 @@
 
 [한국어](README.md) | **English**
 
-**Keyframe-driven previs for AI video reference.**
+**Keyframe-driven previs for Seedance video reference.**
 
-FrisFrame is a browser/Electron previsualization tool for designing **camera movement, actor blocking, timing, framing, lens changes, and spatial relationships** before generating the final shot with an AI video model such as Seedance.
+FrisFrame is a browser/Electron previsualization tool for creating **reference MP4s for Seedance**. Before the final shot is generated, you can author **camera movement, actor blocking, timing, framing, lens changes, and spatial relationships**, then export that information as a video reference.
 
-The main goal is not to make the previs itself look natural. The goal is to produce a **clean, controllable reference MP4** that tells the downstream model exactly what it needs to follow — and no more.
+FrisFrame is **not** an AI video generator. Its role is straightforward:
+
+```text
+Build the previs in FrisFrame
+        ↓
+Export an MP4 containing camera / actor / timing / spatial information
+        ↓
+Use that MP4 as a Seedance Video Reference
+        ↓
+Seedance generates the final shot
+```
+
+The goal is not to make the previs itself look natural or cinematic. The goal is to produce a **clean, controllable reference MP4 containing only the motion and spatial information Seedance needs**.
 
 [![Quality and security](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml)
 [![Desktop builds](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml)
@@ -24,14 +36,14 @@ Reference Readiness Check
         ↓
 Frame-accurate H.264 MP4 Previs
         ↓
-Seedance / AI Video Reference
+Seedance Video Reference
         ↓
-Final Generated Shot
+Final Seedance-generated Shot
 ```
 
 FrisFrame is built around a simple principle:
 
-> **Show only the motion the AI needs to follow. Leave the rest to the model.**
+> **Show only the motion Seedance needs to reference. Leave natural secondary motion and final visual expression to Seedance.**
 
 That means camera motion can be authored precisely, while actor movement stays intentionally sparse. FrisFrame does **not** automatically add walk cycles, arm swing, body bounce, breathing, or other secondary animation unless that motion is explicitly authored.
 
@@ -109,9 +121,9 @@ Camera presets are **keyframe macros**, not a separate animation system. The gen
 - Smooth or linear root-motion timing
 - Pose hold until the authored destination key
 
-FrisFrame intentionally avoids inventing secondary body motion. This is important because AI video models can follow extra motion too literally and produce robotic results.
+FrisFrame intentionally avoids inventing secondary body motion. Seedance can follow unnecessary motion in a reference too literally, which may make the result look stiff or robotic.
 
-### AI reference export
+### Seedance reference export
 
 - Clean H.264 MP4 previs
 - CFR frame sampling at exact `1 / fps` intervals
@@ -119,6 +131,7 @@ FrisFrame intentionally avoids inventing secondary body motion. This is importan
 - Selected export range
 - Batch reference export for multiple cuts
 - ZIP package with per-cut MP4 files and manifest
+- Safe filenames even with duplicate cut names or special characters
 
 ### Reference Readiness
 
@@ -128,11 +141,11 @@ Before batch export, each cut is classified as:
 - **REVIEW** — exportable, but worth checking
 - **BLOCKED** — excluded from batch encoding until fixed
 
-Checks include invalid tracking targets, duplicate/out-of-range keys, broken export ranges, camera value errors, frame-grid timing, long reference duration, and authored discrete events that would otherwise fall after the final CFR sample.
+Checks include invalid tracking targets, duplicate/out-of-range keys, broken export ranges, camera value errors, frame-grid timing, long reference duration, authored discrete events that would otherwise fall after the final CFR sample, and whether the final changed camera framing is directly visible for enough CFR frames.
 
-## Reference-video philosophy
+## Seedance reference philosophy
 
-FrisFrame treats the MP4 as a **control signal**, not a finished animation.
+FrisFrame treats the MP4 as a **camera, spatial, and timing reference for Seedance**, not as a finished animation.
 
 Priority order:
 
@@ -141,7 +154,7 @@ Priority order:
 3. **Explicit intentional action / pose**
 4. **Secondary motion** — normally omitted
 
-This is why a FrisFrame previs can look deliberately simple while still being a better AI reference.
+This is why a FrisFrame previs can look deliberately simple. What matters more is that the information sent to Seedance is clear and that unnecessary motion signals are minimized.
 
 See [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) for the full contract.
 
@@ -160,7 +173,7 @@ Regression tests protect:
 - 24 / 60 fps timing
 - preview ↔ export numerical parity
 
-The goal is simple: **what you author at time `t` should be what the exported reference frame represents at time `t`.**
+The goal is simple: **what you author at time `t` should be what the exported Seedance reference frame represents at time `t`.**
 
 ## Run locally
 
@@ -205,15 +218,26 @@ The packaged app includes its local Python server runtime and FFmpeg, so users d
 
 ## Documentation
 
-- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — detailed original usage guide
-- [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — AI reference-video design contract
+- [한국어 README](README.md) — Korean project overview
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — detailed usage guide
+- [`REFERENCE_VIDEO_PRINCIPLES.md`](REFERENCE_VIDEO_PRINCIPLES.md) — Seedance reference-video design contract
 - [`MAINTENANCE.md`](MAINTENANCE.md) — code ownership, runtime boundaries, and maintenance notes
 - [`SIGNING.md`](SIGNING.md) — macOS / Windows production signing setup
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — bundled third-party software notices
 
 ## Project status
 
-FrisFrame is under active development. Current work is focused on improving **reference-video fidelity, timing predictability, camera control, batch export safety, and cross-platform desktop distribution**.
+FrisFrame is currently focused on improving the **accuracy and reliability of Seedance reference MP4s** rather than continuously adding new features.
+
+Current priorities include:
+
+- Reference MP4 timing accuracy
+- Predictable camera motion
+- Actor root-motion transfer accuracy
+- Save / recovery reliability
+- Batch Export safety
+- Windows / macOS desktop stability
+- Security and regression-test coverage
 
 External video analysis and arbitrary external 3D asset importing are not part of the current core scope.
 
