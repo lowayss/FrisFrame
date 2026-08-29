@@ -52,6 +52,7 @@
       "electron/alignment-ux.js",
       "electron/history-safety-ux.js",
       "electron/scene-cache-ux.js",
+      "electron/dynamic-prop-cache-ux.js",
       "electron/stage-shell-cache-ux.js",
       "electron/camera-path-cache-ux.js",
       "electron/preview-cache-ux.js",
