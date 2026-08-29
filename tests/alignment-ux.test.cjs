@@ -10,6 +10,7 @@ function mockElement() {
     className: "",
     textContent: "",
     style: {},
+    dataset: {},
     classList: {
       add() {},
       remove() {},
@@ -57,5 +58,11 @@ assert.equal(nearestAxisSnap(0.742, targets, 0.01).value, 0.75,
   "alignment snapping should choose the nearest eligible axis");
 assert.equal(nearestAxisSnap(0.62, targets, 0.01), null,
   "alignment snapping should stay out of the way when no target is near");
+assert.match(source, /threeEditMode !== "move" && threeDrag\.editor\?\.forceMode !== "move"/,
+  "forced 3D move handles must retain alignment snapping even outside global move mode");
+assert.match(source, /Alt\/Option\+클릭 · 겹친 대상 순환/,
+  "3D help should expose overlap cycling");
+assert.match(source, /Alt\+드래그 · 정렬 스냅 해제/,
+  "3D help should expose the temporary snap bypass");
 
-console.log("alignment-ux: nearest-axis snapping threshold passed");
+console.log("alignment-ux: nearest-axis snapping, forced move handles, and help affordances passed");
