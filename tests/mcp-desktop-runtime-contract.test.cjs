@@ -26,8 +26,10 @@ assert.match(build, /mcpExecutable: "frisframe-mcp\.exe"/,
   "Windows runtime config must name the packaged MCP executable");
 assert.match(stage, /sourceMcp[\s\S]*stagedMcp[\s\S]*fs\.cpSync\(sourceMcp, stagedMcp/,
   "runtime staging must copy the MCP bundle into Electron extraResources");
-assert.match(verify, /runtime[^\n]*"mcp"[^\n]*"frisframe-mcp/,
-  "release verification must require the MCP executable inside the packaged app");
+assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp\.exe"\)/,
+  "Windows release verification must require the packaged MCP executable");
+assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp"\)/,
+  "macOS release verification must require the packaged MCP executable");
 assert.match(verify, /verifyMcpExecutable\(mcpExecutable\)/,
   "release verification must smoke-start the packaged MCP process");
 assert.match(verify, /PREVIS_DB_PATH: database/,
