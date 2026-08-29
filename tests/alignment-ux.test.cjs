@@ -64,5 +64,7 @@ assert.match(source, /Alt\/Option\+클릭 · 겹친 대상 순환/,
   "3D help should expose overlap cycling");
 assert.match(source, /Alt\+드래그 · 정렬 스냅 해제/,
   "3D help should expose the temporary snap bypass");
+assert.match(source, /window\.addEventListener\("pointerdown"[\s\S]*syncPlayheadFromTimeInput\(\)[\s\S]*}, true\)/,
+  "window capture must sync a freshly typed time before document-capture overlap cycling");
 
-console.log("alignment-ux: nearest-axis snapping, forced move handles, and help affordances passed");
+console.log("alignment-ux: snapping, forced move handles, overlap-time sync, and help affordances passed");
