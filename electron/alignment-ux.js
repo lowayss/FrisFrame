@@ -69,6 +69,18 @@
     shortcuts.append(overlapHelp, snapHelp);
   }
 
+  // Window capture runs before the selection layer's document capture. This
+  // makes an Alt/Option overlap click use a freshly typed timeline value.
+  window.addEventListener("pointerdown", (event) => {
+    if (!event.altKey || event.button !== 0) return;
+    if (event.target !== stageCanvas && event.target !== threeCanvas) return;
+    try {
+      if (typeof syncPlayheadFromTimeInput === "function") syncPlayheadFromTimeInput();
+    } catch (_error) {
+      // Invalid time input falls back to the latest evaluated/authored frame.
+    }
+  }, true);
+
   let renderFrame = 0;
   let pendingRenderMode = "2d";
   let targetCache = null;
