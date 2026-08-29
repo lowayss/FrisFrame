@@ -12258,27 +12258,14 @@ function interpolateRenderStateAtTime(renderState, time) {
 
 function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
   const keyframes = sortKeyframes(renderState.motion?.keyframes || []).filter((keyframe) => keyframe.source === sourceId);
-  if (!keyframes.length) return clone(fallbackPose);
-  if (keyframes.length === 1 || time <= keyframes[0].time) return mergePoseWithFallbackFor(renderState, sourceId, keyframes[0].pose, fallbackPose);
-  const last = keyframes[keyframes.length - 1];
-  if (time >= last.time) return mergePoseWithFallbackFor(renderState, sourceId, last.pose, fallbackPose);
-
-  let start = keyframes[0];
-  let end = last;
-  for (let i = 0; i < keyframes.length - 1; i += 1) {
-    if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
-      start = keyframes[i];
-      end = keyframes[i + 1];
-      break;
-    }
+  const sourceKeyframeEvaluationPlan = window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan;
+  if (typeof sourceKeyframeEvaluationPlan !== "function") {
+    throw new Error("모션 코어의 키프레임 평가 계획기를 불러오지 못했습니다.");
   }
-  const transition = normalizeTransition(end.transition);
-  const easedProgress = transitionProgress(time, start.time, end.time, transition);
-  const rawProgress = clamp((time - start.time) / Math.max(0.000001, end.time - start.time), 0, 1);
-  // Spatial blocking must cross ordinary key boundaries without braking at
-  // every marker. Holds and cuts retain their explicit discontinuous behavior.
-  const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
-  return interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallbackPose, end);
+  const plan = sourceKeyframeEvaluationPlan(keyframes, time);
+  if (plan.kind === "fallback") return clone(fallbackPose);
+  if (plan.kind === "key") return mergePoseWithFallbackFor(renderState, sourceId, plan.keyframe.pose, fallbackPose);
+  return interpolatePoseFor(renderState, sourceId, plan.start.pose, plan.end.pose, plan.progress, fallbackPose, plan.end);
 }
 
 function mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose) {

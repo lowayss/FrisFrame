@@ -15,6 +15,7 @@ const {
   quadraticBezierArcLengthPoint,
   rescaleKeyframeTimes,
   samplePlanarPath,
+  sourceKeyframeEvaluationPlan,
   transitionProgress,
 } = require("../motion-core.js");
 
@@ -39,6 +40,36 @@ near(transitionProgress(0.5, 0, 1, "linear"), 0.5);
 near(transitionProgress(0.25, 0, 1, "smooth"), 0.125);
 assert.equal(transitionProgress(0.99, 0, 1, "hold"), 0);
 assert.equal(transitionProgress(1, 0, 1, "cut"), 1);
+
+const sourcePlanKeys = [
+  { id: "k0", time: 0, pose: { x: 0 } },
+  { id: "k1", time: 2, transition: "smooth", pose: { x: 1 } },
+  { id: "k2", time: 4, transition: "hold", pose: { x: 2 } },
+  { id: "k3", time: 6, transition: "cut", pose: { x: 3 } },
+];
+assert.equal(sourceKeyframeEvaluationPlan([], 1).kind, "fallback");
+const sourcePlanBefore = sourceKeyframeEvaluationPlan(sourcePlanKeys, -1);
+assert.equal(sourcePlanBefore.kind, "key");
+assert.equal(sourcePlanBefore.keyframe.id, "k0");
+const sourcePlanSmooth = sourceKeyframeEvaluationPlan(sourcePlanKeys, 0.5);
+assert.equal(sourcePlanSmooth.kind, "segment");
+assert.equal(sourcePlanSmooth.end.id, "k1");
+assert.equal(sourcePlanSmooth.transition, "smooth");
+near(sourcePlanSmooth.rawProgress, 0.25);
+near(sourcePlanSmooth.easedProgress, 0.125);
+near(sourcePlanSmooth.progress, 0.25, 0.000001);
+const sourcePlanHold = sourceKeyframeEvaluationPlan(sourcePlanKeys, 3);
+assert.equal(sourcePlanHold.end.id, "k2");
+assert.equal(sourcePlanHold.progress, 0, "hold must remain on the source key before arrival");
+const sourcePlanHoldArrival = sourceKeyframeEvaluationPlan(sourcePlanKeys, 4);
+assert.equal(sourcePlanHoldArrival.end.id, "k2");
+assert.equal(sourcePlanHoldArrival.progress, 1, "hold must apply the destination exactly at arrival");
+const sourcePlanCut = sourceKeyframeEvaluationPlan(sourcePlanKeys, 5);
+assert.equal(sourcePlanCut.end.id, "k3");
+assert.equal(sourcePlanCut.progress, 0, "cut must remain on the source key before arrival");
+const sourcePlanAfter = sourceKeyframeEvaluationPlan(sourcePlanKeys, 7);
+assert.equal(sourcePlanAfter.kind, "key");
+assert.equal(sourcePlanAfter.keyframe.id, "k3");
 
 const straightDown = cameraDirectionVector(25, -90);
 near(straightDown.x, 0, 0.000001);
@@ -219,4 +250,4 @@ const baseActorAtLegacyThreshold = composeBaseInterpolatedPose({
 assert.equal(baseActorAtLegacyThreshold.bodyPose, destinationBodyPose,
   "base compatibility layer keeps the old 0.999 switch while the reference guard holds until the authored destination");
 
-console.log("motion-core: transitions, path constraints, camera reference speed, and base pose composition passed");
+console.log("motion-core: source timing, transitions, path constraints, camera reference speed, and base pose composition passed");

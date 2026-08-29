@@ -60,8 +60,12 @@ assert.ok(app.includes("return interpolateSourceAtTimeFor(state, sourceId, time,
   "interactive preview must use the shared source evaluator");
 assert.ok(app.includes("const renderState = interpolateRenderStateAtTime(exportState, renderTime);"),
   "MP4 export must evaluate authored state at each render time");
-assert.ok(app.includes("return interpolatePoseFor(renderState, sourceId, start.pose, end.pose, progress, fallbackPose, end);"),
-  "render-state interpolation must reach the guarded pose evaluator");
+assert.ok(app.includes("return interpolatePoseFor(renderState, sourceId, plan.start.pose, plan.end.pose, plan.progress, fallbackPose, plan.end);"),
+  "render-state interpolation must reach the guarded pose evaluator through the core timing plan");
+assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"),
+  "the app source evaluator must delegate keyframe timing to motion-core");
+assert.ok(motion.includes("function sourceKeyframeEvaluationPlan"),
+  "motion-core must own source keyframe segment and progress planning");
 assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"),
   "the app evaluator must delegate base pose composition to motion-core");
 assert.ok(motion.includes("function composeBaseInterpolatedPose"),
