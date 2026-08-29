@@ -19,7 +19,7 @@ assert.match(source, /event\.key\.toLowerCase\(\) === "l"/,
   "L must toggle the contextual selection lock outside text inputs");
 assert.match(source, /itemEditLockBtn/,
   "item quick lock must reuse the existing item lock action");
-assert.match(source, /data-camera-lock=\\"position\\"/,
+assert.match(source, /data-camera-lock="position"/,
   "camera quick lock must reuse the existing camera-position lock action");
 assert.match(source, /visibilitychange/,
   "dirty managed projects should request an immediate save when the app is backgrounded");
