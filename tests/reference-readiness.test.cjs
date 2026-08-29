@@ -7,6 +7,7 @@ const {
   evaluateProjectReferenceReadiness,
   evaluateReferenceReadiness,
   isFrameAligned,
+  referenceFinalCameraExposure,
   referenceTailDiscreteEvents,
 } = motion;
 
@@ -113,8 +114,50 @@ smoothEnd.motion.keyframes.push({
   pose: { x: 0.6, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-1" },
 });
 const smoothEndResult = evaluateReferenceReadiness(smoothEnd);
-assert.equal(smoothEndResult.status, "ready", "ordinary smooth endpoint keys must not become false-positive reviews");
-assert.equal(smoothEndResult.stats.tailDiscreteEventCount, 0);
+assert.equal(smoothEndResult.status, "review", "a changed final camera framing with zero CFR samples should be reviewed");
+assert.ok(smoothEndResult.issues.some((issue) => issue.code === "camera-final-framing-short"));
+assert.equal(smoothEndResult.stats.tailDiscreteEventCount, 0, "smooth framing warning must not be misclassified as a discrete event");
+assert.equal(smoothEndResult.stats.finalCameraExposureFrames, 0);
+const smoothEndExposure = referenceFinalCameraExposure(smoothEnd, { start: 0, end: 5 }, 24, 2);
+assert.equal(smoothEndExposure.changed, true);
+assert.equal(smoothEndExposure.exposureFrames, 0);
+
+const oneFrameCameraEnd = baseBlocking();
+oneFrameCameraEnd.motion.keyframes.push({
+  id: "cam-end-one-frame",
+  source: "camera",
+  time: 119 / 24,
+  transition: "smooth",
+  pose: { x: 0.6, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-1" },
+});
+const oneFrameCameraEndResult = evaluateReferenceReadiness(oneFrameCameraEnd);
+assert.equal(oneFrameCameraEndResult.status, "review");
+assert.ok(oneFrameCameraEndResult.issues.some((issue) => issue.code === "camera-final-framing-short"));
+assert.equal(oneFrameCameraEndResult.stats.finalCameraExposureFrames, 1);
+
+const twoFrameCameraEnd = baseBlocking();
+twoFrameCameraEnd.motion.keyframes.push({
+  id: "cam-end-two-frames",
+  source: "camera",
+  time: 118 / 24,
+  transition: "smooth",
+  pose: { x: 0.6, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-1" },
+});
+const twoFrameCameraEndResult = evaluateReferenceReadiness(twoFrameCameraEnd);
+assert.equal(twoFrameCameraEndResult.status, "ready", "two directly sampled destination frames should be enough for readiness");
+assert.equal(twoFrameCameraEndResult.stats.finalCameraExposureFrames, 2);
+
+const redundantCameraEnd = baseBlocking();
+redundantCameraEnd.motion.keyframes.push({
+  id: "cam-end-redundant",
+  source: "camera",
+  time: 5,
+  transition: "smooth",
+  pose: { x: 0.7, y: 0.5, height: 1.6, panDeg: 180, tiltDeg: -4, focal: 50, trackingTargetId: "actor-1" },
+});
+const redundantCameraEndResult = evaluateReferenceReadiness(redundantCameraEnd);
+assert.equal(redundantCameraEndResult.status, "ready", "a redundant final camera key must not trigger a framing warning");
+assert.ok(!redundantCameraEndResult.issues.some((issue) => issue.code === "camera-final-framing-short"));
 
 const holdEnd = baseBlocking();
 holdEnd.motion.keyframes.push({
