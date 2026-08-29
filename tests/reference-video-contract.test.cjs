@@ -35,8 +35,12 @@ assert.ok(workflow.includes('require("./motion-core.js")'),
   "Node reference workflow must import the pure planning owner");
 assert.ok(workflow.includes("root?.FrisFrameMotionCore"),
   "browser reference workflow must reuse the already-loaded motion core");
-assert.ok(workflow.includes("installBatchReferenceExportUi(root)"));
-assert.ok(workflow.includes("installReferenceReadinessUi(root)"));
+assert.ok(workflow.includes("installBatchReferenceExportUi(root)"),
+  "supported multi-cut MP4 ZIP export must remain installed");
+assert.equal(workflow.includes("installReferenceReadinessUi(root)"), false,
+  "reference readiness must remain an internal MP4 safety policy, not a user-facing workflow step");
+assert.equal(workflow.includes("installReferencePromptGuideUi(root)"), false,
+  "final prompt composition must stay outside FrisFrame");
 assert.equal(runtime.includes("exportReferenceVideoBatch"), false,
   "runtime adapter must not own reference batch export anymore");
 
@@ -107,4 +111,4 @@ assert.ok(server.includes('"libx264"'));
 assert.ok(server.includes('"yuv420p"'));
 assert.ok(server.includes('"+faststart"'));
 
-console.log("reference-video-contract: motion-owned evaluator, actor restraint, timing, and MP4 pipeline passed");
+console.log("reference-video-contract: motion-owned evaluator, internal readiness, actor restraint, timing, and MP4 pipeline passed");
