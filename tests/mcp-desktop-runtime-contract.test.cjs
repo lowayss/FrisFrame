@@ -32,6 +32,12 @@ assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp"\)/,
   "macOS release verification must require the packaged MCP executable");
 assert.match(verify, /verifyMcpExecutable\(mcpExecutable\)/,
   "release verification must exercise the packaged MCP process");
+assert.match(verify, /function runMcpRequest\(executable, database, request\)/,
+  "package verification must isolate one stdio JSON-RPC request per process for Windows-safe EOF handling");
+assert.ok((verify.match(/runMcpRequest\(executable, database, \{/g) || []).length >= 3,
+  "package verification must independently exercise initialize, tool discovery, and a DB-backed tool call");
+assert.match(verify, /input: `\$\{JSON\.stringify\(request\)\}\\n`/,
+  "each packaged MCP verification process must receive exactly one newline-delimited request");
 assert.match(verify, /method: "initialize"/,
   "packaged MCP verification must perform an MCP initialize handshake");
 assert.match(verify, /method: "tools\/list"/,
