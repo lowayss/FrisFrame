@@ -46,8 +46,6 @@ An external model should return observations, not rendered geometry.
       "axis": "height",
       "physicalSizeM": 1.78,
       "frameFraction": 0.31,
-      "imageX": 0.52,
-      "imageY": 0.46,
       "confidence": 0.92,
       "source": "external-analysis"
     }
@@ -61,8 +59,6 @@ An external model should return observations, not rendered geometry.
 
 `frameFraction` is the measured width or height divided by the full image width or height. Pixel measurements are also accepted when the corresponding image-axis pixel count is supplied.
 
-`imageX` / `imageY` are optional normalized screen-center observations. Missing X/Y values stay missing; FrisFrame must not synthesize frame center or zero coordinates for an observation that the external model did not provide. An explicitly supplied normalized `0` remains a valid edge-of-frame coordinate.
-
 ## Scale Anchor
 
 A Scale Anchor connects a known real-world dimension to its measured image size.
@@ -71,7 +67,9 @@ Supported axes in 0.6 are `height` and `width`. Depth is not inferred from a sin
 
 With a known focal length, an anchor can solve camera-to-anchor distance. With a known distance, an anchor can solve focal length. If the caller explicitly supplies `distance_m`, the MCP calibration path solves focal rather than silently reusing the current FrisFrame lens.
 
-Applied anchors are persisted in the existing `spatialGuide` structure as `scale-height` or `scale-width` anchors. Their measured frame fraction, optional screen center, world position, attached item, confidence, and physical dimensions remain available for later validation.
+Applied anchors are persisted in the existing `spatialGuide` structure as `scale-height` or `scale-width` anchors. Their measured frame fraction, world position, attached item, confidence, and physical dimensions remain available for later validation.
+
+Screen center `imageX/imageY` is an optional measured observation. Missing X/Y must remain missing; FrisFrame does not synthesize a center or edge value. Explicit normalized `0` is a valid edge-of-frame measurement and must be preserved.
 
 ## Multi-anchor perspective consistency
 
@@ -92,15 +90,14 @@ This catches common external-analysis errors such as a door depth or actor dista
 
 ## Perspective Calibration
 
-The deterministic geometry supports:
+The deterministic core supports:
 
 - horizontal/vertical FOV from focal length, sensor width, and aspect ratio;
 - focal length from anchor size + frame fraction + distance;
 - distance from anchor size + frame fraction + focal length;
 - camera tilt from normalized horizon Y;
 - horizontal ray angle from normalized image X;
-- deterministic 3D world-point → normalized camera-frame X/Y projection using the same FrisFrame pan/tilt convention as the preview camera;
-- deterministic inverse screen-orientation solving for explicit target `image_x/image_y` observations while keeping camera position, lens and zero-roll convention fixed.
+- deterministic 3D world-point → normalized camera-frame X/Y projection using the same FrisFrame pan/tilt convention as the preview camera.
 
 FrisFrame uses negative `tiltDeg` for a downward-looking camera. Therefore a horizon above frame center (`horizonY < 0.5`) produces a negative tilt.
 
@@ -128,6 +125,29 @@ If the cut already has camera keyframes, `apply_reference_camera_calibration` is
 For a keyed cut, first use `calibrate_reference_camera`, then apply the solved values to explicit camera keyframes with the existing `apply_motion_timeline` tool. `allow_keyframed_base_camera=true` exists only as an explicit override.
 
 A solved distance that would move the camera outside the current stage is rejected instead of silently clamping the camera position.
+
+## Explicit screen-orientation solve/apply
+
+Screen-center X/Y remains a diagnostic observation by default. FrisFrame never rotates the camera automatically just because an X/Y residual exists.
+
+When exact screen placement is intentionally requested, use the separate opt-in path:
+
+1. `solve_reference_camera_orientation` — read-only deterministic inverse solve from target world center + measured `image_x/image_y` to camera pan/tilt. It creates no project revision.
+2. Inspect the solved pan/tilt delta and persisted-Horizon consistency.
+3. `apply_reference_camera_orientation` — explicitly apply the solved pan/tilt in one project revision.
+
+The orientation solve keeps the current camera position, focal length, sensor width, aspect ratio, and FrisFrame's zero-roll convention. The solution is reprojected through the same camera projection math before it is returned.
+
+Safety rules:
+
+- a cut with camera keyframes blocks base-camera orientation apply by default (`camera-keyframes-present`);
+- read-only orientation solve remains available on a keyed cut and must not change revision;
+- `allow_keyframed_base_camera=true` is an explicit override only;
+- a solved tilt that conflicts with a persisted Horizon observation blocks apply by default (`reference-horizon-conflict`) before a revision is created;
+- `allow_horizon_mismatch=true` is an explicit override only;
+- after a Horizon override, normal Reference Space validation is expected to report `REVIEW` with `horizon-mismatch` because Horizon remains a blocking observation.
+
+Exact screen reframing intentionally remains separate from `apply_reference_space_plan`. The atomic plan owns camera calibration + mass application; screen orientation follows the explicit solve → inspect → apply workflow.
 
 ## Reference Overlay / Ghost View
 
@@ -157,20 +177,9 @@ When the centers differ, the Ghost draws both center markers and a connector so 
 
 ### Screen-position policy
 
-Scale Anchor screen-center X/Y residuals are **diagnostic only** (`screenPositionPolicy: visual-diagnostic-only` in the Ghost model and `diagnostic-only-no-readiness-impact` in local/MCP validation). They do not change Reference Space `READY` / `REVIEW` by themselves and do not automatically rotate the camera.
+Scale Anchor screen-center X/Y residuals are **diagnostic only** (`screenPositionPolicy: diagnostic-only-no-readiness-impact` in validation; visual-only in Ghost). They do not change Reference Space `READY` / `REVIEW` status.
 
-This is intentional. Existing camera calibration preserves authored camera direction unless the caller explicitly chooses to modify orientation. Promoting X/Y residuals to an automatic validation or mutation rule could reject or overwrite valid authored framing.
-
-When exact screen placement is deliberately required, the desktop MCP exposes a separate opt-in path:
-
-- `solve_reference_camera_orientation` computes the pan/tilt required to place one target center at explicit normalized `image_x/image_y` without creating a project revision;
-- `apply_reference_camera_orientation` applies that solved pan/tilt through one existing scene-command revision.
-
-The inverse solve keeps the current camera position, focal length, sensor/aspect and zero-roll convention. The result is immediately re-projected through the normal Reference Space projector and must reproduce the requested X/Y before it can be applied.
-
-Camera-keyframe safety remains active: base-camera orientation is blocked by default when camera keys already exist. A persisted Horizon observation is also protected. If the solved screen Y would make the current Horizon observation exceed the configured tolerance, application stops before a revision is created. `allow_horizon_mismatch=true` is an explicit override; after such an override the normal validator can report `REVIEW` because Horizon is a blocking observation even though screen X/Y is not.
-
-The explicit orientation tools do **not** make X/Y residuals globally blocking and are intentionally separate from `apply_reference_space_plan` in 0.6. This keeps the atomic reference plan free from implicit camera-direction changes; exact reframing is a deliberate follow-up operation. External clients should prefer `solve_reference_camera_orientation` first, inspect the returned deltas and Horizon check, and call `apply_reference_camera_orientation` only when that reframing is intentionally desired.
+This is intentional. Existing authored camera direction is preserved unless the caller explicitly uses the screen-orientation solve/apply tools. X/Y itself is not a blocking validation rule.
 
 Scale fraction, physical dimensions, world X/Z and Horizon continue to use the existing validation rules.
 
@@ -186,11 +195,11 @@ The panel re-checks the current cut against persisted `spatialGuide` data:
 - anchor world X/Z still matches the item;
 - physical dimensions still match;
 - Scale Anchor observed frame fraction vs current camera projection;
-- optional Scale Anchor observed screen X/Y vs current target-center projection as diagnostic-only checks;
+- optional Scale Anchor screen X/Y observed vs projected target center as diagnostic-only checks;
 - persisted Horizon Y vs current camera focal/tilt;
 - number of existing camera keyframes.
 
-The panel reports `READY` when the blocking persisted Reference Space observations match the current cut and `REVIEW` when they have drifted. Screen X/Y diagnostics alone do not change that status.
+The panel reports `READY` when blocking Reference Space observations match the current cut and `REVIEW` when they have drifted. Screen X/Y diagnostics do not independently change that status.
 
 MCP `validate_reference_space` performs the same class of deterministic checks for external clients and automatically reuses persisted `scale-*` and `horizon` anchors when explicit observations are not supplied again.
 
@@ -278,6 +287,8 @@ Example shape:
 
 By default the tool performs `validate_reference_space` after the commit and returns that validation result without creating another revision.
 
+Screen orientation is not implicitly folded into this atomic plan. If exact `image_x/image_y` placement is desired, run the separate orientation solve/apply path after inspecting the plan result.
+
 ## Implemented MCP tools
 
 Reference Space is an orchestration layer, not an image-analysis engine. The desktop MCP currently exposes:
@@ -288,10 +299,25 @@ Reference Space is an orchestration layer, not an image-analysis engine. The des
 - `check_reference_anchor_consistency` — independently compare focal estimates from multiple known-depth anchors without auto-averaging;
 - `apply_reference_space_plan` — preferred atomic application of camera calibration + large masses, with optional multi-anchor preflight, in one revision;
 - `validate_reference_space` — validate persisted or caller-supplied Reference Space observations against the current cut;
-- `solve_reference_camera_orientation` — read-only inverse solve from explicit target screen X/Y to camera pan/tilt;
-- `apply_reference_camera_orientation` — explicit opt-in application of that pan/tilt with keyframe and Horizon guards.
+- `solve_reference_camera_orientation` — read-only exact screen X/Y orientation solve;
+- `apply_reference_camera_orientation` — explicit one-revision pan/tilt application with keyframe/Horizon guards.
 
 The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros`, and `apply_previs_plan` remain unchanged and continue to own general scene/motion authoring.
+
+## Packaged desktop verification
+
+The desktop package verifier exercises the real bundled `frisframe-mcp` executable on both macOS Apple Silicon and Windows x64. It uses isolated managed-project fixtures and verifies:
+
+- orientation tools are present in the packaged `tools/list` manifest;
+- read-only orientation solve has near-zero projection residual and does not change revision;
+- explicit orientation apply creates exactly one revision and re-solving leaves near-zero pan/tilt delta;
+- persisted Horizon conflict returns `reference-horizon-conflict` and does not change revision;
+- explicit `allow_horizon_mismatch=true` applies one revision and returns normal `REVIEW` / `horizon-mismatch` diagnostics;
+- camera-keyframed cuts return `camera-keyframes-present` and do not change revision;
+- read-only solve remains safe on keyed cuts;
+- explicit `allow_keyframed_base_camera=true` remains available as the deliberate override path.
+
+This protects against a source-only success where PyInstaller packaging, extension loading, or platform-specific stdio behavior would silently remove the safety contract.
 
 ## Compatibility rules
 
@@ -303,6 +329,6 @@ The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros
 - Do not reintroduce retired spatial-reference runtime symbols.
 - Keep Reference Space metadata optional so old projects continue to load.
 - Do not silently clamp or invent missing spatial measurements when a deterministic solve cannot be performed.
-- Do not synthesize screen X/Y observations that were not explicitly supplied; explicit normalized `0` is valid data.
 - Do not auto-average multiple anchor focal estimates into an applied camera value; inconsistent measurements must be surfaced for external review.
-- Keep screen-position X/Y residuals readiness-neutral; changing camera orientation from X/Y requires the explicit orientation MCP path.
+- Keep screen-position X/Y diagnostic-only by default; camera orientation changes require the explicit solve/apply path.
+- Any Horizon or camera-keyframe override must remain explicit and revision-safe.
