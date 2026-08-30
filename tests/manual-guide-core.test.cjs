@@ -17,7 +17,14 @@ assert.equal(manualSource.includes("partitionReferenceBatchByReadiness"), false)
 
 assert.equal(steps.length, 12);
 assert.equal(steps[0].title, "FrisFrame Test 시작하기");
+assert.equal(steps.at(-1).title, "두 가지 시작 방식");
 assert.match(steps.at(-1).body, /프리비즈 검토/);
+assert.match(steps.at(-1).body, /MCP 보조 작업/,
+  "first-run guide must surface the MCP-assisted entry path alongside manual editing");
+assert.match(steps.at(-1).body, /외부 비전 가능한 MCP 클라이언트/,
+  "tutorial must keep image interpretation outside FrisFrame");
+assert.match(steps.at(-1).tryText, /도움말 → MCP 실행 경로 복사/,
+  "desktop tutorial summary must point users to packaged MCP command discovery");
 
 for (const step of steps) {
   assert.ok(step.title && step.body && step.tryText, `incomplete tutorial step: ${step.title || "unknown"}`);
@@ -44,4 +51,4 @@ assert.match(joined, /Seedance Video Reference/,
 assert.equal(joined.includes("카메라 영상을 먼저 프리뷰"), false,
   "tutorial must not use the retired ambiguous camera-video export wording");
 
-console.log("manual-guide-core: current tutorial workflow and target contract passed");
+console.log("manual-guide-core: manual/MCP entry paths, current tutorial workflow, and target contract passed");
