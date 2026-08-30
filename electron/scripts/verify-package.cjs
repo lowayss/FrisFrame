@@ -17,6 +17,25 @@ function requireFiles(files) {
 function verifyMcpExecutable(executable) {
   const smokeDir = fs.mkdtempSync(path.join(os.tmpdir(), "frisframe-mcp-verify-"));
   const database = path.join(smokeDir, "frisframe.db");
+  const requests = [
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "FrisFramePackageVerify", version: packageJson.version },
+      },
+    },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "list_projects", arguments: {} },
+    },
+  ];
   try {
     const result = spawnSync(executable, [], {
       encoding: "utf8",
@@ -26,13 +45,57 @@ function verifyMcpExecutable(executable) {
         FRISFRAME_MCP_OWNER_LICENSE_HASH: "local",
         PYTHONUNBUFFERED: "1",
       },
-      input: "",
+      input: `${requests.map((request) => JSON.stringify(request)).join("\n")}\n`,
       timeout: 10000,
       windowsHide: true,
     });
     if (result.error) throw result.error;
     if (result.status !== 0) {
       throw new Error(`MCP 실행 확인 실패 (${result.status}): ${result.stderr || result.stdout || "출력 없음"}`);
+    }
+
+    const responses = String(result.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch (error) {
+          throw new Error(`MCP 패키지 응답이 JSON이 아닙니다: ${line}\n${error.message}`);
+        }
+      });
+    if (responses.length !== requests.length) {
+      throw new Error(`MCP 패키지 응답 수가 다릅니다: 요청 ${requests.length}, 응답 ${responses.length}`);
+    }
+
+    const initialized = responses.find((response) => response.id === 1);
+    if (initialized?.result?.serverInfo?.name !== "FrisFramePrevisAuthoring") {
+      throw new Error(`MCP initialize 응답이 올바르지 않습니다: ${JSON.stringify(initialized)}`);
+    }
+
+    const listed = responses.find((response) => response.id === 2);
+    const toolNames = new Set((listed?.result?.tools || []).map((tool) => tool.name));
+    for (const toolName of ["list_projects", "get_project", "apply_stage_layout", "apply_motion_timeline", "apply_motion_macros", "apply_previs_plan"]) {
+      if (!toolNames.has(toolName)) throw new Error(`패키지 MCP 도구가 없습니다: ${toolName}`);
+    }
+
+    const projectList = responses.find((response) => response.id === 3);
+    if (projectList?.result?.isError !== false) {
+      throw new Error(`패키지 MCP list_projects 호출 실패: ${JSON.stringify(projectList)}`);
+    }
+    const listText = projectList?.result?.content?.[0]?.text;
+    let parsedList;
+    try {
+      parsedList = JSON.parse(listText || "null");
+    } catch (error) {
+      throw new Error(`패키지 MCP list_projects 결과가 JSON이 아닙니다: ${listText}\n${error.message}`);
+    }
+    if (!Array.isArray(parsedList) || parsedList.length !== 0) {
+      throw new Error(`격리된 MCP DB의 초기 프로젝트 목록이 비어 있지 않습니다: ${listText}`);
+    }
+    if (!fs.existsSync(database)) {
+      throw new Error("패키지 MCP가 격리된 SQLite DB를 초기화하지 못했습니다.");
     }
   } finally {
     fs.rmSync(smokeDir, { recursive: true, force: true });
