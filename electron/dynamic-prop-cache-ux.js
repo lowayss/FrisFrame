@@ -10,17 +10,56 @@
     transformUpdates: 0,
     invalidations: 0,
     protectedWorldClears: 0,
+    eligibilityIndexBuilds: 0,
+    eligibilityIndexReuses: 0,
+    eligibilityMotionKeysIndexed: 0,
+    eligibilityGroupMembersIndexed: 0,
   };
 
   const propRigs = new Map();
   let mainRenderDepth = 0;
   let previewRenderDepth = 0;
+  let eligibilityIndex = null;
+
+  function buildDynamicEligibilityIndex(renderState = state) {
+    const motionSources = new Set();
+    const groupedItemIds = new Set();
+    const keyframes = renderState.motion?.keyframes || [];
+    const groups = renderState.groups || [];
+    let groupMemberCount = 0;
+
+    keyframes.forEach((keyframe) => {
+      if (keyframe?.source) motionSources.add(keyframe.source);
+    });
+    groups.forEach((group) => {
+      (group.members || []).forEach((member) => {
+        if (!member?.itemId) return;
+        groupedItemIds.add(member.itemId);
+        groupMemberCount += 1;
+      });
+    });
+
+    stats.eligibilityIndexBuilds += 1;
+    stats.eligibilityMotionKeysIndexed += keyframes.length;
+    stats.eligibilityGroupMembersIndexed += groupMemberCount;
+    return { renderState, motionSources, groupedItemIds };
+  }
+
+  function activeDynamicEligibilityIndex(renderState) {
+    if (!eligibilityIndex || eligibilityIndex.renderState !== renderState) return null;
+    stats.eligibilityIndexReuses += 1;
+    return eligibilityIndex;
+  }
 
   function sourceHasMotion(sourceId, renderState = state) {
+    const index = activeDynamicEligibilityIndex(renderState);
+    if (index) return index.motionSources.has(sourceId);
     return Boolean((renderState.motion?.keyframes || []).some((keyframe) => keyframe.source === sourceId));
   }
 
   function itemInManualGroup(itemId, renderState = state) {
+    const index = activeDynamicEligibilityIndex(renderState);
+    if (index) return index.groupedItemIds.has(itemId);
     return Boolean((renderState.groups || []).some((group) =>
       (group.members || []).some((member) => member.itemId === itemId),
     ));
@@ -107,6 +146,9 @@
   }
 
   window.FrisFrameDynamicPropCacheUxTest = {
+    buildDynamicEligibilityIndex,
+    sourceHasMotion,
+    itemInManualGroup,
     dynamicPropEligible,
     propRigSignature,
     stats,
@@ -115,10 +157,14 @@
   if (typeof renderThreeView === "function") {
     const originalRenderThreeView = renderThreeView;
     renderThreeView = function dynamicPropCachedRender(...args) {
+      const previousEligibilityIndex = eligibilityIndex;
+      const renderState = args[0] || state;
       mainRenderDepth += 1;
+      eligibilityIndex = buildDynamicEligibilityIndex(renderState);
       try {
         return originalRenderThreeView(...args);
       } finally {
+        eligibilityIndex = previousEligibilityIndex;
         mainRenderDepth = Math.max(0, mainRenderDepth - 1);
       }
     };
