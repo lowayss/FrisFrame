@@ -14,6 +14,12 @@ assert.match(entry, /Library" \/ "Application Support" \/ "FrisFrame"/,
   "packaged MCP must resolve the macOS Electron userData location");
 assert.match(entry, /"APPDATA", "LOCALAPPDATA"/,
   "packaged MCP must resolve Windows Electron userData locations");
+assert.match(entry, /def configure_stdio_utf8\(\)/,
+  "packaged MCP entrypoint must explicitly configure stdio for UTF-8 JSON-RPC");
+assert.match(entry, /reconfigure\(encoding="utf-8", errors="strict"\)/,
+  "packaged MCP stdio must not depend on the Windows system code page for Korean tool metadata or project content");
+assert.match(entry, /configure_stdio_utf8\(\)[\s\S]*from mcp_previs_server import main as run_mcp/,
+  "UTF-8 stdio configuration must run before the deterministic previs MCP server starts");
 assert.match(entry, /from mcp_previs_server import main as run_mcp/,
   "desktop entrypoint must run the deterministic previs MCP server rather than a separate implementation");
 assert.match(build, /name: "frisframe-mcp"/,
@@ -51,4 +57,4 @@ assert.match(verify, /PREVIS_DB_PATH: database/,
 assert.match(verify, /fs\.existsSync\(database\)/,
   "packaged MCP verification must confirm the SQLite database was really initialized");
 
-console.log("mcp-desktop-runtime-contract: packaged stdio MCP protocol and runtime contracts passed");
+console.log("mcp-desktop-runtime-contract: packaged UTF-8 stdio MCP protocol and runtime contracts passed");
