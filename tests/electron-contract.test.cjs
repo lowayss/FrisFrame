@@ -105,6 +105,17 @@ assert.match(clipboardBridge, /senderOrigin !== allowedOrigin/);
 assert.match(clipboardBridge, /PNG_SIGNATURE/);
 assert.match(preload, /copyImage:\s*\(pngBytes\)\s*=>\s*ipcRenderer\.invoke\("clipboard:write-image", pngBytes\)/);
 assert.match(preload, /saveFile:\s*\(payload\)\s*=>\s*ipcRenderer\.invoke\("file:save", payload\)/);
+assert.equal(preload.includes("focalPresets"), false, "desktop polish must not recreate removed focal preset buttons");
+assert.match(preload, /\.frisframe-annotation-toggle\s*\{[\s\S]*?right:\s*12px;[\s\S]*?bottom:\s*12px;[\s\S]*?display:\s*inline-grid;/,
+  "the pen toolbar trigger must stay visible and clear of the 3D view controls");
+assert.match(preload, /annotationToggle\.textContent\s*=\s*"✎ 펜"/,
+  "the pen toolbar trigger must identify itself in the canvas");
+assert.match(preload, /\.app > \.left-panel\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?grid-row:\s*2;/,
+  "collapsed desktop panels must keep the left panel in grid column 1");
+assert.match(preload, /\.app > \.workspace\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*2;/,
+  "collapsed desktop panels must keep the workspace in grid column 2");
+assert.match(preload, /\.app > \.right-panel\s*\{[\s\S]*?grid-column:\s*3;[\s\S]*?grid-row:\s*2;/,
+  "collapsed desktop panels must keep the right panel in grid column 3");
 assert.match(fileSaveBridge, /ipcMain\.handle\("file:save"/);
 assert.match(fileSaveBridge, /dialog\.showSaveDialog/);
 assert.match(fileSaveBridge, /senderOrigin\(event\) !== allowedOrigin/);

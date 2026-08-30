@@ -15,40 +15,14 @@
 
   const style = document.createElement("style");
   style.textContent = `
-    /* Workflow shell: storyboard -> setup -> motion -> export. */
-    .workspace-nav.frisframe-workflow-nav {
+    /* Workspace shell: storyboard -> blocking -> export. */
+    .workspace-nav.frisframe-workspace-nav {
       gap: 7px;
     }
-    .frisframe-phase-nav {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 3px;
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 9px;
-      background: rgba(255,255,255,.025);
-    }
-    .frisframe-phase-nav button {
-      min-height: 30px;
-      padding: 0 12px;
-      border: 0;
-      border-radius: 7px;
-      color: #8d949d;
-      background: transparent;
-      font-size: 11px;
-      font-weight: 850;
-      cursor: pointer;
-    }
-    .frisframe-phase-nav button:hover {
-      color: #d9dde2;
-      background: rgba(255,255,255,.045);
-    }
-    .frisframe-phase-nav button.is-active {
-      color: #fff;
-      background: rgba(255,107,85,.18);
-      box-shadow: inset 0 0 0 1px rgba(255,107,85,.28);
-    }
     #storyboardBtn.frisframe-storyboard-entry span {
+      font-weight: 850;
+    }
+    #blockingBtn.frisframe-blocking-entry span {
       font-weight: 850;
     }
     .frisframe-view-dock {
@@ -77,16 +51,6 @@
     .frisframe-view-dock #viewButtons {
       display: inline-flex !important;
       margin: 0 !important;
-    }
-    html[data-frisframe-workflow-phase="setup"] .timeline.panel {
-      display: none !important;
-    }
-    html[data-frisframe-workflow-phase="setup"] .workspace {
-      min-height: 0;
-    }
-    html[data-frisframe-workflow-phase="motion"] .timeline.panel {
-      border-color: rgba(255,107,85,.18);
-      box-shadow: 0 -1px 0 rgba(255,107,85,.08);
     }
     .frisframe-primary-export > summary {
       border-color: rgba(255,107,85,.34) !important;
@@ -274,7 +238,6 @@
     .frisframe-pose-disclosure[hidden] { display: none !important; }
 
     @media (max-width: 920px) {
-      .frisframe-phase-nav button { padding: 0 8px; }
       .frisframe-view-dock::before { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -297,9 +260,7 @@
   const workspaceNav = document.querySelector(".workspace-nav");
   const viewButtons = document.getElementById("viewButtons");
   const canvasWrap = document.querySelector(".canvas-wrap");
-
-  let workflowPhase = safeStorage.get("frisframe.ui.workflowPhase") === "motion" ? "motion" : "setup";
-  const phaseButtons = new Map();
+  let blockingBtn = null;
 
   const ensureBlockingWorkspace = () => {
     if (!storyboardScreen || storyboardScreen.hidden) return;
@@ -307,46 +268,31 @@
     activeView?.click();
   };
 
-  const syncWorkflowState = () => {
+  const syncWorkspaceState = () => {
     const storyboardActive = Boolean(storyboardScreen && !storyboardScreen.hidden);
-    document.documentElement.dataset.frisframeWorkflowPhase = workflowPhase;
     document.documentElement.classList.toggle("frisframe-storyboard-active", storyboardActive);
-    phaseButtons.forEach((button, phase) => {
-      button.classList.toggle("is-active", !storyboardActive && phase === workflowPhase);
-      button.setAttribute("aria-pressed", String(!storyboardActive && phase === workflowPhase));
-    });
+    blockingBtn?.classList.toggle("is-active", !storyboardActive);
+    blockingBtn?.setAttribute("aria-current", storyboardActive ? "false" : "page");
   };
 
-  const setWorkflowPhase = (phase, persist = true) => {
-    workflowPhase = phase === "motion" ? "motion" : "setup";
-    if (persist) safeStorage.set("frisframe.ui.workflowPhase", workflowPhase);
-    ensureBlockingWorkspace();
-    syncWorkflowState();
-  };
-
-  if (workspaceNav && !workspaceNav.querySelector(".frisframe-phase-nav")) {
-    workspaceNav.classList.add("frisframe-workflow-nav");
+  if (workspaceNav && !workspaceNav.querySelector("#blockingBtn")) {
+    workspaceNav.classList.add("frisframe-workspace-nav");
     storyboardBtn?.classList.add("frisframe-storyboard-entry");
     const storyboardLabel = document.getElementById("storyboardBtnLabel");
     if (storyboardLabel) storyboardLabel.textContent = "스토리";
-
-    const phaseNav = document.createElement("div");
-    phaseNav.className = "frisframe-phase-nav";
-    phaseNav.setAttribute("aria-label", "프리비즈 작업 단계");
-
-    [["setup", "구성"], ["motion", "움직임"]].forEach(([phase, label]) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.workflowPhase = phase;
-      button.textContent = label;
-      button.setAttribute("aria-pressed", "false");
-      button.addEventListener("click", () => setWorkflowPhase(phase));
-      phaseButtons.set(phase, button);
-      phaseNav.append(button);
+    blockingBtn = document.createElement("button");
+    blockingBtn.id = "blockingBtn";
+    blockingBtn.type = "button";
+    blockingBtn.className = "workspace-tab frisframe-blocking-entry";
+    blockingBtn.title = "블로킹 작업";
+    blockingBtn.innerHTML = "<span>블로킹</span>";
+    blockingBtn.addEventListener("click", () => {
+      ensureBlockingWorkspace();
+      requestAnimationFrame(syncWorkspaceState);
     });
-
     const divider = workspaceNav.querySelector(".workspace-divider");
-    divider?.replaceWith(phaseNav);
+    if (divider) divider.replaceWith(blockingBtn);
+    else workspaceNav.prepend(blockingBtn);
   }
 
   if (canvasWrap && viewButtons && !canvasWrap.querySelector(".frisframe-view-dock")) {
@@ -357,14 +303,14 @@
     canvasWrap.prepend(viewDock);
   }
 
-  storyboardBtn?.addEventListener("click", () => requestAnimationFrame(syncWorkflowState));
+  storyboardBtn?.addEventListener("click", () => requestAnimationFrame(syncWorkspaceState));
   viewButtons?.querySelectorAll("button").forEach((button) => {
-    button.addEventListener("click", () => requestAnimationFrame(syncWorkflowState));
+    button.addEventListener("click", () => requestAnimationFrame(syncWorkspaceState));
   });
   if (storyboardScreen) {
-    new MutationObserver(syncWorkflowState).observe(storyboardScreen, { attributes: true, attributeFilter: ["hidden"] });
+    new MutationObserver(syncWorkspaceState).observe(storyboardScreen, { attributes: true, attributeFilter: ["hidden"] });
   }
-  syncWorkflowState();
+  syncWorkspaceState();
 
   const exportMenu = document.getElementById("exportMenu");
   const exportPopover = exportMenu?.querySelector(".toolbar-menu-popover");

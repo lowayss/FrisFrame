@@ -27,34 +27,6 @@ function installMcpFirstWorkflowUi() {
 
     const style = document.createElement("style");
     style.textContent = `
-      #focalPresets.frisframe-focal-compact {
-        display: flex !important;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 5px !important;
-        margin: 2px 0 8px 0 !important;
-      }
-      #focalPresets.frisframe-focal-compact button {
-        min-width: 0 !important;
-        width: auto !important;
-        height: 27px !important;
-        min-height: 27px !important;
-        padding: 0 8px !important;
-        border-radius: 7px !important;
-        font-size: 11px !important;
-        line-height: 25px !important;
-        flex: 0 0 auto !important;
-      }
-      #focalPresets.frisframe-focal-compact::before {
-        content: "화각";
-        display: inline-flex;
-        align-items: center;
-        min-width: 32px;
-        color: var(--muted, #9aa0a8);
-        font-size: 10px;
-        font-weight: 800;
-      }
-
       .compact-details > summary::after {
         content: "›" !important;
         display: inline-grid;
@@ -90,14 +62,26 @@ function installMcpFirstWorkflowUi() {
       }
 
       .app.frisframe-left-collapsed {
-        grid-template-columns: 0 minmax(620px, 1fr) 272px;
+        grid-template-columns: 0 minmax(0, 1fr) 272px;
       }
       .app.frisframe-right-collapsed {
-        grid-template-columns: 208px minmax(620px, 1fr) 0;
+        grid-template-columns: 208px minmax(0, 1fr) 0;
       }
       .app.frisframe-left-collapsed.frisframe-right-collapsed,
       .app.frisframe-focus-mode {
-        grid-template-columns: 0 minmax(620px, 1fr) 0;
+        grid-template-columns: 0 minmax(0, 1fr) 0;
+      }
+      .app > .left-panel {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .app > .workspace {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .app > .right-panel {
+        grid-column: 3;
+        grid-row: 2;
       }
       .app.frisframe-left-collapsed > .left-panel,
       .app.frisframe-focus-mode > .left-panel,
@@ -162,11 +146,11 @@ function installMcpFirstWorkflowUi() {
       #annotationToolbar[hidden] { display: none !important; }
       .frisframe-annotation-toggle {
         position: absolute;
-        left: 12px;
-        top: 12px;
+        right: 12px;
+        bottom: 12px;
         z-index: 36;
         min-width: 0;
-        width: 32px;
+        width: 46px;
         height: 32px;
         padding: 0;
         display: inline-grid;
@@ -176,7 +160,8 @@ function installMcpFirstWorkflowUi() {
         background: rgba(24, 29, 34, .88);
         color: #d8dee7;
         box-shadow: 0 5px 14px rgba(0,0,0,.18);
-        font-size: 16px;
+        font-size: 13px;
+        font-weight: 700;
         line-height: 1;
         cursor: pointer;
         opacity: .78;
@@ -327,22 +312,6 @@ function installMcpFirstWorkflowUi() {
         window.dispatchEvent(new Event("resize"));
       });
     };
-
-    const focalInput = document.getElementById("focalValue");
-    const focalRow = focalInput?.closest("label.range-row");
-    const focalPresets = document.getElementById("focalPresets");
-    if (focalRow && focalPresets && focalRow.parentElement) {
-      focalRow.parentElement.insertBefore(focalPresets, focalRow.nextSibling);
-      focalPresets.classList.add("frisframe-focal-compact");
-      const label = focalRow.querySelector(":scope > span:first-child");
-      if (label) label.textContent = "렌즈";
-      focalPresets.querySelectorAll("button[data-focal]").forEach((button) => {
-        const focal = button.getAttribute("data-focal");
-        button.textContent = focal;
-        button.title = `${focal}mm`;
-        button.setAttribute("aria-label", `${focal}mm 렌즈`);
-      });
-    }
 
     const relabel = (id, label) => {
       const button = document.getElementById(id);
@@ -540,7 +509,7 @@ function installMcpFirstWorkflowUi() {
       const annotationToggle = document.createElement("button");
       annotationToggle.type = "button";
       annotationToggle.className = "frisframe-annotation-toggle";
-      annotationToggle.textContent = "✎";
+      annotationToggle.textContent = "✎ 펜";
       annotationToggle.title = "주석 도구 열기 (Shift+A)";
       annotationToggle.setAttribute("aria-label", "주석 도구 열기");
       annotationToggle.setAttribute("aria-controls", "annotationToolbar");

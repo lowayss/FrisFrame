@@ -390,7 +390,6 @@
         renderCameraRigControls,
         renderCameraLockControls,
         renderExportRangeControls,
-        renderSpatialGuideControls,
         renderObjectLists,
         renderTrackingTargetSelect,
         renderProperties,
@@ -402,7 +401,6 @@
       renderCameraRigControls = noop;
       renderCameraLockControls = noop;
       renderExportRangeControls = noop;
-      renderSpatialGuideControls = noop;
       renderObjectLists = noop;
       renderTrackingTargetSelect = noop;
       renderSourceSelect = noop;
@@ -416,7 +414,6 @@
         renderCameraRigControls = originals.renderCameraRigControls;
         renderCameraLockControls = originals.renderCameraLockControls;
         renderExportRangeControls = originals.renderExportRangeControls;
-        renderSpatialGuideControls = originals.renderSpatialGuideControls;
         renderObjectLists = originals.renderObjectLists;
         renderTrackingTargetSelect = originals.renderTrackingTargetSelect;
         renderProperties = originals.renderProperties;

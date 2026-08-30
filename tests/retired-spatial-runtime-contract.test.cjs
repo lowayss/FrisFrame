@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const performanceUx = fs.readFileSync(path.join(root, "electron", "performance-ux.js"), "utf8");
 
 const retiredSpatialSymbols = [
   "renderSpatialGuideControls",
@@ -19,6 +20,7 @@ const retiredSpatialSymbols = [
 for (const symbol of retiredSpatialSymbols) {
   assert.equal(app.includes(symbol), false, `${symbol} must stay absent from app.js`);
   assert.equal(html.includes(symbol), false, `${symbol} must stay absent from index.html`);
+  assert.equal(performanceUx.includes(symbol), false, `${symbol} must stay absent from electron/performance-ux.js`);
 }
 
 console.log("retired-spatial-runtime-contract: removed spatial-reference runtime symbols remain absent");

@@ -18,9 +18,7 @@ const REQUIRED_IDS = [
   "batchReferenceVideoBtn",
 ];
 const REQUIRED_WORKFLOW_SELECTORS = [
-  ".frisframe-phase-nav",
-  '[data-workflow-phase="setup"]',
-  '[data-workflow-phase="motion"]',
+  "#blockingBtn",
   ".frisframe-view-dock #viewButtons",
   "#exportMenu.frisframe-primary-export",
   ".frisframe-export-advanced",
@@ -157,7 +155,7 @@ async function readRendererState(socket) {
     const workflowSelectors = ${JSON.stringify(REQUIRED_WORKFLOW_SELECTORS)};
     const retired = ${JSON.stringify(RETIRED_IDS)};
     const debug = document.querySelector("#debugConsole");
-    const phaseLabels = [...document.querySelectorAll(".frisframe-phase-nav button")].map((button) => String(button.textContent || "").trim());
+    const blockingLabel = String(document.querySelector("#blockingBtn span")?.textContent || "").trim();
     const exportLabel = String(document.querySelector("#exportMenu > summary span")?.textContent || "").trim();
     const videoLabel = String(document.querySelector("#videoBtn span")?.textContent || "").trim();
     return {
@@ -167,7 +165,7 @@ async function readRendererState(socket) {
       requiredMissing: required.filter((id) => !document.getElementById(id)),
       workflowMissing: workflowSelectors.filter((selector) => !document.querySelector(selector)),
       retiredPresent: retired.filter((id) => document.getElementById(id)),
-      phaseLabels,
+      blockingLabel,
       exportLabel,
       videoLabel,
       referenceWorkflowReady: Boolean(window.FrisFrameReferenceWorkflowCore),
@@ -200,7 +198,7 @@ async function waitForHealthyRenderer(socket, child, timeoutMs = 30000) {
           Array.isArray(state.requiredMissing) && state.requiredMissing.length === 0 &&
           Array.isArray(state.workflowMissing) && state.workflowMissing.length === 0 &&
           Array.isArray(state.retiredPresent) && state.retiredPresent.length === 0 &&
-          Array.isArray(state.phaseLabels) && state.phaseLabels.join("|") === "구성|움직임" &&
+          state.blockingLabel === "블로킹" &&
           state.exportLabel === "프리비즈 출력" &&
           state.videoLabel === "프리비즈 MP4 만들기"
         ) return state;
@@ -263,7 +261,7 @@ async function main() {
     const code = await waitForExit(child);
     if (code !== 0) throw new Error(`FrisFrame가 GUI smoke 종료 중 오류 코드를 반환했습니다: ${code}`);
     console.log(`FrisFrame 패키지 GUI smoke 통과: ${state.url}`);
-    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 워크플로우 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
+    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
   } catch (error) {
     try { socket?.close(); } catch { /* ignored */ }
     if (child.exitCode === null) child.kill();

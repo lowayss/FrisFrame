@@ -32,6 +32,8 @@ assert.ok(html.includes("./vendor/three.min.js"));
 assert.ok(html.includes("./vendor/lucide.min.js"));
 assert.equal(html.includes("cdn.jsdelivr.net"), false);
 assert.equal(html.includes("unpkg.com"), false);
+assert.equal(ids.has("focalPresets"), false, "camera focal preset buttons must stay removed");
+assert.equal(app.includes("focalPresets"), false, "camera focal preset behavior must stay removed");
 
 assert.ok(html.includes("class=\"manual-example\""), "manual needs a visual walkthrough example");
 assert.ok(html.includes("class=\"manual-storage-map\""), "manual needs a project storage comparison");

@@ -5,16 +5,20 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "electron", "workspace-ux.js"), "utf8");
 
-assert.ok(source.includes('[["setup", "구성"], ["motion", "움직임"]]'),
-  "the desktop shell must expose setup and motion as the two previs work phases");
+assert.equal(source.includes("frisframe-phase-nav"), false,
+  "the desktop shell must not split blocking into separate setup and motion tabs");
+assert.equal(source.includes('data-frisframe-workflow-phase'), false,
+  "blocking must not hide or restyle the timeline based on a separate workflow phase");
+assert.ok(source.includes('blockingBtn.id = "blockingBtn"'),
+  "the desktop shell must expose one unified blocking work tab");
+assert.ok(source.includes('blockingBtn.innerHTML = "<span>블로킹</span>"'),
+  "the unified blocking tab must be visibly labeled");
 assert.ok(source.includes('storyboardLabel.textContent = "스토리"'),
   "storyboard must remain a distinct planning entry instead of being mixed with stage views");
 assert.ok(source.includes('viewDock.append(viewButtons)'),
   "2D/3D must live with the stage instead of competing with workflow phases in the top navigation");
-assert.ok(source.includes('html[data-frisframe-workflow-phase="setup"] .timeline.panel'),
-  "setup phase must be able to remove the timeline from the primary workspace");
-assert.ok(source.includes('workflowPhase = safeStorage.get("frisframe.ui.workflowPhase")'),
-  "the chosen workflow phase must persist as a UI preference");
+assert.ok(source.includes('syncWorkspaceState'),
+  "the unified blocking tab must stay synchronized with storyboard navigation");
 
 assert.ok(source.includes('exportSummaryLabel.textContent = "프리비즈 출력"'),
   "export must read as one primary previs action");

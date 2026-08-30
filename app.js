@@ -7484,10 +7484,6 @@ function syncUi(updateInputs = true) {
   $("#cameraTiltSlider").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
   $("#cameraTiltValue").disabled = Boolean(state.camera.trackingTargetId) || cameraFieldLocked("orientation");
   $("#trackingTargetSelect").disabled = cameraFieldLocked("orientation");
-  $$("#focalPresets button").forEach((button) => {
-    button.classList.toggle("is-active", Number(button.dataset.focal) === Number(displayCamera.focal));
-    button.disabled = cameraFieldLocked("lens");
-  });
   $("#durationInput").value = state.motion.duration;
   $("#durationInput").disabled = hasLockedTimelineSources();
   $("#fpsInput").value = state.motion.fps;
@@ -10499,21 +10495,6 @@ $("#cameraTiltValue").addEventListener("input", (event) => {
   if (viewMode === "3d") renderThreeView(state, true);
 });
 $("#cameraTiltValue").addEventListener("change", finalizeLiveProjectInputEdit);
-
-$("#focalPresets").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-focal]");
-  if (!button) return;
-  if (cameraFieldLocked("lens")) {
-    notifyEditLocked("카메라 렌즈");
-    return;
-  }
-  materializeEvaluatedViewForEditing("camera");
-  state.camera.focal = Number(button.dataset.focal);
-  selected = { kind: "camera" };
-  setActiveSource("camera");
-  selectKeyForSource("camera");
-  commit();
-});
 
 $("#actorForm").addEventListener("submit", (event) => {
   event.preventDefault();
