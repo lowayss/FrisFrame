@@ -47,6 +47,21 @@ function sample(time, overrides = {}) {
   assert.ok(Math.abs(core.shortestAngleDelta(0.5, output[2].panDeg)) < 3);
 }
 
+// Mouse samples are resampled to a stable clock so playback does not change
+// velocity merely because pointer events arrived at uneven intervals.
+{
+  const input = [
+    sample(0, { x: 0.2, panDeg: 359 }),
+    sample(0.13, { x: 0.4, panDeg: 1 }),
+    sample(0.79, { x: 0.8, panDeg: 5 }),
+  ];
+  const output = core.resampleSamples(input, 0.2);
+  assert.deepEqual(output.map((entry) => Number(entry.time.toFixed(2))), [0, 0.2, 0.4, 0.6, 0.79]);
+  assert.equal(output[0].x, input[0].x);
+  assert.equal(output.at(-1).x, input.at(-1).x);
+  assert.ok(Math.abs(core.shortestAngleDelta(359, output[1].panDeg)) < 3, "resampling must use the shortest angle path");
+}
+
 // Uniform, straight, constant-speed motion can collapse to its endpoints.
 {
   const input = Array.from({ length: 11 }, (_, index) => sample(index / 10, { x: 0.2 + index * 0.04 }));

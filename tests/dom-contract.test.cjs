@@ -146,6 +146,9 @@ assert.match(app, /\.sort\(\(a, b\) => a\.distance - b\.distance \|\| Number\(b\
 assert.doesNotMatch(app, /autoSaveDraggedPose/, "scene dragging must never auto-update timeline keyframes");
 assert.match(motion, /const progress = transition === "smooth" \|\| transition === "linear" \? rawProgress : easedProgress;/, "motion-core source planning must not brake continuous motion at ordinary keyframe boundaries");
 assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"), "app source evaluation must delegate keyframe timing to motion-core");
+assert.match(app, /function cameraOperatorHermiteValue\(/, "camera operator playback must have a continuous pose interpolator");
+assert.match(app, /function interpolatePoseFor\([\s\S]*evaluationOptions = null\)/, "camera pose interpolation must receive operator continuity options");
+assert.match(app, /plan\.end\?\.operatorContinuity === true/, "only recorded camera operator keys may enable continuous pose interpolation");
 assert.equal(app.includes("proceduralLocomotion"), false, "preview playback must not synthesize walking or running");
 assert.ok(app.includes("keyframe.posePreset"), "MCP pose presets must remain attached to authored keyframes");
 assert.ok(app.includes("bodyPose: presetBodyPose(posePreset)"), "MCP pose presets must resolve through the existing pose core");

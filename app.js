@@ -778,6 +778,107 @@ function normalizePanDeg(value) {
   return ((Number(value || 0) % 360) + 360) % 360;
 }
 
+function shortestPanDelta(from, to) {
+  let delta = normalizePanDeg(to) - normalizePanDeg(from);
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function cameraOperatorMonotoneTangent(leftSlope, rightSlope, leftSpan, rightSpan) {
+  if (!Number.isFinite(leftSlope) || !Number.isFinite(rightSlope)) return 0;
+  if (Math.abs(leftSlope) < 0.000001 || Math.abs(rightSlope) < 0.000001 || leftSlope * rightSlope <= 0) return 0;
+  const leftWeight = 2 * rightSpan + leftSpan;
+  const rightWeight = rightSpan + 2 * leftSpan;
+  return (leftWeight + rightWeight) / (leftWeight / leftSlope + rightWeight / rightSlope);
+}
+
+function cameraOperatorHermiteValue(previous, start, end, next, progress, previousTime, startTime, endTime, nextTime) {
+  const t = clamp(Number(progress) || 0, 0, 1);
+  const span = Math.max(0.000001, Number(endTime) - Number(startTime));
+  const p0 = Number.isFinite(Number(previous)) ? Number(previous) : Number(start) || 0;
+  const p1 = Number.isFinite(Number(start)) ? Number(start) : 0;
+  const p2 = Number.isFinite(Number(end)) ? Number(end) : p1;
+  const p3 = Number.isFinite(Number(next)) ? Number(next) : p2;
+  const segmentSpan = span;
+  const previousSegmentSpan = Math.max(0.000001, Number(startTime) - Number(previousTime));
+  const nextSegmentSpan = Math.max(0.000001, Number(nextTime) - Number(endTime));
+  const incomingSlope = (p1 - p0) / previousSegmentSpan;
+  const segmentSlope = (p2 - p1) / segmentSpan;
+  const outgoingSlope = (p3 - p2) / nextSegmentSpan;
+  // PCHIP-style tangents keep each scalar camera channel monotone. A raw
+  // Catmull-Rom tangent can overshoot at a nearly stationary key and then
+  // clamp there, which is exactly the visible "툭" at a recorded join.
+  const m1 = cameraOperatorMonotoneTangent(
+    incomingSlope,
+    segmentSlope,
+    previousSegmentSpan,
+    segmentSpan,
+  ) * span;
+  const m2 = cameraOperatorMonotoneTangent(
+    segmentSlope,
+    outgoingSlope,
+    segmentSpan,
+    nextSegmentSpan,
+  ) * span;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  const value = h00 * p1 + h10 * m1 + h01 * p2 + h11 * m2;
+  // Mouse-recorded paths should not overshoot an authored camera position.
+  return clamp(value, Math.min(p1, p2), Math.max(p1, p2));
+}
+
+function interpolateCameraOperatorPose(from, to, progress, continuity) {
+  if (!continuity) return null;
+  const previous = continuity.previous || from;
+  const next = continuity.next || to;
+  const previousTime = Number.isFinite(Number(continuity.previousTime))
+    ? Number(continuity.previousTime)
+    : Number(continuity.startTime);
+  const startTime = Number(continuity.startTime);
+  const endTime = Number(continuity.endTime);
+  const nextTime = Number.isFinite(Number(continuity.nextTime))
+    ? Number(continuity.nextTime)
+    : endTime;
+  const value = (field) => cameraOperatorHermiteValue(
+    previous[field],
+    from[field],
+    to[field],
+    next[field],
+    progress,
+    previousTime,
+    startTime,
+    endTime,
+    nextTime,
+  );
+  const fromPan = normalizePanDeg(from.panDeg);
+  const toPan = fromPan + shortestPanDelta(fromPan, to.panDeg);
+  const previousPan = fromPan + shortestPanDelta(fromPan, previous.panDeg);
+  const nextPan = toPan + shortestPanDelta(toPan, next.panDeg);
+  return {
+    x: value("x"),
+    y: value("y"),
+    height: value("height"),
+    panDeg: normalizePanDeg(cameraOperatorHermiteValue(
+      previousPan,
+      fromPan,
+      toPan,
+      nextPan,
+      progress,
+      previousTime,
+      startTime,
+      endTime,
+      nextTime,
+    )),
+    tiltDeg: value("tiltDeg"),
+    focal: value("focal"),
+  };
+}
+
 function cameraOrientationFromLegacy(camera, renderState = state) {
   const size = stageWorldSize(renderState);
   const dx = (Number(camera?.aimX ?? camera?.x ?? 0.5) - Number(camera?.x ?? 0.5)) * size.width;
@@ -12085,7 +12186,24 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
     ? plan.referenceProgress
     : plan.progress;
   const evaluationOptions = sourceId === "camera"
-    ? { referenceProgress: plan.referenceProgress }
+    ? {
+        referenceProgress: plan.referenceProgress,
+        operatorContinuity: plan.end?.operatorContinuity === true
+          ? (() => {
+              const startIndex = keyframes.findIndex((keyframe) => keyframe.id === plan.start?.id);
+              const previous = startIndex > 0 ? keyframes[startIndex - 1] : plan.start;
+              const next = startIndex >= 0 ? keyframes[startIndex + 2] || plan.end : plan.end;
+              return {
+                previous: previous?.pose || plan.start.pose,
+                next: next?.pose || plan.end.pose,
+                previousTime: previous?.time ?? plan.start.time,
+                startTime: plan.start.time,
+                endTime: plan.end.time,
+                nextTime: next?.time ?? plan.end.time,
+              };
+            })()
+          : null,
+      }
     : null;
   return interpolatePoseFor(
     renderState,
@@ -12109,7 +12227,7 @@ function mergePoseWithFallbackFor(renderState, sourceId, pose, fallbackPose) {
   );
 }
 
-function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallbackPose, endKeyframe = null) {
+function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallbackPose, endKeyframe = null, evaluationOptions = null) {
   const from = mergePoseWithFallbackFor(renderState, sourceId, startPose, fallbackPose);
   const to = mergePoseWithFallbackFor(renderState, sourceId, endPose, fallbackPose);
   const segment = sanitizeMotionSegment(endKeyframe?.segment, sourceId);
@@ -12133,6 +12251,20 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
     transformed,
   });
   if (sourceId === "camera") {
+    const operatorPose = interpolateCameraOperatorPose(
+      from,
+      to,
+      t,
+      evaluationOptions?.operatorContinuity,
+    );
+    if (operatorPose) {
+      result.x = operatorPose.x;
+      result.y = operatorPose.y;
+      result.height = operatorPose.height;
+      result.panDeg = operatorPose.panDeg;
+      result.tiltDeg = operatorPose.tiltDeg;
+      result.focal = operatorPose.focal;
+    }
     result.trackingTargetId = sanitizeTrackingTargetId(result.trackingTargetId, renderState);
     return syncCameraDerivedAim(result, renderState);
   }

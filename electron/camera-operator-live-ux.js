@@ -42,6 +42,7 @@
   let lastSampleTime = -Infinity;
   let dirty = true;
   let mouseFallbackActive = false;
+  let recordInput = "preview";
 
   const pointerToken = (event) => event?.pointerId == null ? "mouse" : event.pointerId;
   const isActivePointer = (event) => (
@@ -168,6 +169,7 @@
     animationFrame = 0;
     releasePointerControl();
     mouseFallbackActive = false;
+    recordInput = "preview";
     samples = [];
     startSnapshot = null;
     lastSampleTime = -Infinity;
@@ -257,11 +259,12 @@
     animationFrame = requestAnimationFrame(tickRecording);
   };
 
-  const beginRecording = (event) => {
+  const beginRecording = (event, input = "preview") => {
     if (mode !== "armed" || event.button !== 0) return;
     event.preventDefault();
-    event.stopPropagation();
+    if (input !== "world") event.stopPropagation();
     mode = "recording";
+    recordInput = input;
     recordStartedAt = performance.now();
     samples = [];
     lastSampleTime = -Infinity;
@@ -270,7 +273,13 @@
     sampleCurrentPose(startTime);
     updateUi();
     animationFrame = requestAnimationFrame(tickRecording);
-    beginPointerControl(event);
+    if (input === "world") {
+      pointerId = pointerToken(event);
+      lastClientX = event.clientX;
+      lastClientY = event.clientY;
+    } else {
+      beginPointerControl(event);
+    }
   };
 
   const beginPointerControl = (event) => {
@@ -295,7 +304,7 @@
   };
 
   const applyOperatorDrag = (event) => {
-    if (mode !== "recording" || !isActivePointer(event)) return;
+    if (recordInput !== "preview" || mode !== "recording" || !isActivePointer(event)) return;
     event.preventDefault();
     event.stopPropagation();
     const dx = event.clientX - lastClientX;
@@ -331,6 +340,17 @@
     dirty = true;
   };
 
+  const beginWorldCameraRecording = (event) => {
+    if (mode !== "armed" || event.button !== 0) return;
+    const editor = typeof pickThreeEditor === "function" ? pickThreeEditor(event) : null;
+    if (!editor || editor.kind !== "camera") return;
+    beginRecording(event, "world");
+  };
+  const releaseWorldCameraRecording = (event) => {
+    if (recordInput !== "world" || !isActivePointer(event)) return;
+    releasePointerControl(event);
+  };
+
   // Capture at the frame parent too. On some macOS/Electron input paths the
   // native mouse sequence can miss the transparent preview overlay entirely.
   const beginCameraFramePointerControl = (event) => {
@@ -362,7 +382,7 @@
   };
 
   const applyOperatorWheel = (event) => {
-    if (mode !== "recording") return;
+    if (recordInput !== "preview" || mode !== "recording") return;
     event.preventDefault();
     event.stopPropagation();
     const precision = event.ctrlKey || event.metaKey ? 0.35 : 1;
@@ -402,13 +422,20 @@
     }
 
     const cleanupStrength = clamp(Number(cleanup.value) / 100, 0, 0.4);
-    const smoothed = core.smoothSamples(samples, cleanupStrength);
-    const reduced = core.simplifySamples(smoothed, {
+    // Mouse-driven takes need a small amount of stabilization even when the
+    // visible jitter control is left at zero. Without this baseline, the first
+    // and last sparse pointer samples can create a velocity pop between keys.
+    const stabilizationStrength = Math.max(cleanupStrength, 0.16);
+    const smoothed = core.smoothSamples(samples, stabilizationStrength);
+    const resampled = typeof core.resampleSamples === "function"
+      ? core.resampleSamples(smoothed, 1 / 15)
+      : smoothed;
+    const reduced = core.simplifySamples(resampled, {
       positionTolerance: 0.00135 + cleanupStrength * 0.0025,
       heightTolerance: 0.014 + cleanupStrength * 0.026,
       angleTolerance: 0.13 + cleanupStrength * 0.24,
       focalTolerance: 0.25,
-      maxGap: 0.48 + cleanupStrength * 0.35,
+      maxGap: 0.28 + cleanupStrength * 0.22,
     });
     const rawCount = samples.length;
     const previousCameraKeyCount = state.motion.keyframes.filter((keyframe) => (
@@ -426,6 +453,7 @@
         : null;
       if (!keyframe) continue;
       keyframe.transition = "linear";
+      keyframe.operatorContinuity = true;
       state.motion.keyframes.push(keyframe);
       addedKeys.push(keyframe);
     }
@@ -456,6 +484,10 @@
   cameraFrame.addEventListener("mousedown", beginMouseFallback, true);
   window.addEventListener("mousemove", applyMouseFallback, true);
   window.addEventListener("mouseup", releaseMouseFallback, true);
+  const threeCanvas = document.getElementById("threeCanvas");
+  threeCanvas?.addEventListener("pointerdown", beginWorldCameraRecording, true);
+  threeCanvas?.addEventListener("pointerup", releaseWorldCameraRecording, true);
+  threeCanvas?.addEventListener("pointercancel", releaseWorldCameraRecording, true);
   surface.addEventListener("pointerdown", beginPointerControl);
   surface.addEventListener("pointermove", applyOperatorDrag);
   surface.addEventListener("pointerup", (event) => {

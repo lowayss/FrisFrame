@@ -134,9 +134,70 @@
     return [...keep].sort((left, right) => left - right).map((index) => ({ ...samples[index] }));
   }
 
+  function resampleCameraOperatorSamples(samples, step = 1 / 15) {
+    if (!Array.isArray(samples) || samples.length <= 2) {
+      return Array.isArray(samples) ? samples.map((sample) => ({ ...sample })) : [];
+    }
+    const ordered = samples
+      .filter((sample) => Number.isFinite(Number(sample?.time)))
+      .map((sample) => ({ ...sample, time: Number(sample.time) }))
+      .sort((left, right) => left.time - right.time);
+    if (ordered.length <= 2) return ordered.map((sample) => ({ ...sample }));
+
+    const unique = [];
+    ordered.forEach((sample) => {
+      const previous = unique.at(-1);
+      if (previous && sample.time <= previous.time + 0.000001) unique[unique.length - 1] = sample;
+      else unique.push(sample);
+    });
+    if (unique.length <= 2) return unique.map((sample) => ({ ...sample }));
+
+    const interval = Math.max(1 / 60, Number(step) || 1 / 15);
+    const first = unique[0];
+    const last = unique.at(-1);
+    const output = [{ ...first }];
+    let segmentIndex = 0;
+    const numberOr = (value, fallback = 0) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const interpolateAt = (time) => {
+      while (segmentIndex < unique.length - 2 && time > unique[segmentIndex + 1].time + 0.000001) {
+        segmentIndex += 1;
+      }
+      const from = unique[segmentIndex];
+      const to = unique[Math.min(unique.length - 1, segmentIndex + 1)];
+      const span = Math.max(0.000001, to.time - from.time);
+      const amount = operatorClamp((time - from.time) / span, 0, 1);
+      const lerp = (field, fallback = 0) => {
+        const start = numberOr(from[field], fallback);
+        return start + (numberOr(to[field], start) - start) * amount;
+      };
+      return {
+        time,
+        x: lerp("x"),
+        y: lerp("y"),
+        height: lerp("height"),
+        panDeg: normalizeOperatorAngle(
+          numberOr(from.panDeg, 0) + shortestOperatorAngleDelta(from.panDeg, to.panDeg) * amount,
+        ),
+        tiltDeg: lerp("tiltDeg"),
+        focal: lerp("focal"),
+      };
+    };
+
+    for (let time = first.time + interval; time < last.time - 0.000001; time += interval) {
+      output.push(interpolateAt(Number(time.toFixed(6))));
+    }
+    output.push({ ...last });
+    return output;
+  }
+
   const cameraOperatorCore = {
     shortestAngleDelta: shortestOperatorAngleDelta,
     smoothSamples: smoothCameraOperatorSamples,
+    resampleSamples: resampleCameraOperatorSamples,
     simplifySamples: simplifyCameraOperatorSamples,
   };
 

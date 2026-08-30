@@ -24,6 +24,13 @@ assert.match(controller, /const canStartAtRequestedTime = requestedTime < maxTim
 assert.match(controller, /cameraFrame\.addEventListener\("pointerdown", beginCameraFramePointerControl, true\)/, "camera frame parent must catch preview pointerdown when the overlay misses it");
 assert.match(controller, /cameraFrame\.addEventListener\("mousedown", beginMouseFallback, true\)/, "native mouse down must start recording when pointer events are unavailable");
 assert.match(controller, /window\.addEventListener\("mousemove", applyMouseFallback, true\)/, "native mouse drag must continue outside the preview overlay");
+assert.match(controller, /const beginWorldCameraRecording = \(event\) => \{[\s\S]*pickThreeEditor\(event\)[\s\S]*beginRecording\(event, "world"\)/, "STBY camera-rig drag must enter the live recording state");
+assert.match(controller, /threeCanvas\?\.addEventListener\("pointerdown", beginWorldCameraRecording, true\)/, "3D camera rig pointerdown must be captured before normal stage editing");
+assert.match(controller, /recordInput !== "preview"/, "world camera recording must not reinterpret 3D rig movement as pan/tilt preview drag");
+assert.match(controller, /const stabilizationStrength = Math\.max\(cleanupStrength, 0\.16\)/, "mouse-driven takes must have a baseline stabilization pass");
+assert.match(controller, /core\.resampleSamples\(smoothed, 1 \/ 15\)/, "mouse-driven takes must use a stable sample clock before key reduction");
+assert.match(controller, /maxGap: 0\.28 \+ cleanupStrength \* 0\.22/, "camera take key reduction must keep motion segments temporally dense enough for smooth playback");
+assert.match(controller, /keyframe\.operatorContinuity = true;/, "recorded camera keys must opt into continuous pose interpolation");
 const liveRenderFrame = controller.match(/const renderLiveFrame = \(time\) => \{[\s\S]*?\n  \};/)?.[0] || "";
 assert.match(liveRenderFrame, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
 assert.doesNotMatch(liveRenderFrame, /renderThreeView\(renderState, true\)/, "the live frame must not render the 3D scene twice");
