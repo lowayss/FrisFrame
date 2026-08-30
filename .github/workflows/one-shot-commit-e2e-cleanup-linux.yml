@@ -1,0 +1,51 @@
+name: Commit MCP E2E cleanup through Linux verification
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  contents: write
+
+jobs:
+  commit:
+    if: github.event.head_commit.message == 'Commit MCP E2E cleanup through Linux verification'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply robust cleanup
+        run: python3 tools/one_shot_windows_e2e_process_cleanup.py
+
+      - name: Verify MCP E2E
+        run: python3 tests/mcp-previs-e2e.py
+
+      - name: Verify full project contracts
+        run: python3 quality_check.py
+
+      - name: Verify patch whitespace
+        run: git diff --check
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/mcp-previs-e2e.py
+          git commit -m "Harden MCP E2E resource cleanup"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
