@@ -53,8 +53,12 @@ def calibrate_reference_camera(data, defaults=None):
     axis = "width" if str(data.get("axis", "height")).lower() == "width" else "height"
     physical_size_m = positive(data.get("physical_size_m"), "physical_size_m")
     fraction = frame_fraction(data)
-    focal_mm = optional_positive(data.get("focal_mm", defaults.get("focal_mm")), "focal_mm")
     distance_m = optional_positive(data.get("distance_m"), "distance_m")
+    focal_mm = optional_positive(data.get("focal_mm"), "focal_mm")
+    # Explicit known distance means "solve focal". Only borrow the current
+    # FrisFrame focal when neither distance nor focal was supplied.
+    if focal_mm is None and distance_m is None:
+        focal_mm = optional_positive(defaults.get("focal_mm"), "focal_mm")
     sensor_width_mm = positive(data.get("sensor_width_mm", defaults.get("sensor_width_mm", DEFAULT_SENSOR_WIDTH_MM)), "sensor_width_mm")
     aspect = aspect_value(data.get("aspect", defaults.get("aspect", "16:9")))
     if focal_mm is None and distance_m is None:
