@@ -46,7 +46,23 @@ def prepare_environment() -> Path:
     return database
 
 
+def configure_stdio_utf8() -> None:
+    """Keep JSON-RPC stdio UTF-8 on Windows/PyInstaller as MCP expects."""
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="strict")
+        except (OSError, ValueError):
+            # Some embedded hosts expose immutable text streams. In those hosts
+            # the launcher-provided encoding remains authoritative.
+            pass
+
+
 def main() -> None:
+    configure_stdio_utf8()
     database = prepare_environment()
     sys.stderr.write(f"[FrisFrame MCP] database={database}\n")
     sys.stderr.flush()
