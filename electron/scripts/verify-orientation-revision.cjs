@@ -113,6 +113,73 @@ function main() {
       throw new Error(`orientation keyframed fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
     }
 
+    const initialProject = getProject(executable, database, fixture.project_id, 20, "strict target 입력 전 프로젝트 조회");
+    const initialCamera = JSON.stringify(currentCamera(initialProject));
+    if (Number(initialProject?.revision) !== fixture.revision || !initialCamera) {
+      throw new Error(`strict target 입력 전 상태가 올바르지 않습니다: ${JSON.stringify(initialProject)}`);
+    }
+
+    const badRevision = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          revision: true,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: fixture.actor_id,
+          image_x: 0.62,
+          image_y: 0.42,
+        },
+      },
+    });
+    expectToolError(badRevision, "패키지 boolean revision", "revision 값은 JSON integer");
+
+    for (const [id, field, value] of [[22, "scene_index", "0"], [23, "cut_index", false]]) {
+      const args = {
+        project_id: fixture.project_id,
+        scene_index: 0,
+        cut_index: 0,
+        target_id: fixture.actor_id,
+        image_x: 0.62,
+        image_y: 0.42,
+      };
+      args[field] = value;
+      const response = runMcpRequest(executable, database, {
+        jsonrpc: "2.0",
+        id,
+        method: "tools/call",
+        params: { name: "solve_reference_camera_orientation", arguments: args },
+      });
+      expectToolError(response, `패키지 coerced ${field}`, `${field} 값은 JSON integer`);
+    }
+
+    const badTargetId = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 24,
+      method: "tools/call",
+      params: {
+        name: "solve_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: 123,
+          image_x: 0.62,
+          image_y: 0.42,
+        },
+      },
+    });
+    expectToolError(badTargetId, "패키지 non-string target_id", "target_id 값은 비어 있지 않은 JSON string");
+
+    const afterTargetValidation = getProject(executable, database, fixture.project_id, 25, "strict target 입력 후 프로젝트 조회");
+    if (Number(afterTargetValidation?.revision) !== fixture.revision || JSON.stringify(currentCamera(afterTargetValidation)) !== initialCamera) {
+      throw new Error("잘못된 orientation target/revision 입력이 프로젝트를 변경했습니다.");
+    }
+
     const applied = runMcpRequest(executable, database, {
       jsonrpc: "2.0",
       id: 1,
@@ -270,7 +337,7 @@ function main() {
       throw new Error("문자열 Horizon override가 프로젝트를 변경했습니다.");
     }
 
-    console.log("FrisFrame packaged orientation safety: stale revision, coerced numbers, and non-boolean overrides rejected without mutation");
+    console.log("FrisFrame packaged orientation safety: strict target fields, stale revision, coerced numbers, and non-boolean overrides rejected without mutation");
   } finally {
     fs.rmSync(smokeDir, { recursive: true, force: true });
   }
