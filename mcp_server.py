@@ -172,12 +172,17 @@ def archive_project_version(cursor, row):
     )
 
 
-def save_mutated_document(cursor, row, document, expected_revision):
+def ensure_expected_revision(row, expected_revision):
     current_revision = int(row["revision"] or 1)
     if current_revision != expected_revision:
         raise ValueError(
             f"revision_conflict: 현재 revision은 {current_revision}입니다. 프로젝트를 다시 불러와 주세요."
         )
+    return current_revision
+
+
+def save_mutated_document(cursor, row, document, expected_revision):
+    current_revision = ensure_expected_revision(row, expected_revision)
     project_obj = validate_managed_document(document)
     now_str = utc_now()
     project_obj["updatedAt"] = now_str
@@ -231,6 +236,10 @@ def mutate_project(project_id, revision, mutation):
         cursor = conn.cursor()
         cursor.execute("BEGIN IMMEDIATE")
         row = load_project_row(cursor, project_id)
+        # Reject stale clients before running mutation-specific validation. This
+        # guarantees the caller sees revision_conflict instead of a misleading
+        # "target/key not found" error caused by a newer UI/MCP edit.
+        ensure_expected_revision(row, expected_revision)
         document = project_document(json.loads(row["content"]))
         detail = mutation(document["project"])
         next_revision, updated_at = save_mutated_document(cursor, row, document, expected_revision)

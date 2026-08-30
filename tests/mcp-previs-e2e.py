@@ -134,20 +134,30 @@ def main():
                 # Simulate a normal UI save against the same managed project DB.
                 manual_document = after_failure["document"]
                 manual_document["project"]["title"] = "UI에서 수정한 제목"
-                manual_document["project"]["scenes"][0]["cuts"][0]["blocking"]["camera"]["focal"] = 50
+                manual_blocking = manual_document["project"]["scenes"][0]["cuts"][0]["blocking"]
+                manual_blocking["camera"]["focal"] = 50
+                stale_key_id = next(
+                    key["id"] for key in manual_blocking["motion"]["keyframes"]
+                    if key["source"] == "e2e-actor"
+                )
+                manual_blocking["motion"]["keyframes"] = [
+                    key for key in manual_blocking["motion"]["keyframes"] if key["id"] != stale_key_id
+                ]
                 manual_saved = json.loads(core.handle_save_project(project_id, manual_document, 2))
                 assert manual_saved["revision"] == 3
 
-                # A stale MCP plan must not overwrite the UI save or leak its stage mutation.
+                # A stale MCP plan references a key deleted by the newer UI save.
+                # Revision conflict must win over mutation-specific "key missing" errors.
                 stale_result, stale_text = call_tool("apply_previs_plan", {
                     "project_id": project_id,
                     "revision": 2,
-                    "stage_operations": [
-                        {"op": "add_dummy", "id": "stale-probe", "type": "actor", "name": "오래된 revision", "x": 0.5, "y": 0.5},
+                    "motion_operations": [
+                        {"op": "update_keyframe", "id": stale_key_id, "source_id": "e2e-actor", "time": 1.0, "x": 0.44},
                     ],
                 })
                 assert stale_result["isError"] is True
                 assert "revision_conflict" in stale_text
+                assert "수정할 동작 키를 찾을 수 없습니다" not in stale_text
 
                 _, fresh_text = call_tool("get_project", {"project_id": project_id})
                 fresh = json.loads(fresh_text)
@@ -155,7 +165,7 @@ def main():
                 assert fresh["document"]["project"]["title"] == "UI에서 수정한 제목"
                 fresh_blocking = fresh["document"]["project"]["scenes"][0]["cuts"][0]["blocking"]
                 assert fresh_blocking["camera"]["focal"] == 50
-                assert all(item["id"] != "stale-probe" for item in fresh_blocking["items"])
+                assert all(key["id"] != stale_key_id for key in fresh_blocking["motion"]["keyframes"])
 
                 # Re-read the revision, then continue authoring through MCP.
                 final_result, final_text = call_tool("apply_previs_plan", {
