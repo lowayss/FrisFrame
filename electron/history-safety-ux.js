@@ -71,6 +71,20 @@
     }
     .app.is-storyboard .frisframe-quick-lock { display: none !important; }
 
+    @media (max-width: 1320px) {
+      .frisframe-save-detail { display: none; }
+      .frisframe-quick-lock {
+        width: 29px;
+        min-width: 29px;
+        padding: 0;
+        margin-left: 2px;
+        justify-content: center;
+        gap: 0;
+      }
+      .frisframe-quick-lock .frisframe-quick-lock-label,
+      .frisframe-quick-lock kbd { display: none; }
+    }
+
     .frisframe-drag-cancel-hint {
       position: absolute;
       left: 50%;
@@ -121,6 +135,16 @@
     quickLockButton.hidden = true;
     quickLockButton.innerHTML = '<span class="frisframe-quick-lock-icon" aria-hidden="true">◫</span><span class="frisframe-quick-lock-label">잠금</span><kbd>L</kbd>';
     workspaceNav.append(quickLockButton);
+  }
+
+  const threeShortcuts = document.querySelector(".three-shortcuts");
+  if (threeShortcuts && threeShortcuts.dataset.frisframeSafetyHelp !== "1") {
+    threeShortcuts.dataset.frisframeSafetyHelp = "1";
+    const cancelHelp = document.createElement("span");
+    cancelHelp.innerHTML = '<kbd>Esc</kbd> 드래그 취소';
+    const lockHelp = document.createElement("span");
+    lockHelp.innerHTML = '<kbd>L</kbd> 선택 대상 잠금';
+    threeShortcuts.append(cancelHelp, lockHelp);
   }
 
   let dirtyAt = 0;

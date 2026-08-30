@@ -28,4 +28,13 @@ assert.match(source, /2600/,
 assert.match(source, /frisframe:drag-cancelled/,
   "drag cancellation must publish a cleanup event for companion UX layers");
 
-console.log("history-safety-contract: undo/redo, autosave, lock, and drag cancellation contracts passed");
+assert.match(source, /@media \(max-width: 1320px\)[^]*frisframe-quick-lock-label[^]*display: none/,
+  "narrow desktop headers must collapse the contextual lock to an icon-only control");
+assert.match(source, /frisframe-save-detail \{ display: none; \}/,
+  "narrow desktop headers must hide secondary save-detail text before crowding the toolbar");
+assert.match(source, /<kbd>Esc<\/kbd> 드래그 취소/,
+  "3D help must expose direct-edit cancellation");
+assert.match(source, /<kbd>L<\/kbd> 선택 대상 잠금/,
+  "3D help must expose contextual quick lock");
+
+console.log("history-safety-contract: undo/redo, autosave, responsive lock, help, and drag cancellation contracts passed");
