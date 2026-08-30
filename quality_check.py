@@ -84,6 +84,7 @@ def main() -> None:
         "electron/scripts/smoke-package.cjs",
         "electron/scripts/verify-runtime-source-parity.cjs",
         "electron/scripts/verify-package.cjs",
+        "electron/scripts/verify-orientation-revision.cjs",
         "electron/scripts/build-python-runtime.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
