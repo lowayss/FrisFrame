@@ -18,8 +18,10 @@ assert.match(entry, /def configure_stdio_utf8\(\)/,
   "packaged MCP entrypoint must explicitly configure stdio for UTF-8 JSON-RPC");
 assert.match(entry, /reconfigure\(encoding="utf-8", errors="strict"\)/,
   "packaged MCP stdio must not depend on the Windows system code page for Korean tool metadata or project content");
-assert.match(entry, /configure_stdio_utf8\(\)[\s\S]*from mcp_previs_server import main as run_mcp/,
-  "UTF-8 stdio configuration must run before the deterministic previs MCP server starts");
+assert.match(entry, /configure_stdio_utf8\(\)[\s\S]*import reference_space_mcp[\s\S]*from mcp_previs_server import main as run_mcp/,
+  "UTF-8 setup must run before the Reference Space extension and deterministic MCP server start");
+assert.match(entry, /import reference_space_mcp/,
+  "packaged MCP entrypoint must statically import the Reference Space extension so PyInstaller bundles it");
 assert.match(entry, /from mcp_previs_server import main as run_mcp/,
   "desktop entrypoint must run the deterministic previs MCP server rather than a separate implementation");
 assert.match(build, /name: "frisframe-mcp"/,
@@ -52,9 +54,15 @@ assert.match(verify, /name: "list_projects"/,
   "packaged MCP verification must execute a DB-backed MCP tool call");
 assert.match(verify, /"apply_previs_plan"/,
   "packaged MCP verification must require the atomic previs-plan tool in the bundled manifest");
+assert.match(verify, /"calibrate_reference_camera"/,
+  "packaged MCP verification must require Reference Space camera calibration");
+assert.match(verify, /"apply_reference_mass_blocks"/,
+  "packaged MCP verification must require meter-based Reference Space mass blocking");
+assert.match(verify, /"validate_reference_space"/,
+  "packaged MCP verification must require Reference Space validation");
 assert.match(verify, /PREVIS_DB_PATH: database/,
   "MCP package protocol tests must use an isolated temporary database");
 assert.match(verify, /fs\.existsSync\(database\)/,
   "packaged MCP verification must confirm the SQLite database was really initialized");
 
-console.log("mcp-desktop-runtime-contract: packaged UTF-8 stdio MCP protocol and runtime contracts passed");
+console.log("mcp-desktop-runtime-contract: packaged UTF-8 stdio MCP + Reference Space runtime contracts passed");
