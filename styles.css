@@ -8951,3 +8951,19 @@ input[type="checkbox"] {
   flex: 1 1 auto;
   text-align: right;
 }
+
+/* Priority product-boundary hotfix: retired surfaces stay hidden on main desktop builds. */
+#blockingPlanBtn,
+#backgroundSheetBtn,
+#productionPackBtn,
+#multiCamPreviewBtn,
+#multiCamVideoBtn,
+#blockingPlanPanelBtn,
+#backgroundSheetPanelBtn,
+#productionPackPanelBtn,
+#multiCamPreviewPanelBtn,
+#multiCamPreviewPanelBtnSecondary,
+#multiCamVideoPanelBtn,
+.spatial-reference-panel {
+  display: none !important;
+}
