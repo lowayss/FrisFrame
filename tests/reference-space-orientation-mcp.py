@@ -116,6 +116,30 @@ def main():
         assert abs(projection["frame_x"] - desired_x) < 1e-9, projection
         assert abs(projection["frame_y"] - desired_y) < 1e-9, projection
 
+        stale_revision = revision
+        current_revision = revision + 1
+        before_stale = project_payload(project_id)
+        before_stale_camera = dict(first_blocking(project_id)["camera"])
+        try:
+            orientation.call_tool("apply_reference_camera_orientation", {
+                "project_id": project_id,
+                "revision": stale_revision,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": 0.48,
+                "image_y": 0.55,
+            })
+        except ValueError as error:
+            assert "revision_conflict" in str(error), error
+        else:
+            raise AssertionError("stale orientation revision must be rejected")
+        assert project_revision(project_id) == current_revision, "stale orientation apply must not create a revision"
+        after_stale = project_payload(project_id)
+        after_stale_camera = first_blocking(project_id)["camera"]
+        assert after_stale["revision"] == before_stale["revision"] == current_revision
+        assert after_stale_camera == before_stale_camera, "stale orientation apply must not mutate camera state"
+
         guarded = json.loads(core.handle_create_project("Reference Orientation Horizon Guard"))
         guarded_id = guarded["project_id"]
         guarded_revision = guarded["revision"]
@@ -177,7 +201,7 @@ def main():
         assert overridden["validation"]["status"] == "review", overridden["validation"]
         assert any(issue.get("code") == "horizon-mismatch" for issue in overridden["validation"]["issues"])
 
-        print("reference-space-orientation-mcp: solve/apply exact screen orientation, revision safety, and horizon guard passed")
+        print("reference-space-orientation-mcp: solve/apply exact screen orientation, stale-revision safety, and horizon guard passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
