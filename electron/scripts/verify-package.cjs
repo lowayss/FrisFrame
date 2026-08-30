@@ -93,6 +93,7 @@ function verifyMcpExecutable(executable) {
       "calibrate_reference_camera",
       "apply_reference_camera_calibration",
       "apply_reference_mass_blocks",
+      "check_reference_anchor_consistency",
       "apply_reference_space_plan",
       "validate_reference_space",
     ]) {
@@ -146,6 +147,37 @@ function verifyMcpExecutable(executable) {
     }
     if (Math.abs(Number(calibratedPayload?.distance_m) - 10) > 1e-6) {
       throw new Error(`패키지 MCP Reference Space 거리 보정이 올바르지 않습니다: ${JSON.stringify(calibratedPayload)}`);
+    }
+
+    const secondFraction = 2 * 50 / (8 * (36 / (16 / 9)));
+    const consistency = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: {
+        name: "check_reference_anchor_consistency",
+        arguments: {
+          sensor_width_mm: 36,
+          aspect: 16 / 9,
+          expected_focal_mm: 50,
+          anchors: [
+            { id: "actor", axis: "height", physical_size_m: 1.78, distance_m: 10, frame_fraction: frameFraction },
+            { id: "door", axis: "height", physical_size_m: 2, distance_m: 8, frame_fraction: secondFraction },
+          ],
+        },
+      },
+    });
+    if (consistency?.result?.isError !== false) {
+      throw new Error(`패키지 MCP Scale Anchor 일관성 호출 실패: ${JSON.stringify(consistency)}`);
+    }
+    let consistencyPayload;
+    try {
+      consistencyPayload = JSON.parse(consistency?.result?.content?.[0]?.text || "null");
+    } catch (error) {
+      throw new Error(`패키지 MCP Scale Anchor 일관성 결과가 JSON이 아닙니다: ${error.message}`);
+    }
+    if (consistencyPayload?.consistent !== true || Math.abs(Number(consistencyPayload?.diagnostic_median_focal_mm) - 50) > 1e-6) {
+      throw new Error(`패키지 MCP Scale Anchor 일관성 결과가 올바르지 않습니다: ${JSON.stringify(consistencyPayload)}`);
     }
 
     if (!fs.existsSync(database)) {
