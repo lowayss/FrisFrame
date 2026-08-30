@@ -42,6 +42,11 @@
   let lastSampleTime = -Infinity;
   let dirty = true;
 
+  const pointerToken = (event) => event?.pointerId == null ? "mouse" : event.pointerId;
+  const isActivePointer = (event) => (
+    pointerId != null && (pointerId === "mouse" || pointerToken(event) === pointerId)
+  );
+
   const currentCameraPose = () => ({
     x: Number(state.camera.x || 0),
     y: Number(state.camera.y || 0),
@@ -76,14 +81,17 @@
     button.classList.toggle("is-armed", mode === "armed");
     button.classList.toggle("is-recording", mode === "recording");
     settings.hidden = mode === "idle";
-    surface.hidden = mode === "idle";
+    // Keep the preview surface mounted even before STBY. A user should be able
+    // to grab the camera preview and drag immediately; the first pointerdown
+    // below arms and starts the take without requiring a separate button click.
+    surface.hidden = false;
     surface.classList.toggle("is-recording", mode === "recording");
     cameraFrame.classList.toggle("frisframe-camera-operator-monitor", mode !== "idle");
     cameraFrame.classList.toggle("frisframe-camera-operator-recording", mode === "recording");
 
     if (mode === "idle") {
       button.textContent = "● 직접 촬영";
-      status.textContent = "첫 카메라 키를 찍고 시작";
+      status.textContent = "프리뷰를 드래그하면 REC 시작";
       if (monitorHud) monitorHud.textContent = "STBY";
       return;
     }
@@ -144,8 +152,10 @@
 
   const releasePointerControl = (event) => {
     if (pointerId == null) return;
-    if (event?.pointerId != null && event.pointerId !== pointerId) return;
-    try { surface.releasePointerCapture?.(pointerId); } catch { /* already released */ }
+    if (event && !isActivePointer(event)) return;
+    if (pointerId !== "mouse") {
+      try { surface.releasePointerCapture?.(pointerId); } catch { /* already released */ }
+    }
     pointerId = null;
   };
 
@@ -184,7 +194,8 @@
       ? readTimelineTimeInput(state.motion.playhead)
       : Number(state.motion.playhead || 0);
     const cameraKeys = typeof keysForSource === "function" ? keysForSource("camera") : [];
-    const exactKey = cameraKeys.find((keyframe) => (
+    const canStartAtRequestedTime = requestedTime < maxTimelineTime() - 0.0005;
+    const exactKey = canStartAtRequestedTime && cameraKeys.find((keyframe) => (
       typeof timelineTimesMatch === "function"
         ? timelineTimesMatch(keyframe.time, requestedTime)
         : Math.abs(Number(keyframe.time) - Number(requestedTime)) < 0.0005
@@ -258,6 +269,11 @@
   };
 
   const beginPointerControl = (event) => {
+    if (mode === "idle" && event.button === 0) {
+      armOperator();
+      if (mode === "armed") beginRecording(event);
+      return;
+    }
     if (mode === "armed") {
       beginRecording(event);
       return;
@@ -265,14 +281,16 @@
     if (mode !== "recording" || event.button !== 0 || pointerId != null) return;
     event.preventDefault();
     event.stopPropagation();
-    pointerId = event.pointerId;
+    pointerId = pointerToken(event);
     lastClientX = event.clientX;
     lastClientY = event.clientY;
-    surface.setPointerCapture?.(pointerId);
+    if (pointerId !== "mouse") {
+      try { surface.setPointerCapture?.(pointerId); } catch { /* capture is optional */ }
+    }
   };
 
   const applyOperatorDrag = (event) => {
-    if (mode !== "recording" || pointerId == null || event.pointerId !== pointerId) return;
+    if (mode !== "recording" || !isActivePointer(event)) return;
     event.preventDefault();
     event.stopPropagation();
     const dx = event.clientX - lastClientX;
@@ -399,7 +417,7 @@
   surface.addEventListener("pointerdown", beginPointerControl);
   surface.addEventListener("pointermove", applyOperatorDrag);
   surface.addEventListener("pointerup", (event) => {
-    if (mode !== "recording" || event.pointerId !== pointerId) return;
+    if (mode !== "recording" || !isActivePointer(event)) return;
     event.preventDefault();
     event.stopPropagation();
     releasePointerControl(event);
