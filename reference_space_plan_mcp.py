@@ -152,12 +152,10 @@ def _camera_plan(blocking, camera_args):
     target_world_x, target_world_z = reference._world_xy(blocking, target)
     fraction = space.frame_fraction(camera_args)
     confidence = min(1.0, max(0.0, float(camera_args.get("confidence", 1.0))))
-    anchors = [{
+    scale_anchor = {
         "id": anchor_id,
         "label": str(camera_args.get("label") or target.get("name") or target_id)[:80],
         "kind": f"scale-{axis}",
-        "image_x": float(camera_args.get("image_x", 0.5)),
-        "image_y": float(camera_args.get("image_y", 0.5)),
         "image_width": fraction if axis == "width" else 0,
         "image_height": fraction if axis == "height" else 0,
         "world_x_m": target_world_x,
@@ -165,14 +163,15 @@ def _camera_plan(blocking, camera_args):
         "physical_dimensions_m": target_dims,
         "confidence": confidence,
         "attached_item_id": target_id,
-    }]
+    }
+    scale_anchor.update(reference._image_observation_fields(camera_args))
+    anchors = [scale_anchor]
 
     if camera_args.get("horizon_y") is not None:
         anchors.append({
             "id": reference._anchor_id(camera_args.get("horizon_anchor_id"), "reference-horizon"),
             "label": "Reference horizon",
             "kind": "horizon",
-            "image_x": 0.5,
             "image_y": float(camera_args["horizon_y"]),
             "confidence": confidence,
         })
