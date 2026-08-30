@@ -96,6 +96,8 @@ function verifyMcpExecutable(executable) {
       "check_reference_anchor_consistency",
       "apply_reference_space_plan",
       "validate_reference_space",
+      "solve_reference_camera_orientation",
+      "apply_reference_camera_orientation",
     ]) {
       if (!toolNames.has(toolName)) throw new Error(`패키지 MCP 도구가 없습니다: ${toolName}`);
     }
