@@ -85,6 +85,8 @@ python3 mcp_previs_server.py
 
 외부 MCP 클라이언트에는 이 실행파일을 stdio 서버 command로 등록한다. 설치본 MCP는 Electron 앱의 플랫폼별 `userData/data/frisframe.db`를 찾아 같은 관리 프로젝트를 읽고 수정한다. `PREVIS_DB_PATH` 환경변수를 명시하면 다른 DB를 사용할 수도 있다.
 
+설치 위치를 직접 찾을 필요는 없다. 데스크톱 앱 메뉴에서 **`도움말 → MCP 실행 경로 복사`**를 선택하면 현재 설치본의 실제 `frisframe-mcp` / `frisframe-mcp.exe` 절대 경로를 클립보드에 복사한다. 이 경로를 외부 MCP 클라이언트의 stdio `command` 값에 넣으면 된다. 패키지에 MCP 실행파일이 누락된 경우에는 조용히 잘못된 경로를 복사하지 않고 오류를 표시한다.
+
 ### 외부 MCP 클라이언트 등록 예시
 
 MCP 설정 형식이 `mcpServers`를 사용하는 클라이언트라면 구조는 다음과 같다. 실제 설치 위치가 다르면 `command`만 바꾼다.
@@ -133,7 +135,7 @@ Windows 예시:
 
 등록 후 MCP 클라이언트를 다시 연결하거나 재시작하고 `list_projects`를 먼저 호출해 연결과 프로젝트 DB가 맞는지 확인한다. 이후 수정 명령을 보내기 전에는 `get_project`로 최신 `revision`을 읽는다.
 
-패키지 검증에서는 이 MCP 실행파일의 존재 여부만 보는 것이 아니라 **임시 DB를 사용해 실제 프로세스를 smoke-start하고 stdin EOF에서 정상 종료되는 것까지 검사**한다.
+패키지 검증에서는 실행파일 존재 여부만 보지 않는다. macOS/Windows에서 실제 번들 MCP 프로세스를 임시 DB로 실행하고 **`initialize` → `tools/list` → DB-backed `list_projects`** JSON-RPC 왕복을 각각 검사한다. Windows에서는 한국어 도구 설명이 포함된 `tools/list`도 UTF-8로 정상 출력되는지 함께 검증한다.
 
 ## MCP 설계 원칙
 
