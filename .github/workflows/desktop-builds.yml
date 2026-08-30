@@ -57,7 +57,9 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run desktop:build:mac
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --mac dmg zip --arm64 --publish never
 
       - name: Validate macOS release secrets
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -87,7 +89,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           npm run desktop:prepare
-          npx electron-builder --mac dmg zip --arm64 --config.forceCodeSigning=true --config.mac.notarize=true
+          npx electron-builder --mac dmg zip --arm64 --publish never --config.forceCodeSigning=true --config.mac.notarize=true
 
       - name: Verify macOS package
         run: npm run desktop:verify
@@ -135,7 +137,9 @@ jobs:
 
       - name: Build unsigned Windows package
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run desktop:build:win
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --win nsis --x64 --publish never
 
       - name: Validate Windows release secrets
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -158,7 +162,7 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
           npm run desktop:prepare
-          npx electron-builder --win nsis --x64 --config.forceCodeSigning=true
+          npx electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=true
 
       - name: Verify Windows package
         run: npm run desktop:verify
