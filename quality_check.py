@@ -96,6 +96,8 @@ def main() -> None:
         "tests/spatial-scale-core.test.cjs",
         "tests/selection-ux.test.cjs",
         "tests/alignment-ux.test.cjs",
+        "tests/camera-operator-core.test.cjs",
+        "tests/camera-operator-ux-contract.test.cjs",
         "tests/history-safety-contract.test.cjs",
         "tests/scene-cache-ux-contract.test.cjs",
         "tests/dynamic-prop-cache-ux-contract.test.cjs",
