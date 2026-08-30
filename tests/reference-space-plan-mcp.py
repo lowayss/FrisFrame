@@ -88,6 +88,35 @@ def main():
         assert observed_screen["in_front"] is True
         assert observed_screen["frame_x"] is not None and observed_screen["frame_y"] is not None
 
+        no_screen_camera_plan = plan_extension._camera_plan(blocking, {
+            "target_id": actor_id,
+            "anchor_id": "actor-scale-no-screen-plan",
+            "axis": "height",
+            "physical_size_m": 1.78,
+            "frame_fraction": observed_fraction,
+            "apply_distance": False,
+            "apply_focal": False,
+            "apply_tilt": False,
+        })
+        no_screen_anchor = no_screen_camera_plan["anchors"][0]
+        assert "image_x" not in no_screen_anchor, no_screen_anchor
+        assert "image_y" not in no_screen_anchor, no_screen_anchor
+        explicit_screen_camera_plan = plan_extension._camera_plan(blocking, {
+            "target_id": actor_id,
+            "anchor_id": "actor-scale-explicit-screen-plan",
+            "axis": "height",
+            "physical_size_m": 1.78,
+            "frame_fraction": observed_fraction,
+            "image_x": observed_screen["frame_x"],
+            "image_y": observed_screen["frame_y"],
+            "apply_distance": False,
+            "apply_focal": False,
+            "apply_tilt": False,
+        })
+        explicit_screen_anchor = explicit_screen_camera_plan["anchors"][0]
+        assert abs(explicit_screen_anchor["image_x"] - observed_screen["frame_x"]) < 1e-12
+        assert abs(explicit_screen_anchor["image_y"] - observed_screen["frame_y"]) < 1e-12
+
         consistency_anchors = [
             {
                 "id": "actor-check",
@@ -229,7 +258,7 @@ def main():
         assert project_revision(project_id) == stable_revision, "failed consistency preflight must not create a revision"
         assert "must-not-exist" not in {item["id"] for item in first_blocking(project_id)["items"]}
 
-        print("reference-space-plan-mcp: consistency preflight, camera, masses, screen diagnostics, validation, atomic commit, and atomic rejection passed")
+        print("reference-space-plan-mcp: explicit screen observations, consistency preflight, atomic commit, and atomic rejection passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
