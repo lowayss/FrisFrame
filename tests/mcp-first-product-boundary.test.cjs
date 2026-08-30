@@ -117,6 +117,10 @@ assert.match(workflow, /FrisFrame 자체는 이미지를 분석하지 않는다/
   "workflow doc must keep vision interpretation outside FrisFrame");
 assert.match(workflow, /최종 Seedance 프롬프트를 작성한다/,
   "workflow doc must keep final prompt composition in the external MCP conversation");
+assert.match(workflow, /최종 Seedance 프롬프트 생성 UI를 제공하지 않는다/,
+  "workflow doc must say clearly that final prompt UI is not part of FrisFrame");
+assert.equal(workflow.includes("Reference Prompt 생성은 핵심 워크플로우가 아니다"), false,
+  "workflow doc must not imply that a retired Reference Prompt UI still exists as a secondary feature");
 assert.match(workflow, /"mcpServers"/,
   "workflow doc must include a copyable MCP client configuration shape");
 assert.match(workflow, /\/Applications\/FrisFrame\.app\/Contents\/Resources\/runtime\/mcp\/frisframe-mcp/,
