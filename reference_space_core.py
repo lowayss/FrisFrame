@@ -284,3 +284,55 @@ def predicted_frame_fraction(physical_size_m, distance_m, focal_mm, sensor_width
 def horizon_from_tilt(tilt_deg, focal_mm, sensor_width_mm, aspect):
     sensor_height = positive(sensor_width_mm, "sensor_width_mm") / aspect_value(aspect)
     return 0.5 + math.tan(math.radians(float(tilt_deg))) * positive(focal_mm, "focal_mm") / sensor_height
+
+
+def camera_basis(pan_deg=180, tilt_deg=0):
+    pan = math.radians(float(pan_deg))
+    tilt = math.radians(max(-90.0, min(90.0, float(tilt_deg))))
+    cos_tilt, sin_tilt = math.cos(tilt), math.sin(tilt)
+    cos_pan, sin_pan = math.cos(pan), math.sin(pan)
+    return {
+        "forward": {"x": cos_tilt * cos_pan, "y": sin_tilt, "z": cos_tilt * sin_pan},
+        "right": {"x": -sin_pan, "y": 0.0, "z": cos_pan},
+        "up": {"x": -cos_pan * sin_tilt, "y": cos_tilt, "z": -sin_pan * sin_tilt},
+    }
+
+
+def project_world_point_to_frame(camera_position, world_point, *, pan_deg=180, tilt_deg=0, focal_mm=50, sensor_width_mm=DEFAULT_SENSOR_WIDTH_MM, aspect="16:9"):
+    focal = positive(focal_mm, "focal_mm")
+    sensor_width = positive(sensor_width_mm, "sensor_width_mm")
+    ratio = aspect_value(aspect)
+    sensor_height = sensor_width / ratio
+    basis = camera_basis(pan_deg, tilt_deg)
+    delta = {
+        key: float(world_point.get(key, 0.0)) - float(camera_position.get(key, 0.0))
+        for key in ("x", "y", "z")
+    }
+
+    def dot(a, b):
+        return a["x"] * b["x"] + a["y"] * b["y"] + a["z"] * b["z"]
+
+    depth = dot(delta, basis["forward"])
+    right = dot(delta, basis["right"])
+    up = dot(delta, basis["up"])
+    if depth <= 1e-6:
+        return {
+            "frame_x": None,
+            "frame_y": None,
+            "depth_m": depth,
+            "right_m": right,
+            "up_m": up,
+            "in_front": False,
+            "in_frame": False,
+        }
+    frame_x = 0.5 + (right / depth) * focal / sensor_width
+    frame_y = 0.5 - (up / depth) * focal / sensor_height
+    return {
+        "frame_x": frame_x,
+        "frame_y": frame_y,
+        "depth_m": depth,
+        "right_m": right,
+        "up_m": up,
+        "in_front": True,
+        "in_frame": 0 <= frame_x <= 1 and 0 <= frame_y <= 1,
+    }
