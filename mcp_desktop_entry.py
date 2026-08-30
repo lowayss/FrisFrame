@@ -66,6 +66,7 @@ def main() -> None:
     database = prepare_environment()
     sys.stderr.write(f"[FrisFrame MCP] database={database}\n")
     sys.stderr.flush()
+    import reference_space_mcp  # noqa: F401 - installs deterministic Reference Space tools
     from mcp_previs_server import main as run_mcp
     run_mcp()
 
