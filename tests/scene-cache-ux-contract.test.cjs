@@ -8,6 +8,16 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const source = fs.readFileSync(path.join(root, "electron/scene-cache-ux.js"), "utf8");
 
+assert.match(source, /function buildStaticEligibilityIndex\(/,
+  "scene cache must index motion sources and group membership once per editor render");
+assert.match(source, /const motionSources = new Set\(\)/,
+  "static eligibility must use an O(1) motion-source lookup set");
+assert.match(source, /const groupedItemIds = new Set\(\)/,
+  "static eligibility must use an O(1) manual-group lookup set");
+assert.match(source, /eligibilityIndex = buildStaticEligibilityIndex\(renderState\)/,
+  "the static eligibility index must be built at the render boundary rather than once per prop");
+assert.match(source, /eligibilityIndex\.renderState !== renderState/,
+  "eligibility lookup must reject an index built for a different evaluated frame");
 assert.match(source, /function staticItemEligible\(/,
   "scene cache must explicitly define which props are safe to reuse as static scene objects");
 assert.match(source, /item\.type !== "prop"/,
@@ -72,6 +82,52 @@ vm.createContext(sandbox);
 vm.runInContext(source, sandbox, { filename: "scene-cache-ux.js" });
 const cacheApi = sandbox.window.FrisFrameSceneCacheUxTest;
 assert.ok(cacheApi, "scene cache must expose its deterministic cache policy for regression tests");
+
+const eligibilityState = {
+  aspect: "16:9",
+  motion: {
+    keyframes: [
+      { id: "k1", source: "moving-prop" },
+      { id: "k2", source: "moving-prop" },
+      { id: "k3", source: "camera" },
+    ],
+  },
+  groups: [
+    { id: "g1", members: [{ itemId: "grouped-prop" }, { itemId: "grouped-actor" }] },
+  ],
+  items: [],
+};
+const indexBuildsBefore = cacheApi.stats.staticEligibilityIndexBuilds;
+const indexedKeysBefore = cacheApi.stats.staticEligibilityMotionKeysIndexed;
+const indexedMembersBefore = cacheApi.stats.staticEligibilityGroupMembersIndexed;
+const eligibilityIndex = cacheApi.buildStaticEligibilityIndex(eligibilityState);
+assert.equal(cacheApi.stats.staticEligibilityIndexBuilds, indexBuildsBefore + 1,
+  "building one render index must be observable for large-scene performance validation");
+assert.equal(cacheApi.stats.staticEligibilityMotionKeysIndexed, indexedKeysBefore + 3,
+  "one render index must inspect every authored key exactly once");
+assert.equal(cacheApi.stats.staticEligibilityGroupMembersIndexed, indexedMembersBefore + 2,
+  "one render index must inspect group members exactly once");
+assert.equal(eligibilityIndex.motionSources.has("moving-prop"), true,
+  "render eligibility index must record moving prop sources");
+assert.equal(eligibilityIndex.motionSources.has("static-prop"), false,
+  "render eligibility index must not invent motion sources");
+assert.equal(eligibilityIndex.groupedItemIds.has("grouped-prop"), true,
+  "render eligibility index must record manual group membership");
+
+const staticProp = {
+  id: "static-prop",
+  type: "prop",
+  assetType: "generic",
+  visible: true,
+};
+const movingProp = { ...staticProp, id: "moving-prop" };
+const groupedProp = { ...staticProp, id: "grouped-prop" };
+assert.equal(cacheApi.staticItemEligible(staticProp, eligibilityState), true,
+  "an unselected prop with no motion or group dependency remains cacheable");
+assert.equal(cacheApi.staticItemEligible(movingProp, eligibilityState), false,
+  "a prop with authored motion must remain dynamic");
+assert.equal(cacheApi.staticItemEligible(groupedProp, eligibilityState), false,
+  "a manually grouped prop must remain dynamic");
 
 const actor = {
   id: "actor-1",
@@ -154,4 +210,4 @@ assert.ok(packageJson.build.files.includes("electron/scene-cache-ux.js"),
 assert.match(main, /"scene-cache-ux\.js"[\s\S]*"preview-cache-ux\.js"[\s\S]*"performance-ux\.js"/,
   "scene caching must load before preview caching and render coalescing");
 
-console.log("scene-cache-ux-contract: static props, moving actor rigs, pose and grounding cache contracts passed");
+console.log("scene-cache-ux-contract: indexed static props, moving actor rigs, pose and grounding cache contracts passed");
