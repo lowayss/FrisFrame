@@ -83,7 +83,17 @@ function verifyMcpExecutable(executable) {
       method: "tools/list",
     });
     const toolNames = new Set((listed?.result?.tools || []).map((tool) => tool.name));
-    for (const toolName of ["list_projects", "get_project", "apply_stage_layout", "apply_motion_timeline", "apply_motion_macros", "apply_previs_plan"]) {
+    for (const toolName of [
+      "list_projects",
+      "get_project",
+      "apply_stage_layout",
+      "apply_motion_timeline",
+      "apply_motion_macros",
+      "apply_previs_plan",
+      "calibrate_reference_camera",
+      "apply_reference_mass_blocks",
+      "validate_reference_space",
+    ]) {
       if (!toolNames.has(toolName)) throw new Error(`패키지 MCP 도구가 없습니다: ${toolName}`);
     }
 
