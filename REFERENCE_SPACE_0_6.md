@@ -163,6 +163,47 @@ The current 36m long-edge stage is used for world-meter mapping. Masses are conv
 
 Masses extending outside the current stage are rejected by default. The MCP command exposes an explicit `allow_outside_stage` override for deliberate exceptions.
 
+## Atomic full-reference plan
+
+`apply_reference_space_plan` is the preferred MCP entry point when the external model has already finished analyzing one reference image.
+
+It accepts an optional `camera_calibration` object and an optional `masses` array, computes all requested geometry first, then submits the combined operations and anchors through **one** existing `apply_scene_commands` mutation. This means camera calibration, target physical dimensions, horizon/scale anchors, and large spatial masses share one project revision.
+
+If any deterministic solve or validation needed before mutation fails, no partial Reference Space state is written. Camera-keyframe safety remains identical to `apply_reference_camera_calibration`.
+
+Example shape:
+
+```json
+{
+  "project_id": "abcd1234",
+  "revision": 7,
+  "scene_index": 0,
+  "cut_index": 0,
+  "source_name": "reference-01",
+  "camera_calibration": {
+    "target_id": "actor-a",
+    "anchor_id": "actor-scale",
+    "axis": "height",
+    "physical_size_m": 1.78,
+    "frame_fraction": 0.31,
+    "horizon_y": 0.43
+  },
+  "masses": [
+    {
+      "id": "back-wall",
+      "world_x_m": 0,
+      "world_z_m": -6,
+      "width_m": 10,
+      "height_m": 4,
+      "depth_m": 0.4
+    }
+  ],
+  "validate_after_apply": true
+}
+```
+
+By default the tool performs `validate_reference_space` after the commit and returns that validation result without creating another revision.
+
 ## Implemented MCP tools
 
 Reference Space is an orchestration layer, not an image-analysis engine. The desktop MCP currently exposes:
@@ -170,6 +211,7 @@ Reference Space is an orchestration layer, not an image-analysis engine. The des
 - `calibrate_reference_camera` — solve distance/focal/FOV/tilt from explicit measurements;
 - `apply_reference_camera_calibration` — safely apply the solved camera + Scale Anchor to a cut;
 - `apply_reference_mass_blocks` — upsert large spatial masses in world meters and persist their anchors;
+- `apply_reference_space_plan` — preferred atomic application of camera calibration + large masses in one revision;
 - `validate_reference_space` — validate persisted or caller-supplied Reference Space observations against the current cut.
 
 The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros`, and `apply_previs_plan` remain unchanged and continue to own general scene/motion authoring.
