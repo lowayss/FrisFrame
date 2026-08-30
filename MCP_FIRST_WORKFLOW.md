@@ -83,6 +83,54 @@ python3 mcp_previs_server.py
 
 외부 MCP 클라이언트에는 이 실행파일을 stdio 서버 command로 등록한다. 설치본 MCP는 Electron 앱의 플랫폼별 `userData/data/frisframe.db`를 찾아 같은 관리 프로젝트를 읽고 수정한다. `PREVIS_DB_PATH` 환경변수를 명시하면 다른 DB를 사용할 수도 있다.
 
+### 외부 MCP 클라이언트 등록 예시
+
+MCP 설정 형식이 `mcpServers`를 사용하는 클라이언트라면 구조는 다음과 같다. 실제 설치 위치가 다르면 `command`만 바꾼다.
+
+macOS 예시:
+
+```json
+{
+  "mcpServers": {
+    "frisframe": {
+      "command": "/Applications/FrisFrame.app/Contents/Resources/runtime/mcp/frisframe-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Windows 예시:
+
+```json
+{
+  "mcpServers": {
+    "frisframe": {
+      "command": "C:\\Users\\사용자명\\AppData\\Local\\Programs\\FrisFrame\\resources\\runtime\\mcp\\frisframe-mcp.exe",
+      "args": []
+    }
+  }
+}
+```
+
+특정 DB를 명시해야 하는 개발/테스트 환경에서는 클라이언트의 `env` 항목으로 `PREVIS_DB_PATH`를 전달한다.
+
+```json
+{
+  "mcpServers": {
+    "frisframe": {
+      "command": "/path/to/frisframe-mcp",
+      "args": [],
+      "env": {
+        "PREVIS_DB_PATH": "/path/to/frisframe.db"
+      }
+    }
+  }
+}
+```
+
+등록 후 MCP 클라이언트를 다시 연결하거나 재시작하고 `list_projects`를 먼저 호출해 연결과 프로젝트 DB가 맞는지 확인한다. 이후 수정 명령을 보내기 전에는 `get_project`로 최신 `revision`을 읽는다.
+
 패키지 검증에서는 이 MCP 실행파일의 존재 여부만 보는 것이 아니라 **임시 DB를 사용해 실제 프로세스를 smoke-start하고 stdin EOF에서 정상 종료되는 것까지 검사**한다.
 
 ## MCP 설계 원칙
