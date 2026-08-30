@@ -48,8 +48,8 @@ assert.match(verify, /verifyMcpExecutable\(mcpExecutable\)/,
   "release verification must exercise the packaged MCP process");
 assert.match(verify, /function runMcpRequest\(executable, database, request\)/,
   "package verification must isolate one stdio JSON-RPC request per process for Windows-safe EOF handling");
-assert.ok((verify.match(/runMcpRequest\(executable, database, \{/g) || []).length >= 5,
-  "package verification must independently exercise initialization, discovery, DB access, calibration, and anchor consistency");
+assert.ok((verify.match(/runMcpRequest\(executable, database, \{/g) || []).length >= 11,
+  "package verification must exercise initialization, discovery, DB access, calibration, consistency, and packaged orientation solve/apply persistence");
 assert.match(verify, /input: `\$\{JSON\.stringify\(request\)\}\\n`/,
   "each packaged MCP verification process must receive exactly one newline-delimited request");
 assert.match(verify, /method: "initialize"/,
@@ -76,6 +76,14 @@ assert.match(verify, /"solve_reference_camera_orientation"/,
   "packaged MCP verification must require the read-only Reference Space screen-orientation solver");
 assert.match(verify, /"apply_reference_camera_orientation"/,
   "packaged MCP verification must require explicit Reference Space screen-orientation application");
+assert.match(verify, /seedReferenceProject\(database\)/,
+  "package verification must seed a real managed project before packaged orientation execution");
+assert.match(verify, /read-only orientation solve가 revision을 변경했습니다/,
+  "packaged orientation solve must be verified as revision-neutral");
+assert.match(verify, /orientation apply revision이 저장되지 않았습니다/,
+  "packaged orientation apply must be verified as a persisted one-revision mutation");
+assert.match(verify, /orientation 적용값 재검증이 올바르지 않습니다/,
+  "packaged orientation application must be re-solved to confirm zero remaining camera delta");
 assert.match(verify, /PREVIS_DB_PATH: database/,
   "MCP package protocol tests must use an isolated temporary database");
 assert.match(verify, /fs\.existsSync\(database\)/,
