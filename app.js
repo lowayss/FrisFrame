@@ -1363,6 +1363,21 @@ function commit({ preserveSourceIds = [], transaction = null } = {}) {
   syncProjectChrome();
 }
 
+// Annotation edits do not change the stage, camera, or evaluated motion state.
+// Keep them on a lightweight history/document path so a pen or eraser gesture
+// never rebuilds the Three.js world or the full inspector on every point.
+function commitAnnotationChange() {
+  history.push(snapshot());
+  if (history.length > 80) history.shift();
+  future = [];
+  syncActiveCutDocument();
+  setProjectSaveStatus("changed");
+  syncProjectChrome();
+  invalidateAnnotationCache();
+  if (viewMode === "3d") drawAnnotations();
+  else draw();
+}
+
 function restore(json) {
   clearLiveSourceEdits();
   state = JSON.parse(json);
@@ -3015,7 +3030,9 @@ function draw(renderState = evaluatedViewState || state, options = {}) {
     // the editable 3D viewport, not the live camera preview.
     renderCameraFramePreview(renderState);
   }
-  if (typeof drawAnnotations === "function") drawAnnotations();
+  // renderThreeView() already composites the 3D annotation layer. Calling it
+  // again here doubled the overlay work for every ordinary 3D commit.
+  if (viewMode !== "3d" && typeof drawAnnotations === "function") drawAnnotations();
 }
 
 function drawStage(renderState, rect, options = {}) {
@@ -7355,10 +7372,8 @@ document.addEventListener("keydown", (event) => {
         } else {
           state.annotations = state.annotations.filter(anno => anno.id !== selectedAnnoId);
           selectedAnnoId = null;
-          commit();
+          commitAnnotationChange();
           notifyApp("선택한 주석을 삭제했습니다.");
-          if (typeof drawAnnotations === "function") drawAnnotations();
-          if (typeof draw === "function") draw();
         }
         event.preventDefault();
         return;
@@ -14234,10 +14249,12 @@ function onAnnoPointerDown(e) {
 
   if (currentAnnoTool === "eraser") {
     isAnnoDrawing = true;
+    eraserChanged = false;
     drawEraserCursor(e.clientX, e.clientY);
     if (applyEraserAt(e.clientX, e.clientY)) {
-      commit();
-      draw();
+      eraserChanged = true;
+      invalidateAnnotationCache();
+      drawAnnotations();
     }
     return;
   }
@@ -14302,7 +14319,7 @@ function onAnnoPointerDown(e) {
           x: mappedPos.x, y: mappedPos.y,
           text: val
         });
-        commit();
+        commitAnnotationChange();
       }
       input.remove();
       drawAnnotations();
@@ -14369,11 +14386,9 @@ function onAnnoPointerMove(e) {
           });
         }
         
-        if (currentTab === "2d") {
-          draw();
-        } else {
-          drawAnnotations();
-        }
+        invalidateAnnotationCache();
+        if (currentTab === "2d") draw();
+        else drawAnnotations();
       }
     } else {
       const item = findAnnotationAt(e.clientX, e.clientY);
@@ -14420,7 +14435,7 @@ function onAnnoPointerUp(e) {
       draggedAnnoId = null;
       draggedAnnoStartPos = null;
       dragStartPointer = null;
-      commit();
+      commitAnnotationChange();
     }
     return;
   }
@@ -14430,6 +14445,8 @@ function onAnnoPointerUp(e) {
       processEraserPoint();
       isAnnoDrawing = false;
       cancelEraserFrame();
+      if (eraserChanged) commitAnnotationChange();
+      eraserChanged = false;
       const overlay = document.getElementById("annotationOverlay");
       if (overlay) {
         try {
@@ -14481,7 +14498,7 @@ function onAnnoPointerUp(e) {
         size: currentAnnoSize,
         points: mappedPoints
       });
-      commit();
+      commitAnnotationChange();
     }
     annoPoints = [];
   } else if (currentAnnoTool === "arrow") {
@@ -14498,7 +14515,7 @@ function onAnnoPointerUp(e) {
         start: startMapped,
         end: endMapped
       });
-      commit();
+      commitAnnotationChange();
     }
   } else if (currentAnnoTool === "text") {
     // Text input is created in onAnnoPointerDown; nothing to do here.
@@ -14511,6 +14528,8 @@ function onAnnoPointerUp(e) {
 function onAnnoPointerCancel(e) {
   cancelAnnotationPreview();
   cancelEraserFrame();
+  if (currentAnnoTool === "eraser" && eraserChanged) commitAnnotationChange();
+  eraserChanged = false;
   isAnnoDrawing = false;
   annoPoints = [];
   hideEraserCursor();
@@ -14640,9 +14659,7 @@ function setupAnnotations() {
         const item = state.annotations.find(a => a.id === selectedAnnoId);
         if (item) {
           item.size = val;
-          commit();
-          drawAnnotations();
-          draw();
+          commitAnnotationChange();
         }
       }
     });
@@ -14663,7 +14680,7 @@ function setupAnnotations() {
       if (indices.length > 0) {
         const lastIndex = indices[indices.length - 1];
         state.annotations.splice(lastIndex, 1);
-        commit();
+        commitAnnotationChange();
         notifyApp("마지막 주석을 되돌렸습니다.");
       }
     });
@@ -14680,7 +14697,7 @@ function setupAnnotations() {
       const initialCount = state.annotations.length;
       state.annotations = state.annotations.filter(anno => anno.tab !== currentTab);
       if (state.annotations.length !== initialCount) {
-        commit();
+        commitAnnotationChange();
         notifyApp("현재 화면의 모든 주석을 지웠습니다.");
       }
     });
@@ -14699,10 +14716,8 @@ function setupAnnotations() {
       }
       state.annotations = state.annotations.filter(anno => anno.id !== selectedAnnoId);
       selectedAnnoId = null;
-      commit();
+      commitAnnotationChange();
       notifyApp("선택한 주석을 삭제했습니다.");
-      drawAnnotations();
-      draw();
     });
   }
 
@@ -14956,6 +14971,14 @@ let pendingAnnotationPreview = null;
 let eraserFrame = 0;
 let pendingEraserPoint = null;
 let eraserCursorEl = null;
+let eraserChanged = false;
+let annotationRenderRevision = 0;
+let annotationBaseCache = null;
+
+function invalidateAnnotationCache() {
+  annotationRenderRevision += 1;
+  annotationBaseCache = null;
+}
 
 function cancelAnnotationPreview() {
   if (annotationPreviewFrame) cancelAnimationFrame(annotationPreviewFrame);
@@ -14985,8 +15008,9 @@ function processEraserPoint() {
   pendingEraserPoint = null;
   if (!point || !isAnnoDrawing || currentAnnoTool !== "eraser") return;
   if (applyEraserAt(point.x, point.y)) {
-    commit();
-    draw();
+    eraserChanged = true;
+    invalidateAnnotationCache();
+    drawAnnotations();
   }
 }
 
@@ -15011,6 +15035,7 @@ function resizeAnnotationOverlay() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   overlay.width = Math.floor(rect.width * dpr);
   overlay.height = Math.floor(rect.height * dpr);
+  invalidateAnnotationCache();
   drawAnnotations();
 }
 
@@ -15251,15 +15276,36 @@ function getCompositedFrameCanvas(targetState = state) {
   return offscreen;
 }
 
+function getAnnotationBaseCache(overlay, dpr, offsetX, offsetY, width, height) {
+  const key = [
+    annotationRenderRevision,
+    overlay.width,
+    overlay.height,
+    dpr,
+    Math.round(offsetX * 100) / 100,
+    Math.round(offsetY * 100) / 100,
+    Math.round(width * 100) / 100,
+    Math.round(height * 100) / 100,
+    selectedAnnoId || "",
+  ].join("|");
+  if (annotationBaseCache?.key === key) return annotationBaseCache.canvas;
+
+  const cache = document.createElement("canvas");
+  cache.width = overlay.width;
+  cache.height = overlay.height;
+  const cacheCtx = cache.getContext("2d");
+  cacheCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw3DAnnotationsOnContext(cacheCtx, width, height, offsetX, offsetY, state, true);
+  annotationBaseCache = { key, canvas: cache };
+  return cache;
+}
+
 function drawAnnotations(tempAnno = null) {
   const overlay = document.getElementById("annotationOverlay");
   if (!overlay) return;
   const ctxAnno = overlay.getContext("2d");
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   ctxAnno.clearRect(0, 0, overlay.width, overlay.height);
-
-  ctxAnno.save();
-  ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   if (viewMode === "3d" && workspaceMode === "blocking") {
     const threeWrap = document.getElementById("threeWrap");
@@ -15270,11 +15316,16 @@ function drawAnnotations(tempAnno = null) {
       const offsetY = wrapRect.top - parentRect.top;
       const width = wrapRect.width;
       const height = wrapRect.height;
-      draw3DAnnotationsOnContext(ctxAnno, width, height, offsetX, offsetY, state, true);
+      const baseCache = getAnnotationBaseCache(overlay, dpr, offsetX, offsetY, width, height);
+      // The cache is already rendered at device-pixel resolution. Composite it
+      // before switching to CSS-pixel coordinates for the live preview stroke.
+      ctxAnno.drawImage(baseCache, 0, 0);
     }
   }
 
   if (tempAnno) {
+    ctxAnno.save();
+    ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctxAnno.save();
     ctxAnno.strokeStyle = tempAnno.color;
     ctxAnno.fillStyle = tempAnno.color;
@@ -15299,9 +15350,8 @@ function drawAnnotations(tempAnno = null) {
       drawArrow(ctxAnno, tempAnno.start.x, tempAnno.start.y, tempAnno.end.x, tempAnno.end.y, tempAnno.color, currentAnnoSize);
     }
     ctxAnno.restore();
+    ctxAnno.restore();
   }
-
-  ctxAnno.restore();
 }
 
 function init() {

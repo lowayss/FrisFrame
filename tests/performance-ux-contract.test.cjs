@@ -58,6 +58,16 @@ assert.match(app, /currentAnnoTool === "eraser"[\s\S]*?if \(isAnnoDrawing\) sche
   "eraser hover must not repaint the full annotation canvas");
 assert.ok(app.includes("annotation-eraser-cursor"),
   "eraser hover feedback must use a lightweight cursor layer");
+assert.match(app, /function commitAnnotationChange\(\)/,
+  "annotation edits must have a lightweight commit path");
+assert.match(app, /let eraserChanged = false/,
+  "eraser gesture changes must be grouped before committing");
+assert.match(app, /if \(eraserChanged\) commitAnnotationChange\(\)/,
+  "eraser must commit once when the gesture ends");
+assert.match(app, /annotationBaseCache/,
+  "3D annotation previews must reuse a cached committed layer");
+assert.match(app, /viewMode !== "3d" && typeof drawAnnotations === "function"/,
+  "3D draw must not repaint the annotation layer twice");
 
 assert.ok(packageJson.build.files.includes("electron/performance-ux.js"),
   "desktop package must include the performance UX layer");
