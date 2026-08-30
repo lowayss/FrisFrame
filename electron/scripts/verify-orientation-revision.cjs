@@ -169,6 +169,29 @@ function main() {
       throw new Error("stale orientation apply가 camera state를 변경했습니다.");
     }
 
+    const malformedImageObservation = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          revision: currentRevision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: fixture.actor_id,
+          image_x: "0.48",
+          image_y: 0.55,
+        },
+      },
+    });
+    expectToolError(malformedImageObservation, "패키지 문자열 screen observation", "JSON number");
+    const afterMalformedImage = getProject(executable, database, fixture.project_id, 12, "문자열 screen observation 후 프로젝트 조회");
+    if (Number(afterMalformedImage?.revision) !== currentRevision || JSON.stringify(currentCamera(afterMalformedImage)) !== cameraBefore) {
+      throw new Error("문자열 screen observation이 프로젝트를 변경했습니다.");
+    }
+
     const keyframedFixture = fixture.keyframed;
     const keyframedBefore = getProject(executable, database, keyframedFixture.project_id, 5, "문자열 camera override 전 프로젝트 조회");
     const keyframedCameraBefore = JSON.stringify(currentCamera(keyframedBefore));
@@ -197,8 +220,32 @@ function main() {
     }
 
     const horizonFixture = fixture.horizon_guard;
-    const horizonBefore = getProject(executable, database, horizonFixture.project_id, 8, "문자열 Horizon override 전 프로젝트 조회");
+    const horizonBefore = getProject(executable, database, horizonFixture.project_id, 8, "Horizon 안전 입력 전 프로젝트 조회");
     const horizonCameraBefore = JSON.stringify(currentCamera(horizonBefore));
+    const malformedTolerance = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 13,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: horizonFixture.project_id,
+          revision: horizonFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: horizonFixture.actor_id,
+          image_x: 0.5,
+          image_y: 0.12,
+          horizon_tolerance: true,
+        },
+      },
+    });
+    expectToolError(malformedTolerance, "패키지 boolean Horizon tolerance", "horizon_tolerance 값은 JSON number");
+    const horizonAfterTolerance = getProject(executable, database, horizonFixture.project_id, 14, "boolean Horizon tolerance 후 프로젝트 조회");
+    if (Number(horizonAfterTolerance?.revision) !== Number(horizonFixture.revision) || JSON.stringify(currentCamera(horizonAfterTolerance)) !== horizonCameraBefore) {
+      throw new Error("boolean Horizon tolerance가 프로젝트를 변경했습니다.");
+    }
+
     const malformedHorizonOverride = runMcpRequest(executable, database, {
       jsonrpc: "2.0",
       id: 9,
@@ -223,7 +270,7 @@ function main() {
       throw new Error("문자열 Horizon override가 프로젝트를 변경했습니다.");
     }
 
-    console.log("FrisFrame packaged orientation safety: stale revision and non-boolean overrides rejected without mutation");
+    console.log("FrisFrame packaged orientation safety: stale revision, coerced numbers, and non-boolean overrides rejected without mutation");
   } finally {
     fs.rmSync(smokeDir, { recursive: true, force: true });
   }
