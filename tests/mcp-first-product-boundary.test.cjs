@@ -117,6 +117,18 @@ assert.match(workflow, /FrisFrame 자체는 이미지를 분석하지 않는다/
   "workflow doc must keep vision interpretation outside FrisFrame");
 assert.match(workflow, /최종 Seedance 프롬프트를 작성한다/,
   "workflow doc must keep final prompt composition in the external MCP conversation");
+assert.match(workflow, /"mcpServers"/,
+  "workflow doc must include a copyable MCP client configuration shape");
+assert.match(workflow, /\/Applications\/FrisFrame\.app\/Contents\/Resources\/runtime\/mcp\/frisframe-mcp/,
+  "workflow doc must include a packaged macOS MCP command example");
+assert.match(workflow, /FrisFrame\\\\resources\\\\runtime\\\\mcp\\\\frisframe-mcp\.exe/,
+  "workflow doc must include a packaged Windows MCP command example");
+assert.match(workflow, /"PREVIS_DB_PATH"/,
+  "workflow doc must show how development or test clients can target an explicit project DB");
+assert.match(workflow, /`list_projects`를 먼저 호출/,
+  "workflow doc must include a simple post-registration connection check");
+assert.match(workflow, /`get_project`로 최신 `revision`/,
+  "workflow doc must tell clients to refresh revision before mutation");
 assert.match(maintenance, /Reference Prompt 사용자 UI/,
   "maintenance guide must explicitly keep Reference Prompt UI outside the product boundary");
 assert.match(maintenance, /320개 대상 \+ 8,000개 키프레임/,
@@ -124,4 +136,4 @@ assert.match(maintenance, /320개 대상 \+ 8,000개 키프레임/,
 assert.equal(maintenance.includes("촬영 자료 ZIP과 MP4 프리뷰"), false,
   "maintenance checklist must not restore the retired production-pack flow");
 
-console.log("mcp-first-product-boundary: prompt/readiness removal, desktop UI, docs, maintenance, selection polish, and AI boundary contracts passed");
+console.log("mcp-first-product-boundary: prompt/readiness removal, desktop UI, docs, client setup, maintenance, selection polish, and AI boundary contracts passed");
