@@ -67,8 +67,8 @@ FrisFrame is built from the same source for both desktop platforms.
 
 | Platform | Build | Output |
 | --- | --- | --- |
-| macOS | Apple Silicon | `FrisFrame-0.4.0-arm64.dmg` + ZIP |
-| Windows | x64 | `FrisFrame-0.4.0-x64.exe` |
+| macOS | Apple Silicon | `FrisFrame-0.5.0-arm64.dmg` + ZIP |
+| Windows | x64 | `FrisFrame-0.5.0-x64.exe` |
 
 GitHub Actions runs separate native jobs for **macOS · Apple Silicon** and **Windows · x64**. Successful development builds are uploaded as `FrisFrame-macOS-arm64` and `FrisFrame-Windows-x64`.
 
