@@ -57,14 +57,17 @@ REFERENCE_ORIENTATION_TOOLS = [
 _PREVIOUS_CALL_TOOL = base.call_tool
 
 
-def _image_coordinate(value, name):
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{name} 값이 숫자가 아닙니다.") from error
+def _bounded_json_number(value, name):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} 값은 JSON number여야 합니다.")
+    number = float(value)
     if not math.isfinite(number) or number < 0 or number > 1:
         raise ValueError(f"{name} 값은 0~1 사이여야 합니다.")
     return number
+
+
+def _image_coordinate(value, name):
+    return _bounded_json_number(value, name)
 
 
 def _boolean_override(args, name):
@@ -166,9 +169,9 @@ def _solve_orientation(args, blocking=None):
         blocking.get("spatialGuide") if isinstance(blocking.get("spatialGuide"), dict) else {}
     )
     solved_horizon = space.horizon_from_tilt(tilt_deg, focal, sensor_width, aspect)
-    horizon_tolerance = float(args.get("horizon_tolerance", 0.03))
-    if not math.isfinite(horizon_tolerance) or horizon_tolerance < 0 or horizon_tolerance > 1:
-        raise ValueError("horizon_tolerance은 0~1 사이여야 합니다.")
+    horizon_tolerance = 0.03 if "horizon_tolerance" not in args else _bounded_json_number(
+        args.get("horizon_tolerance"), "horizon_tolerance"
+    )
     horizon_residual = None if persisted_horizon is None else persisted_horizon - solved_horizon
 
     return {
