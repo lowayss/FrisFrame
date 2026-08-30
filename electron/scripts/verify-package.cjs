@@ -67,6 +67,17 @@ function parseToolJson(response, label) {
   }
 }
 
+function expectToolError(response, label, expectedText) {
+  if (response?.result?.isError !== true) {
+    throw new Error(`${label}가 차단되지 않았습니다: ${JSON.stringify(response)}`);
+  }
+  const text = String(response?.result?.content?.[0]?.text || "");
+  if (!text.includes(expectedText)) {
+    throw new Error(`${label} 오류가 예상과 다릅니다: ${text}`);
+  }
+  return text;
+}
+
 function seedReferenceProject(database) {
   const script = path.join(root, "tests", "seed-packaged-reference-project.py");
   const candidates = [process.env.PYTHON, "python3", "python"].filter(Boolean);
@@ -206,6 +217,12 @@ function verifyMcpExecutable(executable) {
     if (!fixture?.project_id || !fixture?.actor_id || Number(fixture?.revision) !== 1) {
       throw new Error(`패키지 MCP orientation fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
     }
+    if (!fixture?.horizon_guard?.project_id || !fixture?.horizon_guard?.actor_id || Number(fixture?.horizon_guard?.revision) < 2) {
+      throw new Error(`패키지 MCP Horizon guard fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
+    }
+    if (!fixture?.keyframed?.project_id || !fixture?.keyframed?.actor_id || Number(fixture?.keyframed?.camera_keyframes) < 1) {
+      throw new Error(`패키지 MCP camera-keyframe fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
+    }
 
     const beforeOrientation = runMcpRequest(executable, database, {
       jsonrpc: "2.0",
@@ -312,6 +329,152 @@ function verifyMcpExecutable(executable) {
         Math.abs(Number(resolvedAgainPayload?.projection_check?.residual_x)) > 1e-8 ||
         Math.abs(Number(resolvedAgainPayload?.projection_check?.residual_y)) > 1e-8) {
       throw new Error(`패키지 MCP orientation 적용값 재검증이 올바르지 않습니다: ${JSON.stringify(resolvedAgainPayload)}`);
+    }
+
+    const horizonFixture = fixture.horizon_guard;
+    const blockedHorizon = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 12,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: horizonFixture.project_id,
+          revision: horizonFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: horizonFixture.actor_id,
+          image_x: 0.5,
+          image_y: 0.12,
+        },
+      },
+    });
+    expectToolError(blockedHorizon, "패키지 MCP Horizon 충돌 orientation", "reference-horizon-conflict");
+
+    const horizonAfterBlocked = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 13,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: horizonFixture.project_id } },
+    });
+    const horizonAfterBlockedPayload = parseToolJson(horizonAfterBlocked, "패키지 MCP Horizon 차단 후 프로젝트 조회");
+    if (Number(horizonAfterBlockedPayload?.revision) !== horizonFixture.revision) {
+      throw new Error(`Horizon 충돌 차단이 revision을 변경했습니다: ${JSON.stringify(horizonAfterBlockedPayload)}`);
+    }
+
+    const horizonOverride = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 14,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: horizonFixture.project_id,
+          revision: horizonFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: horizonFixture.actor_id,
+          image_x: 0.5,
+          image_y: 0.12,
+          allow_horizon_mismatch: true,
+        },
+      },
+    });
+    const horizonOverridePayload = parseToolJson(horizonOverride, "패키지 MCP Horizon 충돌 명시적 override");
+    const horizonIssues = horizonOverridePayload?.validation?.issues || [];
+    if (Number(horizonOverridePayload?.revision) !== horizonFixture.revision + 1 ||
+        horizonOverridePayload?.reference_camera_orientation?.horizon_check?.consistent !== false ||
+        horizonOverridePayload?.validation?.status !== "review" ||
+        !horizonIssues.some((issue) => issue?.code === "horizon-mismatch")) {
+      throw new Error(`패키지 MCP Horizon override 결과가 올바르지 않습니다: ${JSON.stringify(horizonOverridePayload)}`);
+    }
+
+    const keyframedFixture = fixture.keyframed;
+    const blockedKeyframed = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 15,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: keyframedFixture.project_id,
+          revision: keyframedFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: keyframedFixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+        },
+      },
+    });
+    expectToolError(blockedKeyframed, "패키지 MCP camera-keyframe orientation", "camera-keyframes-present");
+
+    const keyframedAfterBlocked = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 16,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: keyframedFixture.project_id } },
+    });
+    const keyframedAfterBlockedPayload = parseToolJson(keyframedAfterBlocked, "패키지 MCP camera-keyframe 차단 후 프로젝트 조회");
+    if (Number(keyframedAfterBlockedPayload?.revision) !== keyframedFixture.revision) {
+      throw new Error(`camera-keyframe 차단이 revision을 변경했습니다: ${JSON.stringify(keyframedAfterBlockedPayload)}`);
+    }
+
+    const keyframedSolve = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 17,
+      method: "tools/call",
+      params: {
+        name: "solve_reference_camera_orientation",
+        arguments: {
+          project_id: keyframedFixture.project_id,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: keyframedFixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+        },
+      },
+    });
+    const keyframedSolvePayload = parseToolJson(keyframedSolve, "패키지 MCP camera-keyframe read-only solve");
+    if (Math.abs(Number(keyframedSolvePayload?.projection_check?.residual_x)) > 1e-8 ||
+        Math.abs(Number(keyframedSolvePayload?.projection_check?.residual_y)) > 1e-8) {
+      throw new Error(`camera-keyframe read-only solve 결과가 올바르지 않습니다: ${JSON.stringify(keyframedSolvePayload)}`);
+    }
+
+    const keyframedAfterSolve = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 18,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: keyframedFixture.project_id } },
+    });
+    const keyframedAfterSolvePayload = parseToolJson(keyframedAfterSolve, "패키지 MCP camera-keyframe solve 후 프로젝트 조회");
+    if (Number(keyframedAfterSolvePayload?.revision) !== keyframedFixture.revision) {
+      throw new Error(`camera-keyframe read-only solve가 revision을 변경했습니다: ${JSON.stringify(keyframedAfterSolvePayload)}`);
+    }
+
+    const keyframedOverride = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 19,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: keyframedFixture.project_id,
+          revision: keyframedFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: keyframedFixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+          allow_keyframed_base_camera: true,
+        },
+      },
+    });
+    const keyframedOverridePayload = parseToolJson(keyframedOverride, "패키지 MCP camera-keyframe 명시적 override");
+    if (Number(keyframedOverridePayload?.revision) !== keyframedFixture.revision + 1 ||
+        keyframedOverridePayload?.reference_camera_orientation?.application_policy !== "explicit-opt-in-camera-orientation") {
+      throw new Error(`패키지 MCP camera-keyframe override 결과가 올바르지 않습니다: ${JSON.stringify(keyframedOverridePayload)}`);
     }
 
     if (!fs.existsSync(database)) {
