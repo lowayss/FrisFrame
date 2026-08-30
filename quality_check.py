@@ -71,6 +71,7 @@ def main() -> None:
         "electron/helper-raycast-ux.js",
         "electron/preview-cache-ux.js",
         "electron/performance-ux.js",
+        "electron/scripts/smoke-package.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
