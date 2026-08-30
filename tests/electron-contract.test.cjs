@@ -110,6 +110,20 @@ assert.match(fileSaveBridge, /dialog\.showSaveDialog/);
 assert.match(fileSaveBridge, /senderOrigin\(event\) !== allowedOrigin/);
 assert.match(appJs, /window\.frisframeDesktop\.copyImage\(new Uint8Array\(await pngBlob\.arrayBuffer\(\)\)\)/);
 assert.match(appJs, /window\.frisframeDesktop\.saveFile/);
+
+assert.match(main, /function resolveMcpLaunch\(/,
+  "desktop must resolve the packaged MCP executable without renderer IPC");
+assert.match(main, /path\.join\("mcp", mcpName\)/,
+  "packaged MCP discovery must resolve the runtime/mcp executable path");
+assert.match(main, /mcp_desktop_entry\.py/,
+  "development MCP discovery must point at the same desktop database entrypoint");
+assert.match(main, /MCP 실행 경로 복사/,
+  "the desktop application menu must expose MCP executable discovery to users");
+assert.match(main, /clipboard\.writeText\(launch\.command\)/,
+  "MCP discovery must copy the exact command path from the trusted main process");
+assert.match(main, /app\.isPackaged && !fs\.existsSync\(launch\.command\)/,
+  "packaged MCP discovery must fail visibly if the bundled executable is missing");
+
 assert.match(main, /app\.on\("will-quit"/);
 assert.equal(/app\.on\("before-quit"[^]*killServerProcess/.test(main), false,
   "server must remain available while the renderer can still cancel quit");
@@ -146,4 +160,4 @@ assert.ok(server.includes("FRISFRAME_FFMPEG"));
 assert.equal(/https:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(server), false,
   "server CSP must not allow remote renderer assets");
 
-console.log("electron-contract: runtime, signing, security, navigation, permissions, offline assets, and persistent data path passed");
+console.log("electron-contract: runtime, signing, security, MCP discovery, navigation, permissions, offline assets, and persistent data path passed");
