@@ -30,6 +30,12 @@ def check_python_syntax() -> None:
         ROOT / "mcp_server.py",
         ROOT / "mcp_previs_server.py",
         ROOT / "mcp_desktop_entry.py",
+        ROOT / "reference_space_core.py",
+        ROOT / "reference_space_mcp.py",
+        ROOT / "reference_space_consistency_mcp.py",
+        ROOT / "reference_space_plan_mcp.py",
+        ROOT / "reference_space_orientation_mcp.py",
+        ROOT / "tests/seed-packaged-reference-project.py",
         ROOT / "add_license.py",
     ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -77,6 +83,9 @@ def main() -> None:
         "electron/performance-ux.js",
         "electron/scripts/smoke-package.cjs",
         "electron/scripts/verify-runtime-source-parity.cjs",
+        "electron/scripts/verify-package.cjs",
+        "electron/scripts/verify-orientation-revision.cjs",
+        "electron/scripts/build-python-runtime.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
@@ -89,6 +98,8 @@ def main() -> None:
         "tests/reference-batch-export.test.cjs",
         "tests/reference-batch-policy.test.cjs",
         "tests/reference-readiness.test.cjs",
+        "tests/reference-ghost-ui-contract.test.cjs",
+        "tests/reference-validation-ui.test.cjs",
         "tests/scene-blocking-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
@@ -127,6 +138,10 @@ def main() -> None:
 
     run("스토리보드 코어", [node, "--test", "tests/storyboard-core.test.cjs"])
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
+    run("Reference Space Python projection", [sys.executable, "tests/reference-space-projection.py"])
+    run("Reference Space MCP", [sys.executable, "tests/reference-space-mcp.py"])
+    run("Reference Space 원자 계획", [sys.executable, "tests/reference-space-plan-mcp.py"])
+    run("Reference Space 화면 방향", [sys.executable, "tests/reference-space-orientation-mcp.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
     run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
     run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
