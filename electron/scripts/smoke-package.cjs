@@ -174,6 +174,7 @@ async function readRendererState(socket) {
       videoLabel,
       cameraOperatorLabel,
       cameraOperatorReady: Boolean(window.FrisFrameCameraOperatorCore && window.FrisFrameCameraOperator),
+      cameraOperatorLiveTimeline: window.FrisFrameCameraOperator?.liveTimeline === true,
       referenceWorkflowReady: Boolean(window.FrisFrameReferenceWorkflowCore),
       debugConsoleVisible: Boolean(debug && getComputedStyle(debug).display !== "none"),
       bodyText: String(document.body?.innerText || "").slice(0, 2200),
@@ -201,6 +202,7 @@ async function waitForHealthyRenderer(socket, child, timeoutMs = 30000) {
           state.title === "FrisFrame" &&
           state.referenceWorkflowReady === true &&
           state.cameraOperatorReady === true &&
+          state.cameraOperatorLiveTimeline === true &&
           state.debugConsoleVisible === false &&
           Array.isArray(state.requiredMissing) && state.requiredMissing.length === 0 &&
           Array.isArray(state.workflowMissing) && state.workflowMissing.length === 0 &&
@@ -269,7 +271,7 @@ async function main() {
     const code = await waitForExit(child);
     if (code !== 0) throw new Error(`FrisFrame가 GUI smoke 종료 중 오류 코드를 반환했습니다: ${code}`);
     console.log(`FrisFrame 패키지 GUI smoke 통과: ${state.url}`);
-    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 · Camera Operator 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
+    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 · Camera Operator live timeline 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
   } catch (error) {
     try { socket?.close(); } catch { /* ignored */ }
     if (child.exitCode === null) child.kill();
