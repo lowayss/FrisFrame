@@ -213,6 +213,216 @@
     }
   }
 
+  function validateReferenceSpaceBlocking(blocking = {}, options = {}) {
+    const spatialCore = options.spatialCore;
+    if (!spatialCore
+      || typeof spatialCore.stageWorldSize !== "function"
+      || typeof spatialCore.stageNormalizedToWorld !== "function"
+      || typeof spatialCore.frameFractionForDistance !== "function"
+      || typeof spatialCore.horizonFromTilt !== "function") {
+      throw new Error("FrisFrameSpatialScaleCore validation functions are required.");
+    }
+    const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const aspectMap = { "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "1:1": 1, "3:4": 3 / 4 };
+    const aspect = aspectMap[blocking.aspect] || 16 / 9;
+    const stage = spatialCore.stageWorldSize({ aspect });
+    const camera = blocking.camera || {};
+    const sensorWidthMm = Math.max(1, finite(blocking.cameraSetup?.sensorWidthMm, 36));
+    const focalMm = Math.max(1, finite(camera.focal, 50));
+    const positionToleranceM = Math.max(0.001, finite(options.positionToleranceM, 0.05));
+    const dimensionToleranceRatio = Math.max(0, finite(options.dimensionToleranceRatio, 0.02));
+    const frameTolerance = Math.max(0, finite(options.frameTolerance, 0.03));
+    const guide = blocking.spatialGuide && typeof blocking.spatialGuide === "object" ? blocking.spatialGuide : {};
+    const items = new Map((blocking.items || []).map((item) => [String(item?.id || ""), item]));
+    const issues = [];
+    const anchorsChecked = [];
+    const projectionChecks = [];
+    let horizonCheck = null;
+    const worldPoint = (item) => spatialCore.stageNormalizedToWorld(
+      { x: finite(item?.x, 0.5), y: finite(item?.y, 0.5) },
+      { width: stage.width, depth: stage.depth },
+    );
+    const dimensionsFor = (item, anchor) => anchor?.dimensionsM || item?.referenceDimensionsM || (
+      item?.type === "actor" && typeof spatialCore.actorDimensions === "function"
+        ? spatialCore.actorDimensions({ size: item.size, scaleX: item.scaleX, scaleY: item.scaleY, scaleZ: item.scaleZ })
+        : null
+    );
+    const distanceTo = (item, dimensions) => {
+      const targetPoint = worldPoint(item);
+      const cameraPoint = spatialCore.stageNormalizedToWorld(
+        { x: finite(camera.x, 0.5), y: finite(camera.y, 0.5) },
+        { width: stage.width, depth: stage.depth },
+      );
+      const bottom = finite(item?.verticalOffset ?? item?.mountedHeight, 0);
+      const centerHeight = bottom + finite(dimensions?.height, item?.type === "actor" ? 1.78 : 1) / 2;
+      return Math.hypot(targetPoint.x - cameraPoint.x, targetPoint.z - cameraPoint.z, centerHeight - finite(camera.height, 1.6));
+    };
+    const relativeError = (actual, expected) => Math.abs(finite(actual) - finite(expected)) / Math.max(Math.abs(finite(expected)), 1e-9);
+
+    for (const anchor of guide.anchors || []) {
+      if (!anchor || typeof anchor !== "object") continue;
+      const id = String(anchor.id || "");
+      const kind = String(anchor.kind || "");
+      if (kind === "horizon") {
+        if (Number.isFinite(Number(anchor.imageY))) {
+          const observed = Number(anchor.imageY);
+          const predicted = spatialCore.horizonFromTilt({ tiltDeg: finite(camera.tiltDeg, 0), focalMm, sensorWidthMm, aspect });
+          horizonCheck = { observed, predicted, residual: observed - predicted };
+          if (Math.abs(horizonCheck.residual) > frameTolerance) issues.push({ code: "horizon-mismatch", anchorId: id, ...horizonCheck });
+        }
+        continue;
+      }
+      const itemId = String(anchor.attachedItemId || id);
+      const item = items.get(itemId);
+      if (!item) {
+        issues.push({ code: "anchor-item-missing", anchorId: id, itemId });
+        continue;
+      }
+      const point = worldPoint(item);
+      const dimensions = dimensionsFor(item, anchor);
+      if (Number.isFinite(Number(anchor.worldX)) && Math.abs(point.x - Number(anchor.worldX)) > positionToleranceM) {
+        issues.push({ code: "anchor-x-mismatch", anchorId: id, actualM: point.x, expectedM: Number(anchor.worldX) });
+      }
+      if (Number.isFinite(Number(anchor.worldZ)) && Math.abs(point.z - Number(anchor.worldZ)) > positionToleranceM) {
+        issues.push({ code: "anchor-z-mismatch", anchorId: id, actualM: point.z, expectedM: Number(anchor.worldZ) });
+      }
+      if (anchor.dimensionsM && item.referenceDimensionsM) {
+        for (const key of ["width", "height", "depth"]) {
+          if (relativeError(item.referenceDimensionsM[key], anchor.dimensionsM[key]) > dimensionToleranceRatio) {
+            issues.push({ code: "anchor-dimension-mismatch", anchorId: id, dimension: key });
+          }
+        }
+      }
+      if (kind === "scale-height" || kind === "scale-width") {
+        const axis = kind === "scale-width" ? "width" : "height";
+        const observed = Number(axis === "width" ? anchor.imageWidth : anchor.imageHeight);
+        const physicalSizeM = Number(dimensions?.[axis]);
+        if (Number.isFinite(observed) && observed > 0 && Number.isFinite(physicalSizeM) && physicalSizeM > 0) {
+          const distanceM = distanceTo(item, dimensions);
+          const predicted = spatialCore.frameFractionForDistance({ axis, subjectSizeM: physicalSizeM, distanceM, focalMm, sensorWidthMm, aspect });
+          const entry = { id, itemId, axis, observed, predicted, residual: observed - predicted, distanceM };
+          projectionChecks.push(entry);
+          if (Math.abs(entry.residual) > frameTolerance) issues.push({ code: "scale-anchor-frame-mismatch", ...entry });
+        } else {
+          issues.push({ code: "scale-anchor-observation-incomplete", anchorId: id, itemId });
+        }
+      }
+      anchorsChecked.push({ id, itemId, kind, worldX: point.x, worldZ: point.z });
+    }
+    return {
+      schema: "frisframe-reference-space-validation",
+      version: 1,
+      status: issues.length ? "review" : "ready",
+      stage,
+      camera: {
+        focalMm,
+        tiltDeg: finite(camera.tiltDeg, 0),
+        keyframes: (blocking.motion?.keyframes || []).filter((key) => key?.source === "camera").length,
+      },
+      anchorsChecked,
+      projectionChecks,
+      horizonCheck,
+      issues,
+    };
+  }
+
+  function installReferenceValidationUi(target) {
+    const documentObject = target?.document;
+    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
+    if (documentObject.querySelector("#referenceSpaceValidationPanel")) return true;
+    const leftPanel = documentObject.querySelector(".left-panel");
+    const spatialCore = target.FrisFrameSpatialScaleCore;
+    if (!leftPanel || !spatialCore) return false;
+    const issueLabels = {
+      "anchor-item-missing": "앵커에 연결된 대상을 찾을 수 없음",
+      "anchor-x-mismatch": "앵커 X 위치 불일치",
+      "anchor-z-mismatch": "앵커 Z 위치 불일치",
+      "anchor-dimension-mismatch": "실측 치수 불일치",
+      "scale-anchor-frame-mismatch": "Scale Anchor 화면 비율 불일치",
+      "scale-anchor-observation-incomplete": "Scale Anchor 측정 정보 부족",
+      "horizon-mismatch": "수평선과 카메라 Tilt 불일치",
+    };
+    const style = documentObject.createElement("style");
+    style.dataset.frisframeReferenceValidation = "1";
+    style.textContent = `
+      .reference-space-validation-panel .reference-validation-actions { display:grid; grid-template-columns:1fr auto; gap:6px; margin-top:7px; }
+      .reference-space-validation-panel .reference-validation-badge { display:inline-flex; align-items:center; justify-content:center; min-width:48px; padding:3px 6px; border:1px solid currentColor; border-radius:999px; font-size:8px; font-weight:700; letter-spacing:.05em; }
+      .reference-space-validation-panel .reference-validation-badge[data-status="ready"] { color:#62c487; }
+      .reference-space-validation-panel .reference-validation-badge[data-status="review"] { color:#e0a25a; }
+      .reference-space-validation-panel .reference-validation-summary { display:block; margin-top:7px; color:#9aa6b1; font-size:9px; line-height:1.45; }
+      .reference-space-validation-panel .reference-validation-list { margin:7px 0 0; padding-left:15px; color:#d8dde2; font-size:8px; line-height:1.45; }
+      .reference-space-validation-panel .reference-validation-empty { color:#8f9aa5; }
+    `;
+    documentObject.head?.appendChild(style);
+    const panel = documentObject.createElement("details");
+    panel.id = "referenceSpaceValidationPanel";
+    panel.className = "panel-section compact-details mobile-collapsible reference-space-validation-panel";
+    panel.dataset.mobileCollapsible = "";
+    panel.dataset.desktopDefault = "closed";
+    panel.innerHTML = `
+      <summary>Reference Space</summary>
+      <div class="reference-validation-actions">
+        <button id="referenceSpaceValidateBtn" type="button" class="text-btn"><span>현재 컷 검증</span></button>
+        <span id="referenceSpaceValidationBadge" class="reference-validation-badge" data-status="review">CHECK</span>
+      </div>
+      <small id="referenceSpaceValidationSummary" class="reference-validation-summary">Scale Anchor, 실측 치수, 카메라 원근을 현재 컷과 비교합니다.</small>
+      <ul id="referenceSpaceValidationList" class="reference-validation-list"><li class="reference-validation-empty">검증 전</li></ul>
+    `;
+    const anchorPanel = documentObject.querySelector("#referenceGhostPanel") || leftPanel.querySelector("details");
+    if (anchorPanel?.insertAdjacentElement) anchorPanel.insertAdjacentElement("afterend", panel);
+    else leftPanel.insertBefore(panel, leftPanel.firstChild || null);
+    const button = panel.querySelector("#referenceSpaceValidateBtn");
+    const badge = panel.querySelector("#referenceSpaceValidationBadge");
+    const summary = panel.querySelector("#referenceSpaceValidationSummary");
+    const list = panel.querySelector("#referenceSpaceValidationList");
+    const render = () => {
+      const cut = typeof target.currentCut === "function" ? target.currentCut() : null;
+      const blocking = cut?.blocking;
+      if (!blocking) {
+        badge.dataset.status = "review";
+        badge.textContent = "N/A";
+        summary.textContent = "현재 블로킹 컷을 찾을 수 없습니다.";
+        list.innerHTML = '<li class="reference-validation-empty">블로킹 컷을 연 뒤 다시 검증하세요.</li>';
+        return null;
+      }
+      try {
+        const result = validateReferenceSpaceBlocking(blocking, { spatialCore });
+        badge.dataset.status = result.status;
+        badge.textContent = result.status.toUpperCase();
+        summary.textContent = [
+          `앵커 ${result.anchorsChecked.length}`,
+          `Scale ${result.projectionChecks.length}`,
+          `Horizon ${result.horizonCheck ? "1" : "0"}`,
+          `카메라 ${result.camera.focalMm}mm / ${result.camera.tiltDeg.toFixed(1)}°`,
+          result.camera.keyframes ? `카메라 키 ${result.camera.keyframes}` : "카메라 키 없음",
+        ].join(" · ");
+        list.innerHTML = "";
+        if (!result.issues.length) {
+          const item = documentObject.createElement("li");
+          item.className = "reference-validation-empty";
+          item.textContent = "현재 저장된 Reference Space 기준과 일치합니다.";
+          list.appendChild(item);
+        } else {
+          result.issues.slice(0, 10).forEach((issue) => {
+            const item = documentObject.createElement("li");
+            item.textContent = issueLabels[issue.code] || issue.code;
+            list.appendChild(item);
+          });
+        }
+        return result;
+      } catch (error) {
+        badge.dataset.status = "review";
+        badge.textContent = "ERROR";
+        summary.textContent = error?.message || "Reference Space 검증에 실패했습니다.";
+        list.innerHTML = '<li class="reference-validation-empty">검증 데이터를 확인하세요.</li>';
+        return null;
+      }
+    };
+    button?.addEventListener("click", render);
+    panel.addEventListener("toggle", () => { if (panel.open) render(); });
+    return true;
+  }
+
   function installReferenceGhostUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -424,23 +634,6 @@
     return true;
   }
 
-  function installReferenceValidationUi(target) {
-    const documentObject = target?.document;
-    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
-    if (target.FrisFrameReferenceValidationUi?.install) {
-      return target.FrisFrameReferenceValidationUi.install(target);
-    }
-    let script = documentObject.querySelector('script[data-frisframe-reference-validation-ui="1"]');
-    if (script) return true;
-    script = documentObject.createElement("script");
-    script.src = "reference-validation-ui.js";
-    script.defer = true;
-    script.dataset.frisframeReferenceValidationUi = "1";
-    script.addEventListener("load", () => target.FrisFrameReferenceValidationUi?.install?.(target), { once: true });
-    documentObject.head?.appendChild(script);
-    return true;
-  }
-
   function installBatchReferenceExportUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -484,6 +677,7 @@
     installBatchReferenceExportUi,
     installReferenceGhostUi,
     installReferenceValidationUi,
+    validateReferenceSpaceBlocking,
     partitionReferenceBatchByReadiness,
     referenceEntryKey,
     safeFileSlug,
