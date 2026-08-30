@@ -72,15 +72,33 @@ assert.equal(ready.issues.length, 0);
 assert.equal(ready.projectionChecks.length, 1);
 assert.ok(ready.horizonCheck);
 
+const overlayRect = { x: 100, y: 50, width: 960, height: 540 };
+const ghostReady = workflow.buildReferenceGhostObservationModel(blocking, { spatialCore: spatial, overlayRect });
+assert.equal(ghostReady.status, "ready");
+assert.equal(ghostReady.scales.length, 1);
+assert.equal(ghostReady.horizons.length, 1);
+assert.equal(ghostReady.legend.observed, "reference");
+assert.equal(ghostReady.legend.predicted, "current-camera");
+assert.ok(Math.abs(ghostReady.scales[0].center.x - 580) < 1e-9);
+assert.ok(Math.abs(ghostReady.scales[0].center.y - 320) < 1e-9);
+assert.ok(Math.abs(ghostReady.scales[0].observedLengthPx - observedHeight * overlayRect.height) < 1e-9);
+assert.ok(Math.abs(ghostReady.scales[0].predictedLengthPx - ghostReady.scales[0].observedLengthPx) < 1e-9);
+assert.ok(Math.abs(ghostReady.horizons[0].observedYPx - (overlayRect.y + horizonY * overlayRect.height)) < 1e-9);
+assert.ok(Math.abs(ghostReady.horizons[0].predictedYPx - ghostReady.horizons[0].observedYPx) < 1e-9);
+
 const badProjection = structuredClone(blocking);
 badProjection.spatialGuide.anchors[0].imageHeight += 0.1;
 const reviewProjection = workflow.validateReferenceSpaceBlocking(badProjection, { spatialCore: spatial });
 assert.equal(reviewProjection.status, "review");
 assert.ok(reviewProjection.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
+const ghostReview = workflow.buildReferenceGhostObservationModel(badProjection, { spatialCore: spatial, overlayRect });
+assert.equal(ghostReview.status, "review");
+assert.ok(Math.abs(ghostReview.scales[0].observedLengthPx - ghostReview.scales[0].predictedLengthPx) > 1);
+assert.ok(ghostReview.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
 
 const badPosition = structuredClone(blocking);
 badPosition.items[0].x += 0.05;
 const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
 assert.ok(reviewPosition.issues.some((issue) => issue.code === "anchor-x-mismatch"));
 
-console.log("reference-validation-ui: inlined anchor, projection, and horizon validation checks passed");
+console.log("reference-validation-ui: anchor validation plus observed/current Ghost overlay geometry passed");
