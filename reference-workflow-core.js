@@ -219,7 +219,8 @@
       || typeof spatialCore.stageWorldSize !== "function"
       || typeof spatialCore.stageNormalizedToWorld !== "function"
       || typeof spatialCore.frameFractionForDistance !== "function"
-      || typeof spatialCore.horizonFromTilt !== "function") {
+      || typeof spatialCore.horizonFromTilt !== "function"
+      || typeof spatialCore.projectWorldPointToFrame !== "function") {
       throw new Error("FrisFrameSpatialScaleCore validation functions are required.");
     }
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -237,11 +238,17 @@
     const issues = [];
     const anchorsChecked = [];
     const projectionChecks = [];
+    const screenPositionChecks = [];
     let horizonCheck = null;
     const worldPoint = (item) => spatialCore.stageNormalizedToWorld(
       { x: finite(item?.x, 0.5), y: finite(item?.y, 0.5) },
       { width: stage.width, depth: stage.depth },
     );
+    const cameraGround = spatialCore.stageNormalizedToWorld(
+      { x: finite(camera.x, 0.5), y: finite(camera.y, 0.5) },
+      { width: stage.width, depth: stage.depth },
+    );
+    const cameraPosition = { x: cameraGround.x, y: finite(camera.height, 1.6), z: cameraGround.z };
     const dimensionsFor = (item, anchor) => anchor?.dimensionsM || item?.referenceDimensionsM || (
       item?.type === "actor" && typeof spatialCore.actorDimensions === "function"
         ? spatialCore.actorDimensions({ size: item.size, scaleX: item.scaleX, scaleY: item.scaleY, scaleZ: item.scaleZ })
@@ -249,13 +256,9 @@
     );
     const distanceTo = (item, dimensions) => {
       const targetPoint = worldPoint(item);
-      const cameraPoint = spatialCore.stageNormalizedToWorld(
-        { x: finite(camera.x, 0.5), y: finite(camera.y, 0.5) },
-        { width: stage.width, depth: stage.depth },
-      );
       const bottom = finite(item?.verticalOffset ?? item?.mountedHeight, 0);
       const centerHeight = bottom + finite(dimensions?.height, item?.type === "actor" ? 1.78 : 1) / 2;
-      return Math.hypot(targetPoint.x - cameraPoint.x, targetPoint.z - cameraPoint.z, centerHeight - finite(camera.height, 1.6));
+      return Math.hypot(targetPoint.x - cameraPosition.x, targetPoint.z - cameraPosition.z, centerHeight - cameraPosition.y);
     };
     const relativeError = (actual, expected) => Math.abs(finite(actual) - finite(expected)) / Math.max(Math.abs(finite(expected)), 1e-9);
 
@@ -306,6 +309,37 @@
         } else {
           issues.push({ code: "scale-anchor-observation-incomplete", anchorId: id, itemId });
         }
+
+        const observedX = Number(anchor.imageX);
+        const observedY = Number(anchor.imageY);
+        if (Number.isFinite(observedX) && Number.isFinite(observedY)) {
+          const bottom = finite(item.verticalOffset ?? item.mountedHeight, 0);
+          const centerHeight = bottom + finite(dimensions?.height, item.type === "actor" ? 1.78 : 1) / 2;
+          const screen = spatialCore.projectWorldPointToFrame({
+            cameraPosition,
+            worldPoint: { x: point.x, y: centerHeight, z: point.z },
+            panDeg: finite(camera.panDeg, 180),
+            tiltDeg: finite(camera.tiltDeg, 0),
+            focalMm,
+            sensorWidthMm,
+            aspect,
+          });
+          const predictedX = Number.isFinite(Number(screen.frameX)) ? Number(screen.frameX) : null;
+          const predictedY = Number.isFinite(Number(screen.frameY)) ? Number(screen.frameY) : null;
+          screenPositionChecks.push({
+            anchorId: id,
+            itemId,
+            observedX,
+            observedY,
+            predictedX,
+            predictedY,
+            residualX: predictedX == null ? null : observedX - predictedX,
+            residualY: predictedY == null ? null : observedY - predictedY,
+            depthM: Number.isFinite(Number(screen.depthM)) ? Number(screen.depthM) : null,
+            inFront: Boolean(screen.inFront),
+            inFrame: Boolean(screen.inFrame),
+          });
+        }
       }
       anchorsChecked.push({ id, itemId, kind, worldX: point.x, worldZ: point.z });
     }
@@ -321,6 +355,8 @@
       },
       anchorsChecked,
       projectionChecks,
+      screenPositionChecks,
+      screenPositionPolicy: "diagnostic-only-no-readiness-impact",
       horizonCheck,
       issues,
     };
@@ -538,6 +574,7 @@
         summary.textContent = [
           `앵커 ${result.anchorsChecked.length}`,
           `Scale ${result.projectionChecks.length}`,
+          `XY ${result.screenPositionChecks.length}`,
           `Horizon ${result.horizonCheck ? "1" : "0"}`,
           `카메라 ${result.camera.focalMm}mm / ${result.camera.tiltDeg.toFixed(1)}°`,
           result.camera.keyframes ? `카메라 키 ${result.camera.keyframes}` : "카메라 키 없음",
