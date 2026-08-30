@@ -55,6 +55,51 @@ function runMcpRequest(executable, database, request) {
   return response;
 }
 
+function parseToolJson(response, label) {
+  if (response?.result?.isError !== false) {
+    throw new Error(`${label} 호출 실패: ${JSON.stringify(response)}`);
+  }
+  const text = response?.result?.content?.[0]?.text;
+  try {
+    return JSON.parse(text || "null");
+  } catch (error) {
+    throw new Error(`${label} 결과가 JSON이 아닙니다: ${text || ""}\n${error.message}`);
+  }
+}
+
+function seedReferenceProject(database) {
+  const script = path.join(root, "tests", "seed-packaged-reference-project.py");
+  const candidates = [process.env.PYTHON, "python3", "python"].filter(Boolean);
+  let lastFailure = null;
+  for (const python of candidates) {
+    const result = spawnSync(python, [script], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PREVIS_DB_PATH: database,
+        FRISFRAME_MCP_OWNER_LICENSE_HASH: "local",
+        PYTHONUNBUFFERED: "1",
+      },
+      timeout: 10000,
+      windowsHide: true,
+    });
+    if (!result.error && result.status === 0) {
+      const lines = String(result.stdout || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      try {
+        return JSON.parse(lines.at(-1) || "null");
+      } catch (error) {
+        throw new Error(`패키지 MCP fixture 결과가 JSON이 아닙니다: ${result.stdout || ""}\n${error.message}`);
+      }
+    }
+    lastFailure = result.error || new Error(result.stderr || result.stdout || `${python} exited ${result.status}`);
+  }
+  throw new Error(`패키지 MCP fixture Python 실행 실패: ${lastFailure?.message || "unknown error"}`);
+}
+
 function verifyMcpExecutable(executable) {
   const smokeDir = fs.mkdtempSync(path.join(os.tmpdir(), "frisframe-mcp-verify-"));
   const database = path.join(smokeDir, "frisframe.db");
@@ -108,18 +153,9 @@ function verifyMcpExecutable(executable) {
       method: "tools/call",
       params: { name: "list_projects", arguments: {} },
     });
-    if (projectList?.result?.isError !== false) {
-      throw new Error(`패키지 MCP list_projects 호출 실패: ${JSON.stringify(projectList)}`);
-    }
-    const listText = projectList?.result?.content?.[0]?.text;
-    let parsedList;
-    try {
-      parsedList = JSON.parse(listText || "null");
-    } catch (error) {
-      throw new Error(`패키지 MCP list_projects 결과가 JSON이 아닙니다: ${listText}\n${error.message}`);
-    }
+    const parsedList = parseToolJson(projectList, "패키지 MCP list_projects");
     if (!Array.isArray(parsedList) || parsedList.length !== 0) {
-      throw new Error(`격리된 MCP DB의 초기 프로젝트 목록이 비어 있지 않습니다: ${listText}`);
+      throw new Error(`격리된 MCP DB의 초기 프로젝트 목록이 비어 있지 않습니다: ${JSON.stringify(parsedList)}`);
     }
 
     const frameFraction = 1.78 * 50 / (10 * (36 / (16 / 9)));
@@ -138,15 +174,7 @@ function verifyMcpExecutable(executable) {
         },
       },
     });
-    if (calibrated?.result?.isError !== false) {
-      throw new Error(`패키지 MCP Reference Space 보정 호출 실패: ${JSON.stringify(calibrated)}`);
-    }
-    let calibratedPayload;
-    try {
-      calibratedPayload = JSON.parse(calibrated?.result?.content?.[0]?.text || "null");
-    } catch (error) {
-      throw new Error(`패키지 MCP Reference Space 결과가 JSON이 아닙니다: ${error.message}`);
-    }
+    const calibratedPayload = parseToolJson(calibrated, "패키지 MCP Reference Space 보정");
     if (Math.abs(Number(calibratedPayload?.distance_m) - 10) > 1e-6) {
       throw new Error(`패키지 MCP Reference Space 거리 보정이 올바르지 않습니다: ${JSON.stringify(calibratedPayload)}`);
     }
@@ -169,17 +197,121 @@ function verifyMcpExecutable(executable) {
         },
       },
     });
-    if (consistency?.result?.isError !== false) {
-      throw new Error(`패키지 MCP Scale Anchor 일관성 호출 실패: ${JSON.stringify(consistency)}`);
-    }
-    let consistencyPayload;
-    try {
-      consistencyPayload = JSON.parse(consistency?.result?.content?.[0]?.text || "null");
-    } catch (error) {
-      throw new Error(`패키지 MCP Scale Anchor 일관성 결과가 JSON이 아닙니다: ${error.message}`);
-    }
+    const consistencyPayload = parseToolJson(consistency, "패키지 MCP Scale Anchor 일관성");
     if (consistencyPayload?.consistent !== true || Math.abs(Number(consistencyPayload?.diagnostic_median_focal_mm) - 50) > 1e-6) {
       throw new Error(`패키지 MCP Scale Anchor 일관성 결과가 올바르지 않습니다: ${JSON.stringify(consistencyPayload)}`);
+    }
+
+    const fixture = seedReferenceProject(database);
+    if (!fixture?.project_id || !fixture?.actor_id || Number(fixture?.revision) !== 1) {
+      throw new Error(`패키지 MCP orientation fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
+    }
+
+    const beforeOrientation = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: fixture.project_id } },
+    });
+    const beforePayload = parseToolJson(beforeOrientation, "패키지 MCP orientation 전 프로젝트 조회");
+    if (Number(beforePayload?.revision) !== fixture.revision) {
+      throw new Error(`orientation 전 revision이 올바르지 않습니다: ${JSON.stringify(beforePayload)}`);
+    }
+
+    const desiredX = 0.62;
+    const desiredY = 0.42;
+    const solved = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {
+        name: "solve_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: fixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+        },
+      },
+    });
+    const solvedPayload = parseToolJson(solved, "패키지 MCP Reference Space orientation solve");
+    if (solvedPayload?.application_policy !== "explicit-opt-in-camera-orientation" ||
+        Math.abs(Number(solvedPayload?.projection_check?.residual_x)) > 1e-8 ||
+        Math.abs(Number(solvedPayload?.projection_check?.residual_y)) > 1e-8 ||
+        solvedPayload?.projection_check?.in_front !== true) {
+      throw new Error(`패키지 MCP orientation solve 결과가 올바르지 않습니다: ${JSON.stringify(solvedPayload)}`);
+    }
+
+    const afterSolve = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: fixture.project_id } },
+    });
+    const afterSolvePayload = parseToolJson(afterSolve, "패키지 MCP orientation solve 후 프로젝트 조회");
+    if (Number(afterSolvePayload?.revision) !== fixture.revision) {
+      throw new Error(`read-only orientation solve가 revision을 변경했습니다: ${JSON.stringify(afterSolvePayload)}`);
+    }
+
+    const applied = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          revision: fixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: fixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+        },
+      },
+    });
+    const appliedPayload = parseToolJson(applied, "패키지 MCP Reference Space orientation apply");
+    if (Number(appliedPayload?.revision) !== fixture.revision + 1 ||
+        appliedPayload?.reference_camera_orientation?.application_policy !== "explicit-opt-in-camera-orientation" ||
+        appliedPayload?.validation?.status !== "ready") {
+      throw new Error(`패키지 MCP orientation apply 결과가 올바르지 않습니다: ${JSON.stringify(appliedPayload)}`);
+    }
+
+    const afterApply = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 10,
+      method: "tools/call",
+      params: { name: "get_project", arguments: { project_id: fixture.project_id } },
+    });
+    const afterApplyPayload = parseToolJson(afterApply, "패키지 MCP orientation apply 후 프로젝트 조회");
+    if (Number(afterApplyPayload?.revision) !== fixture.revision + 1) {
+      throw new Error(`orientation apply revision이 저장되지 않았습니다: ${JSON.stringify(afterApplyPayload)}`);
+    }
+
+    const resolvedAgain = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: {
+        name: "solve_reference_camera_orientation",
+        arguments: {
+          project_id: fixture.project_id,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: fixture.actor_id,
+          image_x: desiredX,
+          image_y: desiredY,
+        },
+      },
+    });
+    const resolvedAgainPayload = parseToolJson(resolvedAgain, "패키지 MCP orientation 재검증");
+    if (Math.abs(Number(resolvedAgainPayload?.solved?.pan_delta_deg)) > 1e-8 ||
+        Math.abs(Number(resolvedAgainPayload?.solved?.tilt_delta_deg)) > 1e-8 ||
+        Math.abs(Number(resolvedAgainPayload?.projection_check?.residual_x)) > 1e-8 ||
+        Math.abs(Number(resolvedAgainPayload?.projection_check?.residual_y)) > 1e-8) {
+      throw new Error(`패키지 MCP orientation 적용값 재검증이 올바르지 않습니다: ${JSON.stringify(resolvedAgainPayload)}`);
     }
 
     if (!fs.existsSync(database)) {
