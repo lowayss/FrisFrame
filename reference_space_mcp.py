@@ -399,6 +399,8 @@ def _persisted_scale_anchors(guide):
                 "frame_fraction": observed,
                 "target_id": target_id,
                 "dimensions_m": dimensions,
+                "image_x": anchor.get("imageX"),
+                "image_y": anchor.get("imageY"),
             })
     return observations
 
@@ -448,7 +450,14 @@ def _validate(args):
 
     defaults = _camera_defaults(blocking)
     camera = blocking.get("camera") or {}
+    stage_width, stage_depth = space.stage_dimensions(blocking.get("aspect", "16:9"))
+    camera_position = {
+        "x": (float(camera.get("x", 0.5)) - 0.5) * stage_width,
+        "y": float(camera.get("height", 1.6)),
+        "z": (float(camera.get("y", 0.5)) - 0.5) * stage_depth,
+    }
     projection = []
+    screen_positions = []
     scale_observations = list(args.get("scale_anchors") or []) or _persisted_scale_anchors(guide)
     for index, obs in enumerate(scale_observations):
         if not isinstance(obs, dict):
@@ -490,6 +499,41 @@ def _validate(args):
         if abs(entry["residual"]) > frame_tol:
             issues.append({"code": "scale-anchor-frame-mismatch", **entry, "tolerance": frame_tol})
 
+        observed_x = obs.get("image_x")
+        observed_y = obs.get("image_y")
+        if observed_x is None or observed_y is None:
+            continue
+        item = items.get(target_id)
+        if not item:
+            continue
+        world_x, world_z = _world_xy(blocking, item)
+        screen = space.project_world_point_to_frame(
+            camera_position,
+            {"x": world_x, "y": _target_center_height(item, dimensions), "z": world_z},
+            pan_deg=camera.get("panDeg", 180),
+            tilt_deg=camera.get("tiltDeg", 0),
+            focal_mm=defaults["focal_mm"],
+            sensor_width_mm=defaults["sensor_width_mm"],
+            aspect=defaults["aspect"],
+        )
+        observed_x = float(observed_x)
+        observed_y = float(observed_y)
+        predicted_x = screen.get("frame_x")
+        predicted_y = screen.get("frame_y")
+        screen_positions.append({
+            "anchor_id": entry["id"],
+            "item_id": target_id,
+            "observed_x": observed_x,
+            "observed_y": observed_y,
+            "predicted_x": predicted_x,
+            "predicted_y": predicted_y,
+            "residual_x": None if predicted_x is None else observed_x - predicted_x,
+            "residual_y": None if predicted_y is None else observed_y - predicted_y,
+            "depth_m": screen.get("depth_m"),
+            "in_front": bool(screen.get("in_front")),
+            "in_frame": bool(screen.get("in_frame")),
+        })
+
     horizon = None
     observed_horizon = args.get("horizon_y")
     if observed_horizon is None:
@@ -507,6 +551,8 @@ def _validate(args):
         "status": "ready" if not issues else "review",
         "anchors_checked": checked,
         "projection_checks": projection,
+        "screen_position_checks": screen_positions,
+        "screen_position_policy": "diagnostic-only-no-readiness-impact",
         "horizon_check": horizon,
         "camera_keyframes": len(_camera_keyframes(blocking)),
         "issues": issues,
