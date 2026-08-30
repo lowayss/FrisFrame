@@ -1,0 +1,50 @@
+name: One-shot responsive header and help polish
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.event.head_commit.message == 'Run one-shot responsive header polish'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply responsive header and help polish
+        run: python3 tools/one_shot_header_help_polish.py
+
+      - name: Verify history safety contract
+        run: node tests/history-safety-contract.test.cjs
+
+      - name: Verify full project contracts
+        run: python3 quality_check.py
+
+      - name: Verify patch whitespace
+        run: git diff --check
+
+      - name: Commit polish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add electron/history-safety-ux.js tests/history-safety-contract.test.cjs
+          git commit -m "Polish responsive header and 3D safety help"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
