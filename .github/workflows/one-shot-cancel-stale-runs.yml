@@ -1,0 +1,36 @@
+name: Cancel stale one-shot Windows runs
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    if: github.event.head_commit.message == 'Cancel stale one-shot Windows runs'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel obsolete one-shot runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for run_id in 33284063171 33284278268; do
+            status="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${REPO}/actions/runs/${run_id}" | python -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
+            if [[ "${status}" == "queued" || "${status}" == "in_progress" || "${status}" == "waiting" || "${status}" == "pending" ]]; then
+              curl -fsSL -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${REPO}/actions/runs/${run_id}/cancel" >/dev/null
+              echo "cancel requested: ${run_id}"
+            else
+              echo "already terminal: ${run_id} (${status})"
+            fi
+          done
