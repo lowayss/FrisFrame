@@ -72,6 +72,7 @@ def main() -> None:
         "electron/preview-cache-ux.js",
         "electron/performance-ux.js",
         "electron/scripts/smoke-package.cjs",
+        "electron/scripts/verify-runtime-source-parity.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
@@ -110,6 +111,7 @@ def main() -> None:
         "tests/mcp-desktop-runtime-contract.test.cjs",
         "tests/mcp-first-product-boundary.test.cjs",
         "tests/mcp-live-sync-contract.test.cjs",
+        "tests/retired-spatial-runtime-contract.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
