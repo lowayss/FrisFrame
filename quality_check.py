@@ -34,6 +34,7 @@ def check_python_syntax() -> None:
         ROOT / "reference_space_mcp.py",
         ROOT / "reference_space_consistency_mcp.py",
         ROOT / "reference_space_plan_mcp.py",
+        ROOT / "reference_space_orientation_mcp.py",
         ROOT / "add_license.py",
     ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -138,6 +139,7 @@ def main() -> None:
     run("Reference Space Python projection", [sys.executable, "tests/reference-space-projection.py"])
     run("Reference Space MCP", [sys.executable, "tests/reference-space-mcp.py"])
     run("Reference Space 원자 계획", [sys.executable, "tests/reference-space-plan-mcp.py"])
+    run("Reference Space 화면 방향", [sys.executable, "tests/reference-space-orientation-mcp.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
     run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
     run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
