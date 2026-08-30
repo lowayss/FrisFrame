@@ -140,6 +140,25 @@ def main():
         assert after_stale["revision"] == before_stale["revision"] == current_revision
         assert after_stale_camera == before_stale_camera, "stale orientation apply must not mutate camera state"
 
+        before_bad_boolean_camera = dict(first_blocking(project_id)["camera"])
+        try:
+            orientation.call_tool("apply_reference_camera_orientation", {
+                "project_id": project_id,
+                "revision": current_revision,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": 0.48,
+                "image_y": 0.55,
+                "allow_keyframed_base_camera": "false",
+            })
+        except ValueError as error:
+            assert "JSON boolean true/false" in str(error), error
+        else:
+            raise AssertionError("string false must not be accepted as a keyframed-camera override")
+        assert project_revision(project_id) == current_revision, "invalid boolean override must not create a revision"
+        assert first_blocking(project_id)["camera"] == before_bad_boolean_camera, "invalid boolean override must not mutate camera state"
+
         guarded = json.loads(core.handle_create_project("Reference Orientation Horizon Guard"))
         guarded_id = guarded["project_id"]
         guarded_revision = guarded["revision"]
@@ -179,6 +198,23 @@ def main():
                 "target_id": guarded_actor_id,
                 "image_x": 0.5,
                 "image_y": 0.12,
+                "allow_horizon_mismatch": "false",
+            })
+        except ValueError as error:
+            assert "JSON boolean true/false" in str(error), error
+        else:
+            raise AssertionError("string false must not be accepted as a Horizon override")
+        assert project_revision(guarded_id) == guarded_revision, "invalid Horizon override must not create a revision"
+
+        try:
+            orientation.call_tool("apply_reference_camera_orientation", {
+                "project_id": guarded_id,
+                "revision": guarded_revision,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": guarded_actor_id,
+                "image_x": 0.5,
+                "image_y": 0.12,
             })
         except ValueError as error:
             assert "reference-horizon-conflict" in str(error)
@@ -201,7 +237,7 @@ def main():
         assert overridden["validation"]["status"] == "review", overridden["validation"]
         assert any(issue.get("code") == "horizon-mismatch" for issue in overridden["validation"]["issues"])
 
-        print("reference-space-orientation-mcp: solve/apply exact screen orientation, stale-revision safety, and horizon guard passed")
+        print("reference-space-orientation-mcp: solve/apply exact screen orientation, stale-revision safety, strict boolean overrides, and horizon guard passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
