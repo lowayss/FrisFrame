@@ -51,7 +51,15 @@ assert.match(app, /const \{\s*collisionEpsilon: timelineCollisionEpsilon,[\s\S]*
 assert.ok(app.includes("const PROJECT_SCHEMA_VERSION = 11;"), "continuity and cut snapshots require project schema v11");
 assert.ok(app.includes("function exportMultiCameraPreview("), "multi-camera preview needs a preview-first export action");
 assert.ok(app.includes("function exportMultiCameraVideo("), "multi-camera needs a preview-first MP4 export action");
-assert.ok(ids.has("multiCamVideoBtn") && ids.has("multiCamVideoPanelBtn"), "multi-camera video needs toolbar and panel actions");
+for (const retiredId of [
+  "multiCamPreviewBtn",
+  "multiCamPreviewPanelBtn",
+  "multiCamPreviewPanelBtnSecondary",
+  "multiCamVideoBtn",
+  "multiCamVideoPanelBtn",
+]) {
+  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+}
 assert.ok(app.includes("function exportSelectedCutFrame("), "selected cut needs a still-frame export action");
 assert.ok(app.includes("function exportSelectedCutVideo("), "selected cut needs an MP4 export action");
 assert.equal(app.includes("maxConcurrency = 6"), false, "MP4 frame uploads must not fan out concurrently");
@@ -152,16 +160,41 @@ assert.equal(app.includes("function drawBlockingGuideLegend("), false, "2D plan 
 assert.equal(ids.has("cameraGuideCanvas"), false, "camera preview should not include a guide overlay canvas");
 assert.equal(ids.has("cameraFrameMeta"), false, "camera preview should not include technical metadata");
 assert.equal(ids.has("videoExportMode"), false, "video export should only create a clean preview");
-assert.ok(ids.has("blockingPlanBtn") && ids.has("blockingPlanPanelBtn"), "2D blocking export needs toolbar and panel actions");
+for (const retiredId of [
+  "blockingPlanBtn",
+  "blockingPlanPanelBtn",
+]) {
+  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+}
 assert.ok(app.includes("function exportBlockingPlanImage("), "2D blocking export needs a preview-first renderer");
-assert.ok(ids.has("productionPackBtn") && ids.has("productionPackPanelBtn"), "production data needs toolbar and panel actions");
+for (const retiredId of [
+  "productionPackBtn",
+  "productionPackPanelBtn",
+]) {
+  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+}
 assert.ok(app.includes('presentExport(zip, `${slug(project?.title || state.sceneTitle)}_production_pack.zip`'), "production data must use the preview-first export dialog");
 assert.ok(app.includes('"project/cut_list.csv"') && app.includes('"docs/continuity_report.md"'), "production data must include cut and continuity reports");
 assert.ok(app.includes('"project/multi_camera_plan.json"') && app.includes("function buildMultiCameraPlan("), "production data must include per-camera plans");
 assert.ok(app.includes('"camera_id"'), "motion CSV must identify the camera that owns each camera key");
 assert.ok(app.includes('"#productionPackBtn": "촬영 자료 ZIP"'), "production data must participate in the single-flight export lock");
 assert.ok(app.includes('caption: "현재 컷 2D 동선도"') && app.includes('caption: "현재 재생 위치 카메라 프레임"'), "production preview must show actual rendered media");
-assert.ok(ids.has("backgroundSheetBtn") && ids.has("backgroundSheetPanelBtn"), "background-sheet export needs toolbar and panel actions");
+for (const retiredId of [
+  "backgroundSheetBtn",
+  "backgroundSheetPanelBtn",
+]) {
+  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+}
+for (const retiredSpatialId of [
+  "spatialReferenceStatus",
+  "spatialReferenceImageInput",
+  "spatialReferencePreview",
+  "clearSpatialReferenceBtn",
+]) {
+  assert.equal(ids.has(retiredSpatialId), false, `${retiredSpatialId} must stay physically removed from shared HTML`);
+}
+assert.equal(html.includes("spatial-reference-panel"), false,
+  "in-app background-image reference panel must stay physically removed");
 assert.ok(app.includes("function exportBackgroundSheetReference("), "background-sheet export needs a preview-first renderer");
 assert.ok(app.includes('handoff: "codex-background-sheet"') && app.includes('path: "scene_manifest.json"'), "background-sheet export must include Codex handoff metadata");
 assert.ok(app.includes('path: "media/background_hero.png"') && app.includes('path: "media/topdown_plan.png"'), "background-sheet export must include clean reference views");

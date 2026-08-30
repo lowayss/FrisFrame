@@ -84,13 +84,8 @@
                   <span id="exportRangeSummary" class="export-range-summary">0.00–15.00초 · 15.00초</span>
                 </div>
               </div>
-              <button id="blockingPlanBtn" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹 이미지</span></button>
               <button id="frameBtn" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
-              <button id="backgroundSheetBtn" class="primary-btn"><i data-lucide="layers-3" aria-hidden="true"></i><span>배경시트 레퍼런스</span></button>
               <button id="framePairBtn" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝 프레임</span></button>
-              <button id="productionPackBtn" class="text-btn"><i data-lucide="package-check" aria-hidden="true"></i><span>촬영 자료 ZIP</span></button>
-              <button id="multiCamPreviewBtn" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠 프리뷰</span></button>
-              <button id="multiCamVideoBtn" class="primary-btn"><i data-lucide="clapperboard" aria-hidden="true"></i><span>멀티캠 영상</span></button>
               <button id="videoBtn" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>프리비즈 영상</span></button>
             </div>
           </details>
@@ -311,20 +306,6 @@
           </button>
         </details>
 
-        <details class="spatial-reference-panel compact-details" aria-label="배경 공간 레퍼런스" open>
-          <summary><span>배경 공간 레퍼런스</span><small id="spatialReferenceStatus">없음</small></summary>
-          <label class="spatial-reference-file-btn" for="spatialReferenceImageInput">
-            <i data-lucide="image-plus" aria-hidden="true"></i>
-            <span>세트 / 배경 이미지 넣기</span>
-          </label>
-          <input id="spatialReferenceImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
-          <img id="spatialReferencePreview" class="spatial-reference-preview" alt="배경 공간 레퍼런스 미리보기" hidden />
-          <div class="spatial-reference-actions">
-            <button id="clearSpatialReferenceBtn" type="button" class="text-btn" disabled>제거</button>
-          </div>
-          <p class="spatial-reference-help">형태를 복사하지 않고, 큰 덩어리·인물 비례·위치·깊이·거리 관계를 구조 분석 기준으로 사용합니다.</p>
-        </details>
-
         <details class="panel-section compact-details mobile-collapsible" data-mobile-collapsible open>
           <summary>카메라</summary>
           <section class="camera-rig-panel" aria-label="멀티카메라">
@@ -335,7 +316,6 @@
             <div id="cameraRigList" class="camera-rig-list"></div>
             <div class="camera-rig-actions">
               <button id="addCameraBtn" type="button" class="text-btn" aria-label="카메라 추가"><i data-lucide="plus" aria-hidden="true"></i><span>추가</span></button>
-              <button id="multiCamPreviewPanelBtn" type="button" class="text-btn" aria-label="멀티카메라 프리뷰"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠</span></button>
             </div>
           </section>
           <div class="lock-control-group" aria-label="카메라 편집 잠금">
@@ -823,13 +803,8 @@
           <summary>내보내기</summary>
           <p class="export-panel-copy">현재 프레임, 시작·끝 프레임, 프리비즈 영상을 준비합니다.</p>
           <div class="export-panel-actions">
-            <button id="blockingPlanPanelBtn" type="button" class="text-btn"><i data-lucide="map" aria-hidden="true"></i><span>2D 블로킹</span></button>
             <button id="framePanelBtn" type="button" class="text-btn"><i data-lucide="image" aria-hidden="true"></i><span>현재 프레임</span></button>
-            <button id="backgroundSheetPanelBtn" type="button" class="primary-btn"><i data-lucide="layers-3" aria-hidden="true"></i><span>배경시트</span></button>
             <button id="framePairPanelBtn" type="button" class="text-btn"><i data-lucide="images" aria-hidden="true"></i><span>시작·끝</span></button>
-            <button id="productionPackPanelBtn" type="button" class="text-btn"><i data-lucide="package-check" aria-hidden="true"></i><span>촬영 자료</span></button>
-            <button id="multiCamPreviewPanelBtnSecondary" type="button" class="text-btn"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠</span></button>
-            <button id="multiCamVideoPanelBtn" type="button" class="primary-btn"><i data-lucide="clapperboard" aria-hidden="true"></i><span>멀티캠 영상</span></button>
             <button id="videoPanelBtn" type="button" class="primary-btn"><i data-lucide="video" aria-hidden="true"></i><span>프리비즈 영상</span></button>
           </div>
         </details>

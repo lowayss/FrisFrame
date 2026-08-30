@@ -7503,7 +7503,6 @@ function syncUi(updateInputs = true) {
     button.classList.toggle("is-active", button.dataset.environmentPreset === state.spacePresetId);
   });
 
-  renderSpatialGuideControls();
   renderObjectLists();
   renderTrackingTargetSelect(updateInputs);
   renderProperties(updateInputs);
@@ -7617,12 +7616,6 @@ function renderCameraRigControls() {
   if (count) count.textContent = `${profiles.length}/4대`;
   const add = $("#addCameraBtn");
   if (add) add.disabled = profiles.length >= 4;
-  const multiVideoReady = profiles.length > 1;
-  [$("#multiCamVideoBtn"), $("#multiCamVideoPanelBtn")].forEach((button) => {
-    if (!button) return;
-    button.disabled = !multiVideoReady || mediaExportBusy;
-    button.title = multiVideoReady ? "카메라별 화면을 분할한 H.264 프리뷰 영상" : "카메라를 2대 이상 추가하면 사용할 수 있습니다";
-  });
   refreshLucideIcons();
 }
 
@@ -11271,10 +11264,6 @@ $("#importBtn").addEventListener("click", () => $("#importInput").click());
 $("#shareBtn").addEventListener("click", shareProject);
 $("#copyShareLinkBtn").addEventListener("click", copyShareLink);
 $("#importInput").addEventListener("change", importJson);
-$("#spatialReferenceImageInput").addEventListener("change", (event) => {
-  importSpatialReferenceImage(event.currentTarget.files?.[0]);
-});
-$("#clearSpatialReferenceBtn").addEventListener("click", clearSpatialReference);
 $("#projectLibraryNewBtn").addEventListener("click", startNewProject);
 $("#projectCreateSaveBtn").addEventListener("click", createManagedProject);
 $("#projectCreateInput").addEventListener("keydown", (event) => {
@@ -11322,11 +11311,6 @@ $("#projectRenameDialog").addEventListener("close", () => {
 });
 $("#videoBtn").addEventListener("click", exportVideo);
 $("#videoPanelBtn").addEventListener("click", exportVideo);
-$("#multiCamVideoBtn").addEventListener("click", exportMultiCameraVideo);
-$("#multiCamVideoPanelBtn").addEventListener("click", exportMultiCameraVideo);
-$("#multiCamPreviewBtn").addEventListener("click", exportMultiCameraPreview);
-$("#multiCamPreviewPanelBtn").addEventListener("click", exportMultiCameraPreview);
-$("#multiCamPreviewPanelBtnSecondary").addEventListener("click", exportMultiCameraPreview);
 $("#addCameraBtn").addEventListener("click", addCameraProfile);
 $("#cameraFrameModeBtn").addEventListener("click", () => {
   cameraPreviewMode = cameraPreviewMode === "single" ? "multi" : "single";
@@ -11336,16 +11320,10 @@ $("#cameraFrameModeBtn").addEventListener("click", () => {
 });
 $("#selectedCutFrameBtn").addEventListener("click", exportSelectedCutFrame);
 $("#selectedCutVideoBtn").addEventListener("click", exportSelectedCutVideo);
-$("#blockingPlanBtn").addEventListener("click", exportBlockingPlanImage);
-$("#blockingPlanPanelBtn").addEventListener("click", exportBlockingPlanImage);
 $("#frameBtn").addEventListener("click", exportCurrentCameraFrame);
 $("#framePanelBtn").addEventListener("click", exportCurrentCameraFrame);
-$("#backgroundSheetBtn").addEventListener("click", exportBackgroundSheetReference);
-$("#backgroundSheetPanelBtn").addEventListener("click", exportBackgroundSheetReference);
 $("#framePairBtn").addEventListener("click", exportStartEndCameraFrames);
 $("#framePairPanelBtn").addEventListener("click", exportStartEndCameraFrames);
-$("#productionPackBtn").addEventListener("click", exportProductionPack);
-$("#productionPackPanelBtn").addEventListener("click", exportProductionPack);
 $("#addKeyBtn").addEventListener("click", addMotionKey);
 $("#updateKeyBtn").addEventListener("click", updateSelectedKey);
 $("#deleteKeyBtn").addEventListener("click", deleteSelectedKey);
@@ -13275,69 +13253,6 @@ function imageFromBlob(blob) {
     };
     image.src = url;
   });
-}
-
-async function importSpatialReferenceImage(file) {
-  if (!file) return;
-  try {
-    const image = await imageFromBlob(file);
-    const maxSide = 1280;
-    const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
-    const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
-    const ratio = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(sourceWidth * ratio));
-    canvas.height = Math.max(1, Math.round(sourceHeight * ratio));
-    const imageContext = canvas.getContext("2d");
-    imageContext.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
-    state.spatialGuide = sanitizeSpatialGuide({
-      ...defaultSpatialGuide(),
-      sourceName: file.name,
-      sourceKind: "image",
-      imageDataUrl,
-      imageWidthPx: sourceWidth,
-      imageHeightPx: sourceHeight,
-      status: "awaiting-plan",
-      importedAt: new Date().toISOString(),
-    });
-    commit();
-    notifyApp("레퍼런스 이미지를 저장했습니다. Codex/Claude에서 공간 앵커를 분석해 적용하면 세트·인물 비례와 깊이가 블로킹에 반영됩니다.");
-  } catch (error) {
-    console.error("spatial reference import failed", error);
-    notifyApp("레퍼런스 이미지를 불러오지 못했습니다. PNG, JPEG, WebP 이미지를 사용해 주세요.");
-  }
-}
-
-function clearSpatialReference() {
-  if (!state.spatialGuide?.imageDataUrl && !state.spatialGuide?.anchors?.length) return;
-  state.spatialGuide = defaultSpatialGuide();
-  const input = $("#spatialReferenceImageInput");
-  if (input) input.value = "";
-  commit();
-  notifyApp("배경 공간 레퍼런스를 제거했습니다.");
-}
-
-function renderSpatialGuideControls() {
-  const guide = state.spatialGuide || defaultSpatialGuide();
-  const hasImage = Boolean(guide.imageDataUrl);
-  const anchorCount = guide.anchors?.length || 0;
-  const status = $("#spatialReferenceStatus");
-  const preview = $("#spatialReferencePreview");
-  const clear = $("#clearSpatialReferenceBtn");
-  if (status) {
-    status.textContent = !hasImage && !anchorCount
-      ? "없음"
-      : anchorCount
-        ? `${guide.sourceName || "레퍼런스"} · 앵커 ${anchorCount}개`
-        : `${guide.sourceName || "레퍼런스"} · 공간 분석 대기`;
-  }
-  if (preview) {
-    preview.hidden = !hasImage;
-    if (hasImage && preview.src !== guide.imageDataUrl) preview.src = guide.imageDataUrl;
-    if (!hasImage) preview.removeAttribute("src");
-  }
-  if (clear) clear.disabled = !hasImage && !anchorCount;
 }
 
 function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines = 2) {
