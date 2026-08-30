@@ -263,7 +263,7 @@
   function tiltFromHorizon(options = {}) {
     const view = fieldOfView(options);
     const horizonY = clamp(options.horizonY ?? options.horizonYNormalized ?? 0.5, 0, 1);
-    const sensorOffsetMm = (0.5 - horizonY) * view.sensorHeightMm;
+    const sensorOffsetMm = (horizonY - 0.5) * view.sensorHeightMm;
     return Math.atan(sensorOffsetMm / view.focalMm) * 180 / Math.PI;
   }
 
@@ -271,7 +271,7 @@
     const view = fieldOfView(options);
     const tiltDeg = finiteNumber(options.tiltDeg ?? options.tiltDownDeg, 0);
     const sensorOffsetMm = Math.tan(tiltDeg * Math.PI / 180) * view.focalMm;
-    return 0.5 - sensorOffsetMm / view.sensorHeightMm;
+    return 0.5 + sensorOffsetMm / view.sensorHeightMm;
   }
 
   function calibratePerspective(options = {}) {
