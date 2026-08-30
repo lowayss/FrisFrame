@@ -97,6 +97,24 @@ def main():
         assert abs(solved["projection_check"]["residual_y"]) < 1e-9, solved
         assert solved["projection_check"]["in_front"] is True
 
+        for bad_name, bad_value in (("image_x", "0.62"), ("image_y", True)):
+            bad_args = {
+                "project_id": project_id,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": desired_x,
+                "image_y": desired_y,
+            }
+            bad_args[bad_name] = bad_value
+            try:
+                orientation.call_tool("solve_reference_camera_orientation", bad_args)
+            except ValueError as error:
+                assert "JSON number" in str(error), error
+            else:
+                raise AssertionError(f"coerced {bad_name} must be rejected")
+        assert project_revision(project_id) == revision, "invalid read-only numeric observations must not create a revision"
+
         applied = json.loads(orientation.call_tool("apply_reference_camera_orientation", {
             "project_id": project_id,
             "revision": revision,
@@ -189,6 +207,25 @@ def main():
         persisted = json.loads(core.handle_apply_scene_commands(guarded_id, payload))
         guarded_revision = persisted["revision"]
 
+        before_bad_tolerance_camera = dict(first_blocking(guarded_id)["camera"])
+        try:
+            orientation.call_tool("apply_reference_camera_orientation", {
+                "project_id": guarded_id,
+                "revision": guarded_revision,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": guarded_actor_id,
+                "image_x": 0.5,
+                "image_y": 0.12,
+                "horizon_tolerance": True,
+            })
+        except ValueError as error:
+            assert "horizon_tolerance 값은 JSON number" in str(error), error
+        else:
+            raise AssertionError("boolean horizon_tolerance must not relax the Horizon guard")
+        assert project_revision(guarded_id) == guarded_revision, "invalid Horizon tolerance must not create a revision"
+        assert first_blocking(guarded_id)["camera"] == before_bad_tolerance_camera, "invalid Horizon tolerance must not mutate camera state"
+
         try:
             orientation.call_tool("apply_reference_camera_orientation", {
                 "project_id": guarded_id,
@@ -237,7 +274,7 @@ def main():
         assert overridden["validation"]["status"] == "review", overridden["validation"]
         assert any(issue.get("code") == "horizon-mismatch" for issue in overridden["validation"]["issues"])
 
-        print("reference-space-orientation-mcp: solve/apply exact screen orientation, stale-revision safety, strict boolean overrides, and horizon guard passed")
+        print("reference-space-orientation-mcp: exact screen orientation, strict numeric/boolean inputs, stale-revision safety, and Horizon guard passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
