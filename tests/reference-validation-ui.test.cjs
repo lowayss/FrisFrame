@@ -17,13 +17,16 @@ const actor = {
   facing: 0,
   referenceDimensionsM: { width: 0.54, height: 1.78, depth: 0.36 },
 };
-const camera = { x: 0.5, y: 0.8, height: 1.6, focal: 50, tiltDeg: -10 };
+const camera = { x: 0.5, y: 0.8, height: 1.6, focal: 50, panDeg: 270, tiltDeg: 0 };
 const actorWorld = spatial.stageNormalizedToWorld(actor, { width: stage.width, depth: stage.depth });
 const cameraWorld = spatial.stageNormalizedToWorld(camera, { width: stage.width, depth: stage.depth });
+const actorCenterHeight = actor.referenceDimensionsM.height / 2;
+const horizontalDistanceM = Math.hypot(actorWorld.x - cameraWorld.x, actorWorld.z - cameraWorld.z);
+camera.tiltDeg = Math.atan2(actorCenterHeight - camera.height, horizontalDistanceM) * 180 / Math.PI;
 const distanceM = Math.hypot(
   actorWorld.x - cameraWorld.x,
   actorWorld.z - cameraWorld.z,
-  actor.referenceDimensionsM.height / 2 - camera.height,
+  actorCenterHeight - camera.height,
 );
 const observedHeight = spatial.frameFractionForDistance({
   axis: "height",
@@ -79,8 +82,14 @@ assert.equal(ghostReady.scales.length, 1);
 assert.equal(ghostReady.horizons.length, 1);
 assert.equal(ghostReady.legend.observed, "reference");
 assert.equal(ghostReady.legend.predicted, "current-camera");
+assert.equal(ghostReady.screenPositionPolicy, "visual-diagnostic-only");
 assert.ok(Math.abs(ghostReady.scales[0].center.x - 580) < 1e-9);
 assert.ok(Math.abs(ghostReady.scales[0].center.y - 320) < 1e-9);
+assert.ok(ghostReady.scales[0].predictedCenter, "centered current camera must provide a predicted screen point");
+assert.ok(Math.abs(ghostReady.scales[0].predictedCenter.x - ghostReady.scales[0].center.x) < 1e-8);
+assert.ok(Math.abs(ghostReady.scales[0].predictedCenter.y - ghostReady.scales[0].center.y) < 1e-8);
+assert.ok(Math.abs(ghostReady.scales[0].predictedNormalized.x - 0.5) < 1e-8);
+assert.ok(Math.abs(ghostReady.scales[0].predictedNormalized.y - 0.5) < 1e-8);
 assert.ok(Math.abs(ghostReady.scales[0].observedLengthPx - observedHeight * overlayRect.height) < 1e-9);
 assert.ok(Math.abs(ghostReady.scales[0].predictedLengthPx - ghostReady.scales[0].observedLengthPx) < 1e-9);
 assert.ok(Math.abs(ghostReady.horizons[0].observedYPx - (overlayRect.y + horizonY * overlayRect.height)) < 1e-9);
@@ -96,9 +105,23 @@ assert.equal(ghostReview.status, "review");
 assert.ok(Math.abs(ghostReview.scales[0].observedLengthPx - ghostReview.scales[0].predictedLengthPx) > 1);
 assert.ok(ghostReview.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
 
+const shiftedImageObservation = structuredClone(blocking);
+shiftedImageObservation.spatialGuide.anchors[0].imageX = 0.62;
+shiftedImageObservation.spatialGuide.anchors[0].imageY = 0.42;
+const unchangedValidation = workflow.validateReferenceSpaceBlocking(shiftedImageObservation, { spatialCore: spatial });
+assert.equal(unchangedValidation.status, "ready", "screen-position residual must remain visual-only in this slice");
+const shiftedGhost = workflow.buildReferenceGhostObservationModel(shiftedImageObservation, { spatialCore: spatial, overlayRect });
+assert.equal(shiftedGhost.status, "ready");
+assert.ok(Math.abs(shiftedGhost.scales[0].center.x - shiftedGhost.scales[0].predictedCenter.x) > 100,
+  "Ghost must visibly separate a shifted observed X from the current camera projection");
+assert.ok(Math.abs(shiftedGhost.scales[0].center.y - shiftedGhost.scales[0].predictedCenter.y) > 40,
+  "Ghost must visibly separate a shifted observed Y from the current camera projection");
+assert.ok(Math.abs(shiftedGhost.scales[0].screenResidual.x - 0.12) < 1e-8);
+assert.ok(Math.abs(shiftedGhost.scales[0].screenResidual.y + 0.08) < 1e-8);
+
 const badPosition = structuredClone(blocking);
 badPosition.items[0].x += 0.05;
 const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
 assert.ok(reviewPosition.issues.some((issue) => issue.code === "anchor-x-mismatch"));
 
-console.log("reference-validation-ui: anchor validation plus observed/current Ghost overlay geometry passed");
+console.log("reference-validation-ui: scale/horizon validation plus observed/current screen-position Ghost projection passed");
