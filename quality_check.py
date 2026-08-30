@@ -135,6 +135,7 @@ def main() -> None:
 
     run("스토리보드 코어", [node, "--test", "tests/storyboard-core.test.cjs"])
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
+    run("Reference Space Python projection", [sys.executable, "tests/reference-space-projection.py"])
     run("Reference Space MCP", [sys.executable, "tests/reference-space-mcp.py"])
     run("Reference Space 원자 계획", [sys.executable, "tests/reference-space-plan-mcp.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
