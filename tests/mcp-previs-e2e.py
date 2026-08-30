@@ -188,19 +188,26 @@ def main():
                 assert [key["time"] for key in camera_keys] == [0.0, 4.0]
                 assert camera_keys[-1]["pose"]["focal"] == 85
 
-                with sqlite3.connect(db_path) as conn:
+                conn = sqlite3.connect(db_path)
+                try:
                     revision = conn.execute("SELECT revision FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
                     versions = [row[0] for row in conn.execute(
                         "SELECT revision FROM project_versions WHERE project_id = ? ORDER BY revision",
                         (project_id,),
                     ).fetchall()]
+                finally:
+                    conn.close()
                 assert revision == 4
                 assert versions == [1, 2, 3], versions
                 print("MCP E2E: atomic plan, rollback, UI save, revision conflict, and resumed authoring passed")
             finally:
-                process.stdin.close()
-                process.wait(timeout=5)
-                stderr = process.stderr.read()
+                try:
+                    _stdout_tail, stderr = process.communicate(timeout=5)
+                except subprocess.TimeoutExpired as error:
+                    process.kill()
+                    _stdout_tail, stderr = process.communicate(timeout=5)
+                    raise AssertionError("MCP stdio process did not exit after stdin EOF") from error
+                assert process.returncode == 0, stderr
                 assert "Traceback" not in stderr
         finally:
             if old_db is None:
