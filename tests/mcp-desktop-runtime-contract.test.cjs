@@ -18,7 +18,7 @@ assert.match(entry, /def configure_stdio_utf8\(\)/,
   "packaged MCP entrypoint must explicitly configure stdio for UTF-8 JSON-RPC");
 assert.match(entry, /reconfigure\(encoding="utf-8", errors="strict"\)/,
   "packaged MCP stdio must not depend on the Windows system code page for Korean tool metadata or project content");
-assert.match(entry, /configure_stdio_utf8\(\)[\s\S]*import reference_space_mcp[\s\S]*import reference_space_consistency_mcp[\s\S]*import reference_space_plan_mcp[\s\S]*from mcp_previs_server import main as run_mcp/,
+assert.match(entry, /configure_stdio_utf8\(\)[\s\S]*import reference_space_mcp[\s\S]*import reference_space_consistency_mcp[\s\S]*import reference_space_plan_mcp[\s\S]*import reference_space_orientation_mcp[\s\S]*from mcp_previs_server import main as run_mcp/,
   "UTF-8 setup must run before all Reference Space extensions and deterministic MCP server start");
 assert.match(entry, /import reference_space_mcp/,
   "packaged MCP entrypoint must statically import the Reference Space extension so PyInstaller bundles it");
@@ -26,6 +26,8 @@ assert.match(entry, /import reference_space_consistency_mcp/,
   "packaged MCP entrypoint must statically import the multi-anchor consistency extension so PyInstaller bundles it");
 assert.match(entry, /import reference_space_plan_mcp/,
   "packaged MCP entrypoint must statically import the atomic Reference Space plan extension so PyInstaller bundles it");
+assert.match(entry, /import reference_space_orientation_mcp/,
+  "packaged MCP entrypoint must statically import explicit screen-orientation tools so PyInstaller bundles them");
 assert.match(entry, /from mcp_previs_server import main as run_mcp/,
   "desktop entrypoint must run the deterministic previs MCP server rather than a separate implementation");
 assert.match(build, /name: "frisframe-mcp"/,
@@ -70,6 +72,10 @@ assert.match(verify, /"apply_reference_space_plan"/,
   "packaged MCP verification must require atomic full Reference Space application");
 assert.match(verify, /"validate_reference_space"/,
   "packaged MCP verification must require Reference Space validation");
+assert.match(verify, /"solve_reference_camera_orientation"/,
+  "packaged MCP verification must require the read-only Reference Space screen-orientation solver");
+assert.match(verify, /"apply_reference_camera_orientation"/,
+  "packaged MCP verification must require explicit Reference Space screen-orientation application");
 assert.match(verify, /PREVIS_DB_PATH: database/,
   "MCP package protocol tests must use an isolated temporary database");
 assert.match(verify, /fs\.existsSync\(database\)/,
