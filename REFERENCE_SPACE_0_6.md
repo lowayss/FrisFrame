@@ -94,7 +94,8 @@ The deterministic core supports:
 - focal length from anchor size + frame fraction + distance;
 - distance from anchor size + frame fraction + focal length;
 - camera tilt from normalized horizon Y;
-- horizontal ray angle from normalized image X.
+- horizontal ray angle from normalized image X;
+- deterministic 3D world-point → normalized camera-frame X/Y projection using the same FrisFrame pan/tilt convention as the preview camera.
 
 FrisFrame uses negative `tiltDeg` for a downward-looking camera. Therefore a horizon above frame center (`horizonY < 0.5`) produces a negative tilt.
 
@@ -133,9 +134,31 @@ It supports:
 - `contain` / `cover` fitting using the shared overlay math;
 - opacity control;
 - show/hide and clear controls;
-- automatic camera-preview resize following.
+- automatic camera-preview resize following;
+- persisted Scale Anchor and Horizon observations drawn in the same normalized image coordinate system;
+- current FrisFrame camera predictions drawn beside the stored reference observations.
 
-The Ghost is a DOM inspection layer above the camera preview. It is not drawn into the preview render canvas and is not included in MP4 export.
+Visual convention:
+
+- **solid cyan** = stored reference observation from the external analysis;
+- **dashed orange** = current FrisFrame camera prediction.
+
+For a Scale Anchor the Ghost compares both:
+
+- measured frame width/height versus the current projected scale;
+- stored `imageX/imageY` center versus the current 3D target center projected through `projectWorldPointToFrame`.
+
+When the centers differ, the Ghost draws both center markers and a connector so pan/tilt/framing drift is visible immediately. Horizon uses the same solid/dashed convention for stored versus current Y.
+
+### Screen-position policy
+
+In this 0.6 slice, Scale Anchor screen-center X/Y residuals are **visual diagnostics only** (`screenPositionPolicy: visual-diagnostic-only`). They do not yet change the Reference Space `READY` / `REVIEW` status and do not block MCP application.
+
+This is intentional. Existing camera calibration can preserve an authored camera direction unless the caller explicitly asks to orient toward a target. Promoting X/Y residuals to an automatic validation rule before that policy is explicit could incorrectly reject otherwise valid authored framing.
+
+Scale fraction, physical dimensions, world X/Z and Horizon continue to use the existing validation rules. Screen-position blocking can be promoted later as a separate explicit policy after camera orientation semantics are finalized.
+
+The Ghost image and all observation guides are DOM inspection layers above the camera preview. They are not drawn into the preview render canvas and are not included in MP4 export. The guide model also refreshes periodically while enabled so external MCP edits can be compared without creating a second spatial runtime.
 
 ## Reference Space validation UI
 
@@ -262,3 +285,4 @@ The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros
 - Keep Reference Space metadata optional so old projects continue to load.
 - Do not silently clamp or invent missing spatial measurements when a deterministic solve cannot be performed.
 - Do not auto-average multiple anchor focal estimates into an applied camera value; inconsistent measurements must be surfaced for external review.
+- Keep screen-position X/Y differences visual-only until an explicit camera-orientation validation policy is introduced.
