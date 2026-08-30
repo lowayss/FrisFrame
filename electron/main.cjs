@@ -8,6 +8,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { registerClipboardImageHandler } = require("./clipboard.cjs");
 const { registerFileSaveHandler } = require("./file-save.cjs");
+const { createPhoneRemoteBridge } = require("./phone-remote.cjs");
 
 app.setName("FrisFrame");
 
@@ -16,6 +17,7 @@ let serverProcess = null;
 let serverOrigin = "";
 let quitting = false;
 let logFile = "";
+let phoneRemoteBridge = null;
 
 function writeLog(message) {
   const line = `[${new Date().toISOString()}] ${String(message).trim()}\n`;
@@ -343,7 +345,13 @@ function createMainWindow(origin) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.webContents.on("did-finish-load", () => {
-    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
+    const phoneConfig = phoneRemoteBridge?.getConfig?.() || null;
+    if (phoneConfig) {
+      const serialized = JSON.stringify(phoneConfig).replace(/</g, "\\u003c");
+      window.webContents.executeJavaScript(`window.__FRISFRAME_PHONE_REMOTE__=${serialized};`, true)
+        .catch((error) => writeLog(`phone remote config injection failed: ${error.stack || error}`));
+    }
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
       const uxPath = path.join(__dirname, filename);
       try {
         const source = fs.readFileSync(uxPath, "utf8");
@@ -387,6 +395,13 @@ else {
     session.defaultSession.setDevicePermissionHandler?.(() => false);
     try {
       const origin = await startLocalServer();
+      phoneRemoteBridge = createPhoneRemoteBridge({ getWindow: () => mainWindow, writeLog });
+      try {
+        await phoneRemoteBridge.start();
+      } catch (error) {
+        writeLog(`phone remote start failed: ${error.stack || error}`);
+        phoneRemoteBridge = null;
+      }
       createMainWindow(origin);
     } catch (error) {
       await showStartupFailure(error);
@@ -398,6 +413,8 @@ else {
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", () => {
     quitting = true;
+    phoneRemoteBridge?.stop?.();
+    phoneRemoteBridge = null;
     killServerProcess();
   });
 }
