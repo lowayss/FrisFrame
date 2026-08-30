@@ -328,11 +328,21 @@
 
   function buildReferenceGhostObservationModel(blocking = {}, options = {}) {
     const spatialCore = options.spatialCore;
-    if (!spatialCore || typeof spatialCore.normalizedToOverlayPoint !== "function") {
-      throw new Error("FrisFrameSpatialScaleCore overlay coordinate functions are required.");
+    if (!spatialCore
+      || typeof spatialCore.normalizedToOverlayPoint !== "function"
+      || typeof spatialCore.stageWorldSize !== "function"
+      || typeof spatialCore.stageNormalizedToWorld !== "function"
+      || typeof spatialCore.projectWorldPointToFrame !== "function") {
+      throw new Error("FrisFrameSpatialScaleCore overlay and camera projection functions are required.");
     }
     const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const clamp01 = (value, fallback = 0.5) => Math.max(0, Math.min(1, finite(value, fallback)));
+    const aspectMap = { "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "1:1": 1, "3:4": 3 / 4 };
+    const aspect = aspectMap[blocking.aspect] || 16 / 9;
+    const stage = spatialCore.stageWorldSize({ aspect });
+    const camera = blocking.camera || {};
+    const sensorWidthMm = Math.max(1, finite(blocking.cameraSetup?.sensorWidthMm, 36));
+    const focalMm = Math.max(1, finite(camera.focal, 50));
     const sourceRect = options.overlayRect || {};
     const overlayRect = {
       x: finite(sourceRect.x, 0),
@@ -348,6 +358,17 @@
     });
     const projectionById = new Map(validation.projectionChecks.map((entry) => [String(entry.id || ""), entry]));
     const guide = blocking.spatialGuide && typeof blocking.spatialGuide === "object" ? blocking.spatialGuide : {};
+    const items = new Map((blocking.items || []).map((item) => [String(item?.id || ""), item]));
+    const cameraGround = spatialCore.stageNormalizedToWorld(
+      { x: finite(camera.x, 0.5), y: finite(camera.y, 0.5) },
+      { width: stage.width, depth: stage.depth },
+    );
+    const cameraPosition = { x: cameraGround.x, y: finite(camera.height, 1.6), z: cameraGround.z };
+    const dimensionsFor = (item, anchor) => anchor?.dimensionsM || item?.referenceDimensionsM || (
+      item?.type === "actor" && typeof spatialCore.actorDimensions === "function"
+        ? spatialCore.actorDimensions({ size: item.size, scaleX: item.scaleX, scaleY: item.scaleY, scaleZ: item.scaleZ })
+        : null
+    );
     const scales = [];
     const horizons = [];
 
@@ -381,23 +402,60 @@
       const axis = kind === "scale-width" ? "width" : "height";
       const observedFraction = Number(axis === "width" ? anchor.imageWidth : anchor.imageHeight);
       if (!(Number.isFinite(observedFraction) && observedFraction > 0)) continue;
-      const center = spatialCore.normalizedToOverlayPoint({
+      const observedNormalized = {
         x: clamp01(anchor.imageX, 0.5),
         y: clamp01(anchor.imageY, 0.5),
-      }, overlayRect);
+      };
+      const center = spatialCore.normalizedToOverlayPoint(observedNormalized, overlayRect);
+      const itemId = String(anchor.attachedItemId || id);
+      const item = items.get(itemId);
+      let screenProjection = null;
+      let predictedCenter = null;
+      let predictedNormalized = null;
+      if (item) {
+        const itemGround = spatialCore.stageNormalizedToWorld(
+          { x: finite(item.x, 0.5), y: finite(item.y, 0.5) },
+          { width: stage.width, depth: stage.depth },
+        );
+        const dimensions = dimensionsFor(item, anchor) || {};
+        const bottom = finite(item.verticalOffset ?? item.mountedHeight, 0);
+        const centerHeight = bottom + finite(dimensions.height, item.type === "actor" ? 1.78 : 1) / 2;
+        screenProjection = spatialCore.projectWorldPointToFrame({
+          cameraPosition,
+          worldPoint: { x: itemGround.x, y: centerHeight, z: itemGround.z },
+          panDeg: finite(camera.panDeg, 180),
+          tiltDeg: finite(camera.tiltDeg, 0),
+          focalMm,
+          sensorWidthMm,
+          aspect,
+        });
+        if (screenProjection.inFront && Number.isFinite(Number(screenProjection.frameX)) && Number.isFinite(Number(screenProjection.frameY))) {
+          predictedNormalized = { x: Number(screenProjection.frameX), y: Number(screenProjection.frameY) };
+          predictedCenter = spatialCore.normalizedToOverlayPoint(predictedNormalized, overlayRect);
+        }
+      }
       const projection = projectionById.get(id);
       const predictedFraction = Number(projection?.predicted);
       const axisPixels = axis === "width" ? overlayRect.width : overlayRect.height;
       scales.push({
         id,
+        itemId,
         label,
         axis,
         center,
+        observedNormalized,
+        predictedCenter,
+        predictedNormalized,
+        screenProjection,
         observedFraction,
         predictedFraction: Number.isFinite(predictedFraction) && predictedFraction > 0 ? predictedFraction : null,
         observedLengthPx: observedFraction * axisPixels,
         predictedLengthPx: Number.isFinite(predictedFraction) && predictedFraction > 0 ? predictedFraction * axisPixels : null,
         residual: Number.isFinite(predictedFraction) ? observedFraction - predictedFraction : null,
+        screenResidual: predictedNormalized ? {
+          x: observedNormalized.x - predictedNormalized.x,
+          y: observedNormalized.y - predictedNormalized.y,
+        } : null,
       });
     }
 
@@ -410,6 +468,7 @@
       horizons,
       issues: validation.issues,
       legend: { observed: "reference", predicted: "current-camera" },
+      screenPositionPolicy: "visual-diagnostic-only",
     };
   }
 
@@ -520,7 +579,10 @@
     const leftPanel = documentObject.querySelector(".left-panel");
     if (!cameraFrame || !cameraCanvas || !leftPanel) return false;
     const spatialCore = target.FrisFrameSpatialScaleCore;
-    if (!spatialCore || typeof spatialCore.fitOverlayRect !== "function" || typeof spatialCore.normalizedToOverlayPoint !== "function") return false;
+    if (!spatialCore
+      || typeof spatialCore.fitOverlayRect !== "function"
+      || typeof spatialCore.normalizedToOverlayPoint !== "function"
+      || typeof spatialCore.projectWorldPointToFrame !== "function") return false;
 
     const style = documentObject.createElement("style");
     style.dataset.frisframeReferenceGhost = "1";
@@ -542,7 +604,9 @@
       .reference-ghost-observation-line.predicted.height { border-left-color:#ffb65f; border-left-style:dashed; }
       .reference-ghost-observation-line.horizon { border-top-width:1px; }
       .reference-ghost-observation-dot { position:absolute; width:7px; height:7px; border:1.5px solid #5de1ff; border-radius:50%; background:rgba(10,16,22,.72); transform:translate(-50%,-50%); box-sizing:border-box; }
-      .reference-ghost-observation-label { position:absolute; max-width:180px; padding:2px 4px; border-radius:3px; background:rgba(8,12,18,.72); color:#e7f8ff; font-size:8px; line-height:1.25; white-space:nowrap; text-shadow:0 1px 2px #000; }
+      .reference-ghost-observation-dot.predicted { width:9px; height:9px; border-color:#ffb65f; border-style:dashed; background:rgba(10,16,22,.45); }
+      .reference-ghost-observation-connector { position:absolute; height:0; border-top:1px dashed rgba(255,182,95,.72); transform-origin:0 50%; }
+      .reference-ghost-observation-label { position:absolute; max-width:220px; padding:2px 4px; border-radius:3px; background:rgba(8,12,18,.72); color:#e7f8ff; font-size:8px; line-height:1.25; white-space:nowrap; text-shadow:0 1px 2px #000; }
       .reference-ghost-observation-label.horizon { color:#b8efff; }
     `;
     documentObject.head?.appendChild(style);
@@ -581,7 +645,7 @@
       </div>
       <small id="referenceGhostStatus" class="reference-ghost-status">이미지를 선택하면 카메라 프리뷰 위에만 겹쳐 표시합니다.</small>
       <small id="referenceGhostObservationStatus" class="reference-ghost-status">실선은 레퍼런스 관측, 점선은 현재 카메라 예측입니다.</small>
-      <small class="reference-ghost-note">검사용 오버레이이며 프리비즈 렌더와 MP4에는 포함되지 않습니다.</small>
+      <small class="reference-ghost-note">화면 위치 차이는 시각 진단만 하며 READY/REVIEW 판정에는 아직 사용하지 않습니다. 검사용 오버레이이며 프리비즈 렌더와 MP4에는 포함되지 않습니다.</small>
     `;
     const stagePanel = leftPanel.querySelector("details");
     if (stagePanel?.insertAdjacentElement) stagePanel.insertAdjacentElement("afterend", panel);
@@ -656,6 +720,22 @@
       return line;
     }
 
+    function addObservationConnector(from, to) {
+      if (!from || !to) return null;
+      const dx = Number(to.x) - Number(from.x);
+      const dy = Number(to.y) - Number(from.y);
+      const length = Math.hypot(dx, dy);
+      if (!(length > 1)) return null;
+      const connector = documentObject.createElement("div");
+      connector.className = "reference-ghost-observation-connector";
+      connector.style.left = `${from.x}px`;
+      connector.style.top = `${from.y}px`;
+      connector.style.width = `${length}px`;
+      connector.style.transform = `rotate(${Math.atan2(dy, dx) * 180 / Math.PI}deg)`;
+      observationLayer.appendChild(connector);
+      return connector;
+    }
+
     function renderObservationOverlay(rect, canvasRect, frameRect, targetWidth, targetHeight) {
       const hasImage = Boolean(ghostState.dataUrl && ghostState.width > 0 && ghostState.height > 0);
       if (!hasImage || !ghostState.observationsEnabled) {
@@ -682,7 +762,16 @@
       const signature = JSON.stringify({
         rect: [rect.x, rect.y, rect.width, rect.height],
         status: model.status,
-        scales: model.scales.map((entry) => [entry.id, entry.axis, entry.center.x, entry.center.y, entry.observedLengthPx, entry.predictedLengthPx]),
+        scales: model.scales.map((entry) => [
+          entry.id,
+          entry.axis,
+          entry.center.x,
+          entry.center.y,
+          entry.predictedCenter?.x,
+          entry.predictedCenter?.y,
+          entry.observedLengthPx,
+          entry.predictedLengthPx,
+        ]),
         horizons: model.horizons.map((entry) => [entry.id, entry.observedYPx, entry.predictedYPx]),
       });
       observationLayer.hidden = false;
@@ -705,27 +794,40 @@
       });
 
       model.scales.forEach((entry) => {
+        const predictedCenter = entry.predictedCenter || entry.center;
         addObservationLine({ axis: entry.axis, x: entry.center.x, y: entry.center.y, length: entry.observedLengthPx });
         if (Number.isFinite(Number(entry.predictedLengthPx))) {
-          addObservationLine({ axis: entry.axis, x: entry.center.x, y: entry.center.y, length: Number(entry.predictedLengthPx), predicted: true });
+          addObservationLine({ axis: entry.axis, x: predictedCenter.x, y: predictedCenter.y, length: Number(entry.predictedLengthPx), predicted: true });
         }
-        const dot = documentObject.createElement("span");
-        dot.className = "reference-ghost-observation-dot";
-        dot.style.left = `${entry.center.x}px`;
-        dot.style.top = `${entry.center.y}px`;
-        observationLayer.appendChild(dot);
+        addObservationConnector(entry.center, entry.predictedCenter);
+        const observedDot = documentObject.createElement("span");
+        observedDot.className = "reference-ghost-observation-dot observed";
+        observedDot.style.left = `${entry.center.x}px`;
+        observedDot.style.top = `${entry.center.y}px`;
+        observationLayer.appendChild(observedDot);
+        if (entry.predictedCenter) {
+          const predictedDot = documentObject.createElement("span");
+          predictedDot.className = "reference-ghost-observation-dot predicted";
+          predictedDot.style.left = `${entry.predictedCenter.x}px`;
+          predictedDot.style.top = `${entry.predictedCenter.y}px`;
+          observationLayer.appendChild(predictedDot);
+        }
         const label = documentObject.createElement("span");
         label.className = "reference-ghost-observation-label";
         label.style.left = `${entry.center.x + 5}px`;
         label.style.top = `${entry.center.y + 5}px`;
         const axisLabel = entry.axis === "width" ? "W" : "H";
-        label.textContent = `${entry.label} · ${axisLabel} ${(entry.observedFraction * 100).toFixed(1)}%${Number.isFinite(Number(entry.predictedFraction)) ? ` / CUR ${(Number(entry.predictedFraction) * 100).toFixed(1)}%` : ""}`;
+        const sizeLabel = `${axisLabel} ${(entry.observedFraction * 100).toFixed(1)}%${Number.isFinite(Number(entry.predictedFraction)) ? ` / CUR ${(Number(entry.predictedFraction) * 100).toFixed(1)}%` : ""}`;
+        const positionLabel = entry.predictedNormalized
+          ? ` · XY ${(entry.observedNormalized.x * 100).toFixed(1)},${(entry.observedNormalized.y * 100).toFixed(1)} → ${(entry.predictedNormalized.x * 100).toFixed(1)},${(entry.predictedNormalized.y * 100).toFixed(1)}`
+          : "";
+        label.textContent = `${entry.label} · ${sizeLabel}${positionLabel}`;
         observationLayer.appendChild(label);
       });
 
       const count = model.scales.length + model.horizons.length;
       setObservationStatus(count
-        ? `관측 ${count} · ${model.status.toUpperCase()} · 실선=Reference / 점선=현재 카메라`
+        ? `관측 ${count} · ${model.status.toUpperCase()} · 실선=Reference / 점선=현재 카메라 · Scale 위치/크기 + Horizon`
         : "현재 컷에 표시할 Scale / Horizon 관측이 없습니다.");
     }
 
