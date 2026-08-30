@@ -393,6 +393,7 @@
       frameTolerance: options.frameTolerance,
     });
     const projectionById = new Map(validation.projectionChecks.map((entry) => [String(entry.id || ""), entry]));
+    const screenPositionById = new Map((validation.screenPositionChecks || []).map((entry) => [String(entry.anchorId || ""), entry]));
     const guide = blocking.spatialGuide && typeof blocking.spatialGuide === "object" ? blocking.spatialGuide : {};
     const items = new Map((blocking.items || []).map((item) => [String(item?.id || ""), item]));
     const cameraGround = spatialCore.stageNormalizedToWorld(
@@ -445,10 +446,23 @@
       const center = spatialCore.normalizedToOverlayPoint(observedNormalized, overlayRect);
       const itemId = String(anchor.attachedItemId || id);
       const item = items.get(itemId);
+      const screenCheck = screenPositionById.get(id);
       let screenProjection = null;
       let predictedCenter = null;
       let predictedNormalized = null;
-      if (item) {
+      if (screenCheck) {
+        screenProjection = {
+          frameX: screenCheck.predictedX,
+          frameY: screenCheck.predictedY,
+          depthM: screenCheck.depthM,
+          inFront: Boolean(screenCheck.inFront),
+          inFrame: Boolean(screenCheck.inFrame),
+        };
+        if (screenProjection.inFront && Number.isFinite(Number(screenProjection.frameX)) && Number.isFinite(Number(screenProjection.frameY))) {
+          predictedNormalized = { x: Number(screenProjection.frameX), y: Number(screenProjection.frameY) };
+          predictedCenter = spatialCore.normalizedToOverlayPoint(predictedNormalized, overlayRect);
+        }
+      } else if (item) {
         const itemGround = spatialCore.stageNormalizedToWorld(
           { x: finite(item.x, 0.5), y: finite(item.y, 0.5) },
           { width: stage.width, depth: stage.depth },
