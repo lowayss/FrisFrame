@@ -134,6 +134,7 @@ const serverDataFiles = [
   "scene-blocking-core.js",
   "previs-runtime-core.js",
   "reference-workflow-core.js",
+  "reference-validation-ui.js",
   "timeline-core.js",
   "project-recovery-core.js",
   "manual-guide-core.js",
