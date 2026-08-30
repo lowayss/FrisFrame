@@ -113,7 +113,59 @@ def main():
                 assert "JSON number" in str(error), error
             else:
                 raise AssertionError(f"coerced {bad_name} must be rejected")
-        assert project_revision(project_id) == revision, "invalid read-only numeric observations must not create a revision"
+
+        for bad_name, bad_value in (("scene_index", "0"), ("cut_index", False)):
+            bad_args = {
+                "project_id": project_id,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": desired_x,
+                "image_y": desired_y,
+            }
+            bad_args[bad_name] = bad_value
+            try:
+                orientation.call_tool("solve_reference_camera_orientation", bad_args)
+            except ValueError as error:
+                assert f"{bad_name} 값은 JSON integer" in str(error), error
+            else:
+                raise AssertionError(f"coerced {bad_name} must be rejected")
+
+        for bad_name, bad_value in (("project_id", True), ("target_id", 123)):
+            bad_args = {
+                "project_id": project_id,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": desired_x,
+                "image_y": desired_y,
+            }
+            bad_args[bad_name] = bad_value
+            try:
+                orientation.call_tool("solve_reference_camera_orientation", bad_args)
+            except ValueError as error:
+                assert f"{bad_name} 값은 비어 있지 않은 JSON string" in str(error), error
+            else:
+                raise AssertionError(f"non-string {bad_name} must be rejected")
+        assert project_revision(project_id) == revision, "invalid read-only orientation inputs must not create a revision"
+
+        before_bad_revision_camera = dict(first_blocking(project_id)["camera"])
+        try:
+            orientation.call_tool("apply_reference_camera_orientation", {
+                "project_id": project_id,
+                "revision": True,
+                "scene_index": 0,
+                "cut_index": 0,
+                "target_id": actor_id,
+                "image_x": desired_x,
+                "image_y": desired_y,
+            })
+        except ValueError as error:
+            assert "revision 값은 JSON integer" in str(error), error
+        else:
+            raise AssertionError("boolean revision must not be accepted as revision 1")
+        assert project_revision(project_id) == revision, "invalid revision type must not create a revision"
+        assert first_blocking(project_id)["camera"] == before_bad_revision_camera, "invalid revision type must not mutate camera state"
 
         applied = json.loads(orientation.call_tool("apply_reference_camera_orientation", {
             "project_id": project_id,
@@ -274,7 +326,7 @@ def main():
         assert overridden["validation"]["status"] == "review", overridden["validation"]
         assert any(issue.get("code") == "horizon-mismatch" for issue in overridden["validation"]["issues"])
 
-        print("reference-space-orientation-mcp: exact screen orientation, strict numeric/boolean inputs, stale-revision safety, and Horizon guard passed")
+        print("reference-space-orientation-mcp: exact screen orientation, strict identity/target/numeric/boolean inputs, stale-revision safety, and Horizon guard passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
