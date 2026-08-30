@@ -104,6 +104,108 @@ def calibrate_reference_camera(data, defaults=None):
     return result
 
 
+def _median(values):
+    ordered = sorted(float(value) for value in values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def evaluate_scale_anchor_consistency(anchors, *, sensor_width_mm=DEFAULT_SENSOR_WIDTH_MM, aspect="16:9", tolerance_ratio=0.08, expected_focal_mm=None):
+    """Check whether independent measured anchors support one shared camera focal.
+
+    Every anchor must provide a known real distance. We intentionally do not infer
+    a consensus depth or silently average anchors at different unknown depths.
+    The median focal is diagnostic only and is never applied automatically.
+    """
+    if not isinstance(anchors, list) or len(anchors) < 2:
+        raise ValueError("Scale Anchor 일관성 검사는 distance_m이 있는 앵커가 2개 이상 필요합니다.")
+    if len(anchors) > 32:
+        raise ValueError("Scale Anchor 일관성 검사는 한 번에 32개까지 지원합니다.")
+    sensor_width = positive(sensor_width_mm, "sensor_width_mm")
+    ratio = aspect_value(aspect)
+    tolerance = float(tolerance_ratio)
+    if not math.isfinite(tolerance) or tolerance < 0 or tolerance > 1:
+        raise ValueError("tolerance_ratio는 0~1 사이여야 합니다.")
+    expected_focal = optional_positive(expected_focal_mm, "expected_focal_mm")
+
+    solved = []
+    for index, anchor in enumerate(anchors):
+        if not isinstance(anchor, dict):
+            raise ValueError(f"anchors[{index}]가 객체가 아닙니다.")
+        axis = "width" if str(anchor.get("axis", "height")).lower() == "width" else "height"
+        physical_size = positive(anchor.get("physical_size_m"), f"anchors[{index}].physical_size_m")
+        distance = positive(anchor.get("distance_m"), f"anchors[{index}].distance_m")
+        fraction = frame_fraction(anchor)
+        sensor_axis = sensor_width if axis == "width" else sensor_width / ratio
+        focal = fraction * distance * sensor_axis / physical_size
+        solved.append({
+            "id": str(anchor.get("id") or f"anchor-{index + 1}")[:64],
+            "axis": axis,
+            "physical_size_m": physical_size,
+            "distance_m": distance,
+            "frame_fraction": fraction,
+            "focal_mm": focal,
+            "applicable_to_frisframe_camera": CAMERA_FOCAL_MIN <= focal <= CAMERA_FOCAL_MAX,
+        })
+
+    median_focal = _median([entry["focal_mm"] for entry in solved])
+    issues = []
+    maximum_deviation = 0.0
+    for entry in solved:
+        deviation = abs(entry["focal_mm"] - median_focal) / max(abs(median_focal), 1e-9)
+        entry["deviation_from_median_ratio"] = deviation
+        maximum_deviation = max(maximum_deviation, deviation)
+        if deviation > tolerance:
+            issues.append({
+                "code": "anchor-focal-inconsistent",
+                "id": entry["id"],
+                "focal_mm": entry["focal_mm"],
+                "median_focal_mm": median_focal,
+                "deviation_ratio": deviation,
+                "tolerance_ratio": tolerance,
+            })
+        if not entry["applicable_to_frisframe_camera"]:
+            issues.append({
+                "code": "anchor-focal-outside-frisframe-range",
+                "id": entry["id"],
+                "focal_mm": entry["focal_mm"],
+                "allowed": [CAMERA_FOCAL_MIN, CAMERA_FOCAL_MAX],
+            })
+        if expected_focal is not None:
+            expected_deviation = abs(entry["focal_mm"] - expected_focal) / expected_focal
+            entry["deviation_from_expected_ratio"] = expected_deviation
+            if expected_deviation > tolerance:
+                issues.append({
+                    "code": "anchor-focal-mismatch-expected",
+                    "id": entry["id"],
+                    "focal_mm": entry["focal_mm"],
+                    "expected_focal_mm": expected_focal,
+                    "deviation_ratio": expected_deviation,
+                    "tolerance_ratio": tolerance,
+                })
+
+    return {
+        "schema": "frisframe-scale-anchor-consistency",
+        "version": 1,
+        "status": "consistent" if not issues else "review",
+        "consistent": not issues,
+        "anchor_count": len(solved),
+        "sensor_width_mm": sensor_width,
+        "aspect": ratio,
+        "tolerance_ratio": tolerance,
+        "expected_focal_mm": expected_focal,
+        "diagnostic_median_focal_mm": median_focal,
+        "minimum_focal_mm": min(entry["focal_mm"] for entry in solved),
+        "maximum_focal_mm": max(entry["focal_mm"] for entry in solved),
+        "maximum_deviation_ratio": maximum_deviation,
+        "anchors": solved,
+        "issues": issues,
+        "application_policy": "diagnostic-only-no-auto-average",
+    }
+
+
 def mass_bounds(mass):
     width = positive(mass.get("width_m"), "width_m")
     depth = positive(mass.get("depth_m"), "depth_m")
