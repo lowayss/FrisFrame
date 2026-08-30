@@ -16,7 +16,7 @@ This preserves the current Camera Operator, keyframe, MP4, and Seedance Video Re
 4. Mass Blocking
 5. MCP spatial commands
 
-The first implementation slice keeps all new math inside the already-shipped `spatial-scale-core.js` and `scene-blocking-core.js`. Do not restore the retired spatial-reference runtime or its old DOM symbols.
+The current implementation keeps deterministic geometry in the shipped spatial/blocking cores and layers MCP commands onto the existing previs server. Do not restore the retired spatial-reference runtime or its old DOM symbols.
 
 ## External analysis contract
 
@@ -57,84 +57,130 @@ An external model should return observations, not rendered geometry.
 }
 ```
 
-`frameFraction` is the measured width or height divided by the full image width or height. Pixel measurements are also accepted by the core when the corresponding image-axis pixel count is supplied.
+`frameFraction` is the measured width or height divided by the full image width or height. Pixel measurements are also accepted when the corresponding image-axis pixel count is supplied.
 
 ## Scale Anchor
 
 A Scale Anchor connects a known real-world dimension to its measured image size.
 
-Supported axes in 0.6 are `height` and `width`. Depth should not be inferred from a single projected length because rotation can make the result ambiguous.
+Supported axes in 0.6 are `height` and `width`. Depth is not inferred from a single projected length because rotation can make that result ambiguous.
 
-With a known focal length, an anchor can solve camera-to-anchor distance. With a known distance, an anchor can solve focal length.
+With a known focal length, an anchor can solve camera-to-anchor distance. With a known distance, an anchor can solve focal length. If the caller explicitly supplies `distance_m`, the MCP calibration path solves focal rather than silently reusing the current FrisFrame lens.
 
-Multiple anchors should be kept as separate observations. Do not average anchors that are clearly at different depths.
+Applied anchors are persisted in the existing `spatialGuide` structure as `scale-height` or `scale-width` anchors. Their measured frame fraction, world position, attached item, confidence, and physical dimensions remain available for later validation.
 
 ## Perspective Calibration
 
-The core supports:
+The deterministic core supports:
 
 - horizontal/vertical FOV from focal length, sensor width, and aspect ratio;
 - focal length from anchor size + frame fraction + distance;
 - distance from anchor size + frame fraction + focal length;
-- camera downward tilt from normalized horizon Y;
+- camera tilt from normalized horizon Y;
 - horizontal ray angle from normalized image X.
 
-These calculations are deterministic. They do not guess scene semantics.
+FrisFrame uses negative `tiltDeg` for a downward-looking camera. Therefore a horizon above frame center (`horizonY < 0.5`) produces a negative tilt.
+
+These calculations do not guess scene semantics.
+
+## Applying calibrated camera geometry
+
+`apply_reference_camera_calibration` applies an explicit external Scale Anchor observation to the current cut.
+
+The command can update:
+
+- the target item's `referenceDimensionsM` and `referenceAnchorId`;
+- camera focal length;
+- camera tilt from a measured horizon;
+- camera position along its current radial relationship to the target so the solved 3D distance is respected;
+- optional pan to face the target;
+- the persisted Scale Anchor and Horizon anchors in `spatialGuide`.
+
+Target dimensions and camera changes are sent through the existing scene-command mutation in one project revision.
+
+### Camera-keyframe safety
+
+If the cut already has camera keyframes, `apply_reference_camera_calibration` is blocked by default. Changing only the base camera under an existing keyed camera path can change the intended previs result.
+
+For a keyed cut, first use `calibrate_reference_camera`, then apply the solved values to explicit camera keyframes with the existing `apply_motion_timeline` tool. `allow_keyframed_base_camera=true` exists only as an explicit override.
+
+A solved distance that would move the camera outside the current stage is rejected instead of silently clamping the camera position.
 
 ## Reference Overlay / Ghost View
 
-The first slice exposes deterministic `contain` / `cover` overlay fitting and image-normalized ↔ overlay-pixel coordinate transforms.
+The camera-preview UI includes a non-destructive Reference Ghost view.
 
-The UI layer should use these functions later without introducing a second image-scaling implementation. Overlay state must remain a non-destructive inspection aid and must not alter keyframes or exported MP4 frames unless explicitly enabled for a diagnostic capture mode.
+It supports:
+
+- local PNG/JPEG/WEBP image selection;
+- `contain` / `cover` fitting using the shared overlay math;
+- opacity control;
+- show/hide and clear controls;
+- automatic camera-preview resize following.
+
+The Ghost is a DOM inspection layer above the camera preview. It is not drawn into the preview render canvas and is not included in MP4 export.
+
+## Reference Space validation UI
+
+The shipped `reference-workflow-core.js` also installs a local Reference Space validation panel. No second spatial runtime or extra static loader is used.
+
+The panel re-checks the current cut against persisted `spatialGuide` data:
+
+- attached anchor target exists;
+- anchor world X/Z still matches the item;
+- physical dimensions still match;
+- Scale Anchor observed frame fraction vs current camera projection;
+- persisted Horizon Y vs current camera focal/tilt;
+- number of existing camera keyframes.
+
+The panel reports `READY` when the persisted Reference Space observations match the current cut and `REVIEW` when they have drifted.
+
+MCP `validate_reference_space` performs the same class of deterministic checks for external clients and automatically reuses persisted `scale-*` and `horizon` anchors when explicit observations are not supplied again.
 
 ## Mass Blocking
 
-External analysis should describe only the large spatial masses first:
+External analysis should describe the large spatial masses first:
 
 ```json
 {
-  "stage": { "width": 36, "depth": 20.25 },
   "masses": [
     {
       "id": "back-wall",
-      "label": "Back wall",
-      "xM": 0,
-      "zM": -6,
-      "widthM": 10,
-      "heightM": 4,
-      "depthM": 0.4,
-      "rotationDeg": 0,
+      "name": "Back wall",
+      "world_x_m": 0,
+      "world_z_m": -6,
+      "width_m": 10,
+      "height_m": 4,
+      "depth_m": 0.4,
+      "rotation_deg": 0,
       "confidence": 0.9
     }
   ]
 }
 ```
 
-`scene-blocking-core.js` converts those world-meter values into FrisFrame's existing normalized stage coordinates and emits scene-object descriptors using `referenceDimensionsM`. That field is already honored by the current 3D physical-dimension path.
+The current 36m long-edge stage is used for world-meter mapping. Masses are converted to existing scene objects, keep their actual W/H/D through `referenceDimensionsM`, and are linked back to `spatialGuide` anchors.
 
-Mass validation currently flags blocks that extend beyond stage bounds and low-confidence observations.
+Masses extending outside the current stage are rejected by default. The MCP command exposes an explicit `allow_outside_stage` override for deliberate exceptions.
 
-## MCP direction
+## Implemented MCP tools
 
-MCP should stay an orchestration layer, not an image-analysis engine.
+Reference Space is an orchestration layer, not an image-analysis engine. The desktop MCP currently exposes:
 
-Planned command families:
+- `calibrate_reference_camera` — solve distance/focal/FOV/tilt from explicit measurements;
+- `apply_reference_camera_calibration` — safely apply the solved camera + Scale Anchor to a cut;
+- `apply_reference_mass_blocks` — upsert large spatial masses in world meters and persist their anchors;
+- `validate_reference_space` — validate persisted or caller-supplied Reference Space observations against the current cut.
 
-- `set_reference_space`
-- `set_scale_anchor`
-- `calibrate_reference_camera`
-- `set_reference_overlay`
-- `apply_mass_blocking`
-- `validate_reference_space`
-
-Each command should accept structured measurements from the external model, call the deterministic core, then update the existing scene document. MCP must not invent missing measurements silently.
+The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros`, and `apply_previs_plan` remain unchanged and continue to own general scene/motion authoring.
 
 ## Compatibility rules
 
-- Keep the 36m long-edge stage model unless the user explicitly changes it.
+- Keep the 36m long-edge stage model unless the product intentionally introduces a stage-size feature.
 - Keep persisted scene objects flat.
 - Keep camera/keyframe ownership unchanged.
 - Do not add automatic secondary actor motion.
 - Do not change MP4 export semantics.
 - Do not reintroduce retired spatial-reference runtime symbols.
-- Reference-space metadata should be optional so old projects continue to load.
+- Keep Reference Space metadata optional so old projects continue to load.
+- Do not silently clamp or invent missing spatial measurements when a deterministic solve cannot be performed.
