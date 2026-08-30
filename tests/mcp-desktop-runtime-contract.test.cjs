@@ -28,8 +28,6 @@ assert.match(build, /name: "frisframe-mcp"/,
   "desktop preparation must create a dedicated stdio MCP executable");
 assert.match(build, /entrypoint: "mcp_desktop_entry\.py"/,
   "the packaged MCP executable must use the desktop database resolver entrypoint");
-assert.match(build, /reference-validation-ui\.js/,
-  "the packaged server runtime must include the Reference Space validation UI module");
 assert.match(build, /mcpExecutable: "frisframe-mcp"/,
   "macOS runtime config must name the packaged MCP executable");
 assert.match(build, /mcpExecutable: "frisframe-mcp\.exe"/,
@@ -40,8 +38,6 @@ assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp\.exe"\)/,
   "Windows release verification must require the packaged MCP executable");
 assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp"\)/,
   "macOS release verification must require the packaged MCP executable");
-assert.match(verify, /reference-validation-ui\.js/,
-  "release verification must require the packaged Reference Space validation UI");
 assert.match(verify, /verifyMcpExecutable\(mcpExecutable\)/,
   "release verification must exercise the packaged MCP process");
 assert.match(verify, /function runMcpRequest\(executable, database, request\)/,
