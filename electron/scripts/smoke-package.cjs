@@ -16,6 +16,7 @@ const REQUIRED_IDS = [
   "cameraFrame",
   "cameraRigList",
   "batchReferenceVideoBtn",
+  "cameraOperatorBtn",
 ];
 const REQUIRED_WORKFLOW_SELECTORS = [
   "#blockingBtn",
@@ -23,6 +24,8 @@ const REQUIRED_WORKFLOW_SELECTORS = [
   "#exportMenu.frisframe-primary-export",
   ".frisframe-export-advanced",
   ".frisframe-project-advanced",
+  ".frisframe-camera-operator",
+  ".frisframe-camera-operator-surface",
 ];
 const RETIRED_IDS = [
   "blockingPlanBtn",
@@ -158,6 +161,7 @@ async function readRendererState(socket) {
     const blockingLabel = String(document.querySelector("#blockingBtn span")?.textContent || "").trim();
     const exportLabel = String(document.querySelector("#exportMenu > summary span")?.textContent || "").trim();
     const videoLabel = String(document.querySelector("#videoBtn span")?.textContent || "").trim();
+    const cameraOperatorLabel = String(document.querySelector("#cameraOperatorBtn")?.textContent || "").trim();
     return {
       readyState: document.readyState,
       title: document.title,
@@ -168,9 +172,11 @@ async function readRendererState(socket) {
       blockingLabel,
       exportLabel,
       videoLabel,
+      cameraOperatorLabel,
+      cameraOperatorReady: Boolean(window.FrisFrameCameraOperatorCore && window.FrisFrameCameraOperator),
       referenceWorkflowReady: Boolean(window.FrisFrameReferenceWorkflowCore),
       debugConsoleVisible: Boolean(debug && getComputedStyle(debug).display !== "none"),
-      bodyText: String(document.body?.innerText || "").slice(0, 1800),
+      bodyText: String(document.body?.innerText || "").slice(0, 2200),
     };
   })()`;
   const result = await cdp(socket, "Runtime.evaluate", {
@@ -194,13 +200,15 @@ async function waitForHealthyRenderer(socket, child, timeoutMs = 30000) {
           state.readyState === "complete" &&
           state.title === "FrisFrame" &&
           state.referenceWorkflowReady === true &&
+          state.cameraOperatorReady === true &&
           state.debugConsoleVisible === false &&
           Array.isArray(state.requiredMissing) && state.requiredMissing.length === 0 &&
           Array.isArray(state.workflowMissing) && state.workflowMissing.length === 0 &&
           Array.isArray(state.retiredPresent) && state.retiredPresent.length === 0 &&
           state.blockingLabel === "블로킹" &&
           state.exportLabel === "프리비즈 출력" &&
-          state.videoLabel === "프리비즈 MP4 만들기"
+          state.videoLabel === "프리비즈 MP4 만들기" &&
+          state.cameraOperatorLabel === "● 직접 촬영"
         ) return state;
       }
     } catch {
@@ -261,7 +269,7 @@ async function main() {
     const code = await waitForExit(child);
     if (code !== 0) throw new Error(`FrisFrame가 GUI smoke 종료 중 오류 코드를 반환했습니다: ${code}`);
     console.log(`FrisFrame 패키지 GUI smoke 통과: ${state.url}`);
-    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
+    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 · Camera Operator 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
   } catch (error) {
     try { socket?.close(); } catch { /* ignored */ }
     if (child.exitCode === null) child.kill();
