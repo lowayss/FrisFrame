@@ -69,6 +69,23 @@ With a known focal length, an anchor can solve camera-to-anchor distance. With a
 
 Applied anchors are persisted in the existing `spatialGuide` structure as `scale-height` or `scale-width` anchors. Their measured frame fraction, world position, attached item, confidence, and physical dimensions remain available for later validation.
 
+## Multi-anchor perspective consistency
+
+Multiple anchors are useful only when their inputs support a valid comparison. FrisFrame does **not** average unrelated anchors or invent their missing depths.
+
+`check_reference_anchor_consistency` requires at least two Scale Anchors whose real `distance_m` is already known or supplied by the external analysis. For each anchor it independently solves the focal length implied by:
+
+- physical size;
+- measured frame fraction;
+- real camera-to-anchor distance;
+- sensor width and aspect ratio.
+
+It then reports the focal estimate for every anchor, a diagnostic median, maximum deviation, and consistency issues. The median is **diagnostic only** and is never applied automatically (`application_policy: diagnostic-only-no-auto-average`).
+
+This catches common external-analysis errors such as a door depth or actor distance that would imply an 85mm lens while the other anchors imply 50mm.
+
+`apply_reference_space_plan` accepts optional `consistency_anchors`. With the default `require_anchor_consistency=true`, inconsistent anchors stop the plan **before** any project revision is created. The caller can lower or raise `consistency_tolerance_ratio`; the default is 8%.
+
 ## Perspective Calibration
 
 The deterministic core supports:
@@ -188,6 +205,23 @@ Example shape:
     "frame_fraction": 0.31,
     "horizon_y": 0.43
   },
+  "consistency_anchors": [
+    {
+      "id": "actor-check",
+      "axis": "height",
+      "physical_size_m": 1.78,
+      "frame_fraction": 0.31,
+      "distance_m": 14.2
+    },
+    {
+      "id": "door-check",
+      "axis": "height",
+      "physical_size_m": 2.0,
+      "frame_fraction": 0.27,
+      "distance_m": 15.8
+    }
+  ],
+  "require_anchor_consistency": true,
   "masses": [
     {
       "id": "back-wall",
@@ -211,7 +245,8 @@ Reference Space is an orchestration layer, not an image-analysis engine. The des
 - `calibrate_reference_camera` — solve distance/focal/FOV/tilt from explicit measurements;
 - `apply_reference_camera_calibration` — safely apply the solved camera + Scale Anchor to a cut;
 - `apply_reference_mass_blocks` — upsert large spatial masses in world meters and persist their anchors;
-- `apply_reference_space_plan` — preferred atomic application of camera calibration + large masses in one revision;
+- `check_reference_anchor_consistency` — independently compare focal estimates from multiple known-depth anchors without auto-averaging;
+- `apply_reference_space_plan` — preferred atomic application of camera calibration + large masses, with optional multi-anchor preflight, in one revision;
 - `validate_reference_space` — validate persisted or caller-supplied Reference Space observations against the current cut.
 
 The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros`, and `apply_previs_plan` remain unchanged and continue to own general scene/motion authoring.
@@ -226,3 +261,4 @@ The existing `apply_stage_layout`, `apply_motion_timeline`, `apply_motion_macros
 - Do not reintroduce retired spatial-reference runtime symbols.
 - Keep Reference Space metadata optional so old projects continue to load.
 - Do not silently clamp or invent missing spatial measurements when a deterministic solve cannot be performed.
+- Do not auto-average multiple anchor focal estimates into an applied camera value; inconsistent measurements must be surfaced for external review.
