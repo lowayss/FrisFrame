@@ -1,6 +1,210 @@
 (() => {
   "use strict";
 
+  function splineClamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, Number(value) || 0));
+  }
+
+  function splineNormalizeAngle(value) {
+    const normalized = Number(value) % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+
+  function splineShortestAngleDelta(from, to) {
+    let delta = splineNormalizeAngle(to) - splineNormalizeAngle(from);
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+  }
+
+  function splineHermite(start, end, startVelocity, endVelocity, progress, span) {
+    const t = splineClamp(progress, 0, 1);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+    return h00 * start
+      + h10 * startVelocity * span
+      + h01 * end
+      + h11 * endVelocity * span;
+  }
+
+  function splineScalarJoinTangent(previous, current, next, previousTime, currentTime, nextTime) {
+    const leftSpan = Number(currentTime) - Number(previousTime);
+    const rightSpan = Number(nextTime) - Number(currentTime);
+    const hasLeft = leftSpan > 0.000001;
+    const hasRight = rightSpan > 0.000001;
+    if (!hasLeft && !hasRight) return 0;
+    if (!hasLeft) return (Number(next) - Number(current)) / Math.max(0.000001, rightSpan);
+    if (!hasRight) return (Number(current) - Number(previous)) / Math.max(0.000001, leftSpan);
+
+    const incoming = (Number(current) - Number(previous)) / leftSpan;
+    const outgoing = (Number(next) - Number(current)) / rightSpan;
+    const incomingAbs = Math.abs(incoming);
+    const outgoingAbs = Math.abs(outgoing);
+    // A real hold or a real reversal should still be allowed to come to rest.
+    if (incomingAbs < 0.000001 || outgoingAbs < 0.000001 || incoming * outgoing < 0) return 0;
+
+    let tangent = (Number(next) - Number(previous)) / Math.max(0.000001, Number(nextTime) - Number(previousTime));
+    const limit = Math.max(0.000001, Math.min(
+      Math.max(incomingAbs, outgoingAbs) * 1.35,
+      (incomingAbs + outgoingAbs) * 0.9,
+    ));
+    if (Math.abs(tangent) > limit) tangent = Math.sign(tangent) * limit;
+    return tangent;
+  }
+
+  function splineVectorJoinTangent(previous, current, next, previousTime, currentTime, nextTime) {
+    const leftSpan = Number(currentTime) - Number(previousTime);
+    const rightSpan = Number(nextTime) - Number(currentTime);
+    const hasLeft = leftSpan > 0.000001;
+    const hasRight = rightSpan > 0.000001;
+    const velocity = (from, to, span) => ({
+      x: (Number(to?.x || 0) - Number(from?.x || 0)) / Math.max(0.000001, span),
+      y: (Number(to?.y || 0) - Number(from?.y || 0)) / Math.max(0.000001, span),
+    });
+    if (!hasLeft && !hasRight) return { x: 0, y: 0 };
+    if (!hasLeft) return velocity(current, next, rightSpan);
+    if (!hasRight) return velocity(previous, current, leftSpan);
+
+    const incoming = velocity(previous, current, leftSpan);
+    const outgoing = velocity(current, next, rightSpan);
+    const incomingSpeed = Math.hypot(incoming.x, incoming.y);
+    const outgoingSpeed = Math.hypot(outgoing.x, outgoing.y);
+    // Preserve an authored stop, and only stop a true turn-around. Unlike scalar
+    // PCHIP, an x-axis sign change during a normal curved move must not zero the
+    // whole camera velocity at the key.
+    if (incomingSpeed < 0.000001 || outgoingSpeed < 0.000001) return { x: 0, y: 0 };
+    const directionDot = (incoming.x * outgoing.x + incoming.y * outgoing.y)
+      / Math.max(0.000001, incomingSpeed * outgoingSpeed);
+    if (directionDot < -0.5) return { x: 0, y: 0 };
+
+    const fullSpan = Math.max(0.000001, Number(nextTime) - Number(previousTime));
+    let tangent = {
+      x: (Number(next?.x || 0) - Number(previous?.x || 0)) / fullSpan,
+      y: (Number(next?.y || 0) - Number(previous?.y || 0)) / fullSpan,
+    };
+    const tangentSpeed = Math.hypot(tangent.x, tangent.y);
+    const limit = Math.max(0.000001, Math.min(
+      Math.max(incomingSpeed, outgoingSpeed) * 1.35,
+      (incomingSpeed + outgoingSpeed) * 0.9,
+    ));
+    if (tangentSpeed > limit) {
+      const scale = limit / tangentSpeed;
+      tangent = { x: tangent.x * scale, y: tangent.y * scale };
+    }
+    return tangent;
+  }
+
+  function interpolateOperatorVectorPose(from, to, progress, continuity) {
+    if (!continuity) return null;
+    const previous = continuity.previous || from;
+    const next = continuity.next || to;
+    const previousTime = Number.isFinite(Number(continuity.previousTime))
+      ? Number(continuity.previousTime)
+      : Number(continuity.startTime);
+    const startTime = Number(continuity.startTime);
+    const endTime = Number(continuity.endTime);
+    const nextTime = Number.isFinite(Number(continuity.nextTime))
+      ? Number(continuity.nextTime)
+      : endTime;
+    const span = Math.max(0.000001, endTime - startTime);
+    const t = splineClamp(progress, 0, 1);
+
+    const startPlanarVelocity = splineVectorJoinTangent(
+      previous,
+      from,
+      to,
+      previousTime,
+      startTime,
+      endTime,
+    );
+    const endPlanarVelocity = splineVectorJoinTangent(
+      from,
+      to,
+      next,
+      startTime,
+      endTime,
+      nextTime,
+    );
+    const scalar = (field) => {
+      const startVelocity = splineScalarJoinTangent(
+        previous[field],
+        from[field],
+        to[field],
+        previousTime,
+        startTime,
+        endTime,
+      );
+      const endVelocity = splineScalarJoinTangent(
+        from[field],
+        to[field],
+        next[field],
+        startTime,
+        endTime,
+        nextTime,
+      );
+      return splineHermite(
+        Number(from[field] || 0),
+        Number(to[field] || 0),
+        startVelocity,
+        endVelocity,
+        t,
+        span,
+      );
+    };
+
+    const fromPan = splineNormalizeAngle(from.panDeg);
+    const toPan = fromPan + splineShortestAngleDelta(fromPan, to.panDeg);
+    const previousPan = fromPan + splineShortestAngleDelta(fromPan, previous.panDeg);
+    const nextPan = toPan + splineShortestAngleDelta(toPan, next.panDeg);
+    const startPanVelocity = splineScalarJoinTangent(
+      previousPan,
+      fromPan,
+      toPan,
+      previousTime,
+      startTime,
+      endTime,
+    );
+    const endPanVelocity = splineScalarJoinTangent(
+      fromPan,
+      toPan,
+      nextPan,
+      startTime,
+      endTime,
+      nextTime,
+    );
+
+    return {
+      x: splineHermite(Number(from.x || 0), Number(to.x || 0), startPlanarVelocity.x, endPlanarVelocity.x, t, span),
+      y: splineHermite(Number(from.y || 0), Number(to.y || 0), startPlanarVelocity.y, endPlanarVelocity.y, t, span),
+      height: scalar("height"),
+      panDeg: splineNormalizeAngle(splineHermite(fromPan, toPan, startPanVelocity, endPanVelocity, t, span)),
+      tiltDeg: scalar("tiltDeg"),
+      focal: scalar("focal"),
+    };
+  }
+
+  const cameraOperatorVectorSplineCore = {
+    interpolatePose: interpolateOperatorVectorPose,
+    scalarJoinTangent: splineScalarJoinTangent,
+    vectorJoinTangent: splineVectorJoinTangent,
+  };
+
+  if (typeof module === "object" && module.exports) {
+    module.exports = cameraOperatorVectorSplineCore;
+    return;
+  }
+
+  if (typeof interpolateCameraOperatorPose === "function") {
+    // app.js owns the evaluator call site; Camera Operator replaces only the
+    // operator-specific interpolation policy after the app has loaded.
+    interpolateCameraOperatorPose = interpolateOperatorVectorPose;
+  }
+  window.FrisFrameCameraOperatorVectorSplineCore = cameraOperatorVectorSplineCore;
+
   if (document.documentElement.dataset.frisframeCameraOperatorLiveUx === "1") return;
   document.documentElement.dataset.frisframeCameraOperatorLiveUx = "1";
 
@@ -435,7 +639,10 @@
       heightTolerance: 0.014 + cleanupStrength * 0.026,
       angleTolerance: 0.13 + cleanupStrength * 0.24,
       focalTolerance: 0.25,
-      maxGap: 0.28 + cleanupStrength * 0.22,
+      // Continuous vector tangents carry the curve between keys, so forcing a
+      // key every ~0.28s only creates extra micro slowdowns. Keep enough keys to
+      // preserve operator timing while allowing each spline segment to breathe.
+      maxGap: 0.42 + cleanupStrength * 0.18,
     });
     const rawCount = samples.length;
     const previousCameraKeyCount = state.motion.keyframes.filter((keyframe) => (
@@ -513,6 +720,7 @@
     cancel: cancelOperator,
     finish: finishOperatorTake,
     liveTimeline: true,
+    vectorSpline: true,
     get mode() { return mode; },
     get controlling() { return pointerId != null; },
   };
