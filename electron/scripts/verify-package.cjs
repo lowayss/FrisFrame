@@ -93,6 +93,7 @@ function verifyMcpExecutable(executable) {
       "calibrate_reference_camera",
       "apply_reference_camera_calibration",
       "apply_reference_mass_blocks",
+      "apply_reference_space_plan",
       "validate_reference_space",
     ]) {
       if (!toolNames.has(toolName)) throw new Error(`패키지 MCP 도구가 없습니다: ${toolName}`);
@@ -117,6 +118,36 @@ function verifyMcpExecutable(executable) {
     if (!Array.isArray(parsedList) || parsedList.length !== 0) {
       throw new Error(`격리된 MCP DB의 초기 프로젝트 목록이 비어 있지 않습니다: ${listText}`);
     }
+
+    const frameFraction = 1.78 * 50 / (10 * (36 / (16 / 9)));
+    const calibrated = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "calibrate_reference_camera",
+        arguments: {
+          physical_size_m: 1.78,
+          frame_fraction: frameFraction,
+          focal_mm: 50,
+          sensor_width_mm: 36,
+          aspect: 16 / 9,
+        },
+      },
+    });
+    if (calibrated?.result?.isError !== false) {
+      throw new Error(`패키지 MCP Reference Space 보정 호출 실패: ${JSON.stringify(calibrated)}`);
+    }
+    let calibratedPayload;
+    try {
+      calibratedPayload = JSON.parse(calibrated?.result?.content?.[0]?.text || "null");
+    } catch (error) {
+      throw new Error(`패키지 MCP Reference Space 결과가 JSON이 아닙니다: ${error.message}`);
+    }
+    if (Math.abs(Number(calibratedPayload?.distance_m) - 10) > 1e-6) {
+      throw new Error(`패키지 MCP Reference Space 거리 보정이 올바르지 않습니다: ${JSON.stringify(calibratedPayload)}`);
+    }
+
     if (!fs.existsSync(database)) {
       throw new Error("패키지 MCP가 격리된 SQLite DB를 초기화하지 못했습니다.");
     }
