@@ -204,7 +204,7 @@ TOOLS = [
     },
     {
         "name": "apply_previs_plan",
-        "description": "무대 배치 + 명시적 키프레임 + 고수준 모션 매크로를 한 요청에서 순서대로 적용하는 권장 도구입니다. 수동 편집 후에는 최신 revision을 읽고 호출하세요. AI API나 최종 Seedance 프롬프트 생성은 하지 않습니다.",
+        "description": "무대 배치 + 명시적 키프레임 + 고수준 모션 매크로를 한 DB 트랜잭션과 한 revision으로 원자적으로 적용하는 권장 도구입니다. 중간 단계가 실패하면 전체 계획을 롤백합니다. 수동 편집 후에는 최신 revision을 읽고 호출하세요. AI API나 최종 Seedance 프롬프트 생성은 하지 않습니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -566,49 +566,72 @@ def call_tool(name, args):
     if name == "apply_previs_plan":
         project_id = args.get("project_id")
         revision = int(args["revision"])
-        steps = []
-        stage_operations = args.get("stage_operations") or []
+        stage_operations = list(args.get("stage_operations") or [])
         spatial_guide = args.get("spatial_guide")
-        motion_operations = list(args.get("motion_operations") or [])
-        motion_macros = args.get("motion_macros") or []
-        if not stage_operations and spatial_guide is None and not motion_operations and not motion_macros:
+        explicit_motion_operations = list(args.get("motion_operations") or [])
+        motion_macros = list(args.get("motion_macros") or [])
+        if not stage_operations and spatial_guide is None and not explicit_motion_operations and not motion_macros:
             raise ValueError("stage_operations, spatial_guide, motion_operations, motion_macros 중 하나 이상이 필요합니다.")
 
-        if stage_operations or spatial_guide is not None:
-            payload = _target_args(args, revision)
-            payload["operations"] = stage_operations
-            if spatial_guide is not None:
-                payload["spatial_guide"] = spatial_guide
-            stage_result = _json_result(core.handle_apply_scene_commands(project_id, payload))
-            if "revision" not in stage_result:
-                raise ValueError(stage_result.get("raw", "무대 명령 적용 결과를 읽지 못했습니다."))
-            revision = int(stage_result["revision"])
-            steps.append({"stage": stage_result})
+        scene_index = int(args.get("scene_index", 0))
+        cut_index = int(args.get("cut_index", 0))
 
-        macro_summaries = []
-        if motion_macros:
-            blocking = _load_blocking(project_id, int(args.get("scene_index", 0)), int(args.get("cut_index", 0)))
-            expanded, macro_summaries = _expand_macros(blocking, motion_macros)
-            motion_operations.extend(expanded)
+        def apply_atomic_plan(project_obj):
+            steps = []
+            if stage_operations or spatial_guide is not None:
+                payload = _target_args(args, revision)
+                payload["operations"] = stage_operations
+                if spatial_guide is not None:
+                    payload["spatial_guide"] = spatial_guide
+                stage_result = _json_result(core.handle_apply_scene_commands(project_id, payload))
+                stage_detail = _json_result(stage_result.get("message", ""))
+                if not isinstance(stage_detail, dict):
+                    raise ValueError("무대 명령 적용 결과를 읽지 못했습니다.")
+                steps.append({"stage": stage_detail})
 
-        if motion_operations:
-            if len(motion_operations) > 200:
-                raise ValueError("명시적 키프레임 + 매크로 확장 결과가 200개 명령을 초과했습니다.")
-            payload = _target_args(args, revision)
-            payload["operations"] = motion_operations
-            motion_result = _json_result(core.handle_apply_motion_commands(project_id, payload))
-            if "revision" not in motion_result:
-                raise ValueError(motion_result.get("raw", "모션 명령 적용 결과를 읽지 못했습니다."))
-            revision = int(motion_result["revision"])
-            if macro_summaries:
-                motion_result["expanded_macros"] = macro_summaries
-            steps.append({"motion": motion_result})
+            motion_operations = list(explicit_motion_operations)
+            macro_summaries = []
+            if motion_macros:
+                _, _, cut = core._scene_cut(project_obj, {
+                    "scene_index": scene_index,
+                    "cut_index": cut_index,
+                })
+                blocking = cut["blocking"]
+                expanded, macro_summaries = _expand_macros(blocking, motion_macros)
+                motion_operations.extend(expanded)
 
+            if motion_operations:
+                if len(motion_operations) > 200:
+                    raise ValueError("명시적 키프레임 + 매크로 확장 결과가 200개 명령을 초과했습니다.")
+                payload = _target_args(args, revision)
+                payload["operations"] = motion_operations
+                motion_result = _json_result(core.handle_apply_motion_commands(project_id, payload))
+                motion_detail = _json_result(motion_result.get("message", ""))
+                if not isinstance(motion_detail, dict):
+                    raise ValueError("모션 명령 적용 결과를 읽지 못했습니다.")
+                if macro_summaries:
+                    motion_detail["expanded_macros"] = macro_summaries
+                    motion_detail["expanded_keyframes"] = sum(entry["keyframes"] for entry in macro_summaries)
+                steps.append({"motion": motion_detail})
+
+            return {
+                "steps": steps,
+                "expanded_macros": macro_summaries,
+            }
+
+        committed = _json_result(core.mutate_project_atomic(project_id, revision, apply_atomic_plan))
+        detail = committed.get("message")
+        if not isinstance(detail, dict):
+            detail = _json_result(detail)
+        if not isinstance(detail, dict):
+            raise ValueError("원자적 프리비즈 계획 결과를 읽지 못했습니다.")
         return json.dumps({
             "project_id": project_id,
-            "revision": revision,
-            "steps": steps,
-            "message": "프리비즈 계획을 적용했습니다. 앱에서 결과를 확인하고 수동 수정 후에는 get_project로 revision을 다시 읽으세요.",
+            "revision": committed["revision"],
+            "updated_at": committed.get("updated_at"),
+            "steps": detail.get("steps", []),
+            "expanded_macros": detail.get("expanded_macros", []),
+            "message": "프리비즈 계획을 한 revision으로 적용했습니다. 실패 시 전체 계획을 롤백합니다. 수동 수정 후에는 get_project로 revision을 다시 읽으세요.",
         }, ensure_ascii=False)
     raise ValueError(f"Tool '{name}' is not recognized.")
 

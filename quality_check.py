@@ -116,6 +116,7 @@ def main() -> None:
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
     run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
+    run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
