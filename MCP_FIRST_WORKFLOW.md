@@ -46,7 +46,7 @@ FrisFrame은 이 이미지들을 생성하지 않는다.
 - 소품 이미지
 - 컷/영상 설명 텍스트
 
-MCP 대화가 이 자료를 바탕으로 최종 Seedance 프롬프트를 작성한다. **FrisFrame 내부의 Reference Prompt 생성은 핵심 워크플로우가 아니다.**
+MCP 대화가 이 자료를 바탕으로 최종 Seedance 프롬프트를 작성한다. **FrisFrame은 최종 Seedance 프롬프트 생성 UI를 제공하지 않는다.**
 
 ## 내보내기 UI 원칙
 
