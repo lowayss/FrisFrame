@@ -8,6 +8,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { registerClipboardImageHandler } = require("./clipboard.cjs");
 const { registerFileSaveHandler } = require("./file-save.cjs");
+const { createPhoneRemoteBridge } = require("./phone-remote.cjs");
 
 app.setName("FrisFrame");
 
@@ -16,6 +17,7 @@ let serverProcess = null;
 let serverOrigin = "";
 let quitting = false;
 let logFile = "";
+let phoneRemoteBridge = null;
 
 function writeLog(message) {
   const line = `[${new Date().toISOString()}] ${String(message).trim()}\n`;
@@ -311,6 +313,26 @@ function rendererUrlMatchesOrigin(value, allowedOrigin) {
   }
 }
 
+function rendererEventAllowed(event) {
+  const value = event?.senderFrame?.url || event?.sender?.getURL?.() || "";
+  return rendererUrlMatchesOrigin(value, serverOrigin);
+}
+
+ipcMain.handle("phone-remote:start", async (event) => {
+  if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
+  if (!phoneRemoteBridge) throw new Error("Phone Camera Remote가 준비되지 않았습니다.");
+  return phoneRemoteBridge.start();
+});
+ipcMain.handle("phone-remote:stop", async (event) => {
+  if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
+  phoneRemoteBridge?.stop?.();
+  return true;
+});
+ipcMain.handle("phone-remote:status", async (event) => {
+  if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
+  return phoneRemoteBridge?.getConfig?.() || null;
+});
+
 function createMainWindow(origin) {
   const window = new BrowserWindow({
     width: 1540,
@@ -343,7 +365,7 @@ function createMainWindow(origin) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.webContents.on("did-finish-load", () => {
-    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
       const uxPath = path.join(__dirname, filename);
       try {
         const source = fs.readFileSync(uxPath, "utf8");
@@ -382,11 +404,17 @@ else {
     logFile = path.join(app.getPath("userData"), "logs", "main.log");
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     buildApplicationMenu();
+    session.defaultSession.registerPreloadScript({
+      type: "frame",
+      id: "frisframe-phone-remote",
+      filePath: path.join(__dirname, "phone-remote-preload.cjs"),
+    });
     session.defaultSession.setPermissionCheckHandler(() => false);
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     session.defaultSession.setDevicePermissionHandler?.(() => false);
     try {
       const origin = await startLocalServer();
+      phoneRemoteBridge = createPhoneRemoteBridge({ getWindow: () => mainWindow, writeLog });
       createMainWindow(origin);
     } catch (error) {
       await showStartupFailure(error);
@@ -398,6 +426,8 @@ else {
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", () => {
     quitting = true;
+    phoneRemoteBridge?.stop?.();
+    phoneRemoteBridge = null;
     killServerProcess();
   });
 }
