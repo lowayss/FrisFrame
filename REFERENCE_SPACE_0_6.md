@@ -170,7 +170,7 @@ The inverse solve keeps the current camera position, focal length, sensor/aspect
 
 Camera-keyframe safety remains active: base-camera orientation is blocked by default when camera keys already exist. A persisted Horizon observation is also protected. If the solved screen Y would make the current Horizon observation exceed the configured tolerance, application stops before a revision is created. `allow_horizon_mismatch=true` is an explicit override; after such an override the normal validator can report `REVIEW` because Horizon is a blocking observation even though screen X/Y is not.
 
-The explicit orientation tools do **not** make X/Y residuals globally blocking and are intentionally separate from `apply_reference_space_plan` in 0.6. This keeps the atomic reference plan free from implicit camera-direction changes; exact reframing is a deliberate follow-up operation.
+The explicit orientation tools do **not** make X/Y residuals globally blocking and are intentionally separate from `apply_reference_space_plan` in 0.6. This keeps the atomic reference plan free from implicit camera-direction changes; exact reframing is a deliberate follow-up operation. External clients should prefer `solve_reference_camera_orientation` first, inspect the returned deltas and Horizon check, and call `apply_reference_camera_orientation` only when that reframing is intentionally desired.
 
 Scale fraction, physical dimensions, world X/Z and Horizon continue to use the existing validation rules.
 
