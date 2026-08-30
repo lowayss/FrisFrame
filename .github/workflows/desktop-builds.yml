@@ -6,6 +6,9 @@ on:
     paths:
       - "package.json"
       - "package-lock.json"
+      - "app.js"
+      - "index.html"
+      - "styles.css"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
       - "SIGNING.md"
@@ -19,6 +22,9 @@ on:
     paths:
       - "package.json"
       - "package-lock.json"
+      - "app.js"
+      - "index.html"
+      - "styles.css"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
       - "SIGNING.md"
