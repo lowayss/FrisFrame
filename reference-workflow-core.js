@@ -6,11 +6,14 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.FrisFrameReferenceWorkflowCore = api;
 
-  // Desktop/browser UI only installs the supported multi-cut MP4 export surface.
+  // Desktop/browser UI installs reference export plus non-destructive inspection aids.
   // Readiness remains an internal safety policy and final prompt composition lives
   // in the external MCP conversation.
   if (root?.document && typeof root.addEventListener === "function") {
-    const install = () => api.installBatchReferenceExportUi(root);
+    const install = () => {
+      api.installBatchReferenceExportUi(root);
+      api.installReferenceGhostUi(root);
+    };
     if (root.document.readyState === "loading") root.addEventListener("DOMContentLoaded", install, { once: true });
     else root.setTimeout?.(install, 0);
   }
@@ -33,6 +36,7 @@
   }
 
   const SEEDANCE_REFERENCE_MAX_SECONDS = Number(motionCore.SEEDANCE_REFERENCE_MAX_SECONDS || 30);
+  const REFERENCE_GHOST_MAX_FILE_BYTES = 5_500_000;
   const {
     cloneValue,
     collectReferenceBatchCuts,
@@ -208,6 +212,217 @@
     }
   }
 
+  function installReferenceGhostUi(target) {
+    const documentObject = target?.document;
+    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
+    if (documentObject.querySelector("#referenceGhostPanel")) return true;
+
+    const cameraFrame = documentObject.querySelector("#cameraFrame");
+    const cameraCanvas = documentObject.querySelector("#cameraFrameCanvas");
+    const leftPanel = documentObject.querySelector(".left-panel");
+    if (!cameraFrame || !cameraCanvas || !leftPanel) return false;
+    const spatialCore = target.FrisFrameSpatialScaleCore;
+    if (!spatialCore || typeof spatialCore.fitOverlayRect !== "function") return false;
+
+    const style = documentObject.createElement("style");
+    style.dataset.frisframeReferenceGhost = "1";
+    style.textContent = `
+      .reference-ghost-panel .reference-ghost-actions { display:grid; grid-template-columns:1fr auto; gap:6px; margin-top:7px; }
+      .reference-ghost-panel .reference-ghost-actions button { min-width:0; }
+      .reference-ghost-panel .reference-ghost-status { display:block; margin-top:7px; color:#8f9aa5; font-size:9px; line-height:1.35; overflow-wrap:anywhere; }
+      .reference-ghost-panel .reference-ghost-note { display:block; margin-top:6px; color:#d6a95c; font-size:8px; line-height:1.35; }
+      .reference-ghost-panel .reference-ghost-inline { display:grid; grid-template-columns:minmax(0,1fr) 72px; gap:7px; align-items:center; margin-top:7px; }
+      .reference-ghost-panel .reference-ghost-inline select { width:100%; min-width:0; }
+      .reference-ghost-panel .reference-ghost-opacity { display:grid; grid-template-columns:52px 1fr 34px; gap:6px; align-items:center; margin-top:7px; font-size:9px; }
+      .reference-ghost-layer { position:absolute; z-index:1; pointer-events:none; user-select:none; max-width:none; max-height:none; object-fit:fill; transform:none; }
+      .reference-ghost-layer[hidden] { display:none !important; }
+    `;
+    documentObject.head?.appendChild(style);
+
+    const panel = documentObject.createElement("details");
+    panel.id = "referenceGhostPanel";
+    panel.className = "panel-section compact-details mobile-collapsible reference-ghost-panel";
+    panel.dataset.mobileCollapsible = "";
+    panel.dataset.desktopDefault = "closed";
+    panel.innerHTML = `
+      <summary>Reference Ghost</summary>
+      <label class="toggle-row">
+        <span>Ghost 표시</span>
+        <input id="referenceGhostEnabled" type="checkbox" checked />
+      </label>
+      <div class="reference-ghost-actions">
+        <button id="referenceGhostChooseBtn" type="button" class="text-btn"><span>레퍼런스 이미지 선택</span></button>
+        <button id="referenceGhostClearBtn" type="button" class="icon-btn" title="Ghost 이미지 지우기" aria-label="Ghost 이미지 지우기">×</button>
+      </div>
+      <input id="referenceGhostFileInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+      <div class="reference-ghost-opacity">
+        <span>투명도</span>
+        <input id="referenceGhostOpacity" type="range" min="5" max="80" step="1" value="35" />
+        <output id="referenceGhostOpacityValue">35%</output>
+      </div>
+      <div class="reference-ghost-inline">
+        <label for="referenceGhostFit">화면 맞춤</label>
+        <select id="referenceGhostFit">
+          <option value="contain">Contain</option>
+          <option value="cover">Cover</option>
+        </select>
+      </div>
+      <small id="referenceGhostStatus" class="reference-ghost-status">이미지를 선택하면 카메라 프리뷰 위에만 겹쳐 표시합니다.</small>
+      <small class="reference-ghost-note">검사용 오버레이이며 프리비즈 렌더와 MP4에는 포함되지 않습니다.</small>
+    `;
+    const stagePanel = leftPanel.querySelector("details");
+    if (stagePanel?.insertAdjacentElement) stagePanel.insertAdjacentElement("afterend", panel);
+    else leftPanel.insertBefore(panel, leftPanel.firstChild || null);
+
+    const ghostLayer = documentObject.createElement("img");
+    ghostLayer.id = "referenceGhostLayer";
+    ghostLayer.className = "reference-ghost-layer";
+    ghostLayer.alt = "";
+    ghostLayer.setAttribute("aria-hidden", "true");
+    ghostLayer.hidden = true;
+    cameraCanvas.insertAdjacentElement?.("afterend", ghostLayer) || cameraFrame.appendChild(ghostLayer);
+
+    const enabledInput = panel.querySelector("#referenceGhostEnabled");
+    const chooseButton = panel.querySelector("#referenceGhostChooseBtn");
+    const clearButton = panel.querySelector("#referenceGhostClearBtn");
+    const fileInput = panel.querySelector("#referenceGhostFileInput");
+    const opacityInput = panel.querySelector("#referenceGhostOpacity");
+    const opacityValue = panel.querySelector("#referenceGhostOpacityValue");
+    const fitInput = panel.querySelector("#referenceGhostFit");
+    const status = panel.querySelector("#referenceGhostStatus");
+    const ghostState = {
+      dataUrl: "",
+      filename: "",
+      width: 0,
+      height: 0,
+      enabled: true,
+      opacity: 0.35,
+      fit: "contain",
+    };
+
+    function setStatus(message) {
+      if (status) status.textContent = String(message || "");
+    }
+
+    function syncGhostOverlay() {
+      const hasImage = Boolean(ghostState.dataUrl && ghostState.width > 0 && ghostState.height > 0);
+      ghostLayer.hidden = !(hasImage && ghostState.enabled);
+      if (ghostLayer.hidden) return;
+      const frameRect = cameraFrame.getBoundingClientRect();
+      const canvasRect = cameraCanvas.getBoundingClientRect();
+      const targetWidth = Math.max(1, canvasRect.width || cameraCanvas.clientWidth || cameraCanvas.width || 1);
+      const targetHeight = Math.max(1, canvasRect.height || cameraCanvas.clientHeight || cameraCanvas.height || 1);
+      const rect = spatialCore.fitOverlayRect({
+        sourceWidth: ghostState.width,
+        sourceHeight: ghostState.height,
+        targetWidth,
+        targetHeight,
+        fit: ghostState.fit,
+      });
+      ghostLayer.style.left = `${canvasRect.left - frameRect.left + rect.x}px`;
+      ghostLayer.style.top = `${canvasRect.top - frameRect.top + rect.y}px`;
+      ghostLayer.style.width = `${rect.width}px`;
+      ghostLayer.style.height = `${rect.height}px`;
+      ghostLayer.style.opacity = String(ghostState.opacity);
+    }
+
+    function clearGhost() {
+      ghostState.dataUrl = "";
+      ghostState.filename = "";
+      ghostState.width = 0;
+      ghostState.height = 0;
+      ghostLayer.removeAttribute("src");
+      ghostLayer.hidden = true;
+      if (fileInput) fileInput.value = "";
+      setStatus("이미지를 선택하면 카메라 프리뷰 위에만 겹쳐 표시합니다.");
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        if (typeof target.FileReader !== "function") {
+          reject(new Error("이 환경에서는 이미지 파일을 읽을 수 없습니다."));
+          return;
+        }
+        const reader = new target.FileReader();
+        reader.onerror = () => reject(new Error("레퍼런스 이미지를 읽지 못했습니다."));
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function measureImage(dataUrl) {
+      return new Promise((resolve, reject) => {
+        if (typeof target.Image !== "function") {
+          reject(new Error("이 환경에서는 이미지 크기를 확인할 수 없습니다."));
+          return;
+        }
+        const image = new target.Image();
+        image.onerror = () => reject(new Error("지원되지 않거나 손상된 이미지입니다."));
+        image.onload = () => resolve({ width: image.naturalWidth || image.width, height: image.naturalHeight || image.height });
+        image.src = dataUrl;
+      });
+    }
+
+    chooseButton?.addEventListener("click", () => fileInput?.click());
+    clearButton?.addEventListener("click", clearGhost);
+    enabledInput?.addEventListener("change", () => {
+      ghostState.enabled = enabledInput.checked;
+      syncGhostOverlay();
+    });
+    opacityInput?.addEventListener("input", () => {
+      ghostState.opacity = Math.max(0.05, Math.min(0.8, Number(opacityInput.value || 35) / 100));
+      if (opacityValue) opacityValue.textContent = `${Math.round(ghostState.opacity * 100)}%`;
+      syncGhostOverlay();
+    });
+    fitInput?.addEventListener("change", () => {
+      ghostState.fit = fitInput.value === "cover" ? "cover" : "contain";
+      syncGhostOverlay();
+    });
+    fileInput?.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      if (!/^image\/(?:png|jpeg|webp)$/.test(String(file.type || ""))) {
+        setStatus("PNG, JPEG, WEBP 이미지만 사용할 수 있습니다.");
+        fileInput.value = "";
+        return;
+      }
+      if (Number(file.size || 0) > REFERENCE_GHOST_MAX_FILE_BYTES) {
+        setStatus("이미지가 너무 큽니다. 5.5MB 이하 파일을 사용해 주세요.");
+        fileInput.value = "";
+        return;
+      }
+      chooseButton.disabled = true;
+      setStatus("레퍼런스 이미지를 준비하는 중…");
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const dimensions = await measureImage(dataUrl);
+        if (!(dimensions.width > 0 && dimensions.height > 0)) throw new Error("이미지 크기를 확인하지 못했습니다.");
+        ghostState.dataUrl = dataUrl;
+        ghostState.filename = String(file.name || "reference").slice(0, 160);
+        ghostState.width = dimensions.width;
+        ghostState.height = dimensions.height;
+        ghostLayer.src = dataUrl;
+        ghostLayer.onload = syncGhostOverlay;
+        setStatus(`${ghostState.filename} · ${ghostState.width}×${ghostState.height}px · 프리뷰 검증용`);
+        syncGhostOverlay();
+      } catch (error) {
+        clearGhost();
+        setStatus(error?.message || "레퍼런스 이미지를 준비하지 못했습니다.");
+      } finally {
+        chooseButton.disabled = false;
+      }
+    });
+
+    if (typeof target.ResizeObserver === "function") {
+      const observer = new target.ResizeObserver(syncGhostOverlay);
+      observer.observe(cameraFrame);
+      observer.observe(cameraCanvas);
+    }
+    target.addEventListener?.("resize", syncGhostOverlay);
+    target.addEventListener?.("frisframe:camera-frame-layout", syncGhostOverlay);
+    return true;
+  }
+
   function installBatchReferenceExportUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -240,6 +455,7 @@
 
   return {
     SEEDANCE_REFERENCE_MAX_SECONDS,
+    REFERENCE_GHOST_MAX_FILE_BYTES,
     buildReferenceBatchManifest,
     collectReferenceBatchCuts,
     collectSingleReferenceVideo,
@@ -248,6 +464,7 @@
     exportReferenceBatchSafely,
     exportReferenceVideoBatch,
     installBatchReferenceExportUi,
+    installReferenceGhostUi,
     partitionReferenceBatchByReadiness,
     referenceEntryKey,
     safeFileSlug,
