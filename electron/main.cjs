@@ -343,7 +343,7 @@ function createMainWindow(origin) {
     show: false,
     title: "FrisFrame",
     webPreferences: {
-      preload: path.join(__dirname, "preload-entry.cjs"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -404,6 +404,11 @@ else {
     logFile = path.join(app.getPath("userData"), "logs", "main.log");
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     buildApplicationMenu();
+    session.defaultSession.registerPreloadScript({
+      type: "frame",
+      id: "frisframe-phone-remote",
+      filePath: path.join(__dirname, "phone-remote-preload.cjs"),
+    });
     session.defaultSession.setPermissionCheckHandler(() => false);
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     session.defaultSession.setDevicePermissionHandler?.(() => false);
