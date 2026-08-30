@@ -326,6 +326,93 @@
     };
   }
 
+  function buildReferenceGhostObservationModel(blocking = {}, options = {}) {
+    const spatialCore = options.spatialCore;
+    if (!spatialCore || typeof spatialCore.normalizedToOverlayPoint !== "function") {
+      throw new Error("FrisFrameSpatialScaleCore overlay coordinate functions are required.");
+    }
+    const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const clamp01 = (value, fallback = 0.5) => Math.max(0, Math.min(1, finite(value, fallback)));
+    const sourceRect = options.overlayRect || {};
+    const overlayRect = {
+      x: finite(sourceRect.x, 0),
+      y: finite(sourceRect.y, 0),
+      width: Math.max(1, finite(sourceRect.width, 1)),
+      height: Math.max(1, finite(sourceRect.height, 1)),
+    };
+    const validation = validateReferenceSpaceBlocking(blocking, {
+      spatialCore,
+      positionToleranceM: options.positionToleranceM,
+      dimensionToleranceRatio: options.dimensionToleranceRatio,
+      frameTolerance: options.frameTolerance,
+    });
+    const projectionById = new Map(validation.projectionChecks.map((entry) => [String(entry.id || ""), entry]));
+    const guide = blocking.spatialGuide && typeof blocking.spatialGuide === "object" ? blocking.spatialGuide : {};
+    const scales = [];
+    const horizons = [];
+
+    for (const anchor of guide.anchors || []) {
+      if (!anchor || typeof anchor !== "object") continue;
+      const id = String(anchor.id || "");
+      const kind = String(anchor.kind || "");
+      const label = String(anchor.label || id || "Reference").slice(0, 80);
+      if (kind === "horizon") {
+        const observedY = Number(anchor.imageY);
+        if (!Number.isFinite(observedY)) continue;
+        const observedPoint = spatialCore.normalizedToOverlayPoint({ x: 0.5, y: clamp01(observedY, 0.5) }, overlayRect);
+        const predictedY = Number(validation.horizonCheck?.predicted);
+        const predictedPoint = Number.isFinite(predictedY)
+          ? spatialCore.normalizedToOverlayPoint({ x: 0.5, y: clamp01(predictedY, 0.5) }, overlayRect)
+          : null;
+        horizons.push({
+          id,
+          label,
+          observedY: clamp01(observedY, 0.5),
+          predictedY: Number.isFinite(predictedY) ? predictedY : null,
+          observedYPx: observedPoint.y,
+          predictedYPx: predictedPoint?.y ?? null,
+          residual: Number.isFinite(predictedY) ? observedY - predictedY : null,
+          xPx: overlayRect.x,
+          widthPx: overlayRect.width,
+        });
+        continue;
+      }
+      if (kind !== "scale-height" && kind !== "scale-width") continue;
+      const axis = kind === "scale-width" ? "width" : "height";
+      const observedFraction = Number(axis === "width" ? anchor.imageWidth : anchor.imageHeight);
+      if (!(Number.isFinite(observedFraction) && observedFraction > 0)) continue;
+      const center = spatialCore.normalizedToOverlayPoint({
+        x: clamp01(anchor.imageX, 0.5),
+        y: clamp01(anchor.imageY, 0.5),
+      }, overlayRect);
+      const projection = projectionById.get(id);
+      const predictedFraction = Number(projection?.predicted);
+      const axisPixels = axis === "width" ? overlayRect.width : overlayRect.height;
+      scales.push({
+        id,
+        label,
+        axis,
+        center,
+        observedFraction,
+        predictedFraction: Number.isFinite(predictedFraction) && predictedFraction > 0 ? predictedFraction : null,
+        observedLengthPx: observedFraction * axisPixels,
+        predictedLengthPx: Number.isFinite(predictedFraction) && predictedFraction > 0 ? predictedFraction * axisPixels : null,
+        residual: Number.isFinite(predictedFraction) ? observedFraction - predictedFraction : null,
+      });
+    }
+
+    return {
+      schema: "frisframe-reference-ghost-observations",
+      version: 1,
+      status: validation.status,
+      overlayRect,
+      scales,
+      horizons,
+      issues: validation.issues,
+      legend: { observed: "reference", predicted: "current-camera" },
+    };
+  }
+
   function installReferenceValidationUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -433,7 +520,7 @@
     const leftPanel = documentObject.querySelector(".left-panel");
     if (!cameraFrame || !cameraCanvas || !leftPanel) return false;
     const spatialCore = target.FrisFrameSpatialScaleCore;
-    if (!spatialCore || typeof spatialCore.fitOverlayRect !== "function") return false;
+    if (!spatialCore || typeof spatialCore.fitOverlayRect !== "function" || typeof spatialCore.normalizedToOverlayPoint !== "function") return false;
 
     const style = documentObject.createElement("style");
     style.dataset.frisframeReferenceGhost = "1";
@@ -446,7 +533,17 @@
       .reference-ghost-panel .reference-ghost-inline select { width:100%; min-width:0; }
       .reference-ghost-panel .reference-ghost-opacity { display:grid; grid-template-columns:52px 1fr 34px; gap:6px; align-items:center; margin-top:7px; font-size:9px; }
       .reference-ghost-layer { position:absolute; z-index:1; pointer-events:none; user-select:none; max-width:none; max-height:none; object-fit:fill; transform:none; }
-      .reference-ghost-layer[hidden] { display:none !important; }
+      .reference-ghost-layer[hidden], .reference-ghost-observation-layer[hidden] { display:none !important; }
+      .reference-ghost-observation-layer { position:absolute; z-index:2; pointer-events:none; user-select:none; overflow:hidden; }
+      .reference-ghost-observation-line { position:absolute; box-sizing:border-box; opacity:.95; }
+      .reference-ghost-observation-line.width { height:0; border-top:1.5px solid #5de1ff; }
+      .reference-ghost-observation-line.height { width:0; border-left:1.5px solid #5de1ff; }
+      .reference-ghost-observation-line.predicted.width { border-top-color:#ffb65f; border-top-style:dashed; }
+      .reference-ghost-observation-line.predicted.height { border-left-color:#ffb65f; border-left-style:dashed; }
+      .reference-ghost-observation-line.horizon { border-top-width:1px; }
+      .reference-ghost-observation-dot { position:absolute; width:7px; height:7px; border:1.5px solid #5de1ff; border-radius:50%; background:rgba(10,16,22,.72); transform:translate(-50%,-50%); box-sizing:border-box; }
+      .reference-ghost-observation-label { position:absolute; max-width:180px; padding:2px 4px; border-radius:3px; background:rgba(8,12,18,.72); color:#e7f8ff; font-size:8px; line-height:1.25; white-space:nowrap; text-shadow:0 1px 2px #000; }
+      .reference-ghost-observation-label.horizon { color:#b8efff; }
     `;
     documentObject.head?.appendChild(style);
 
@@ -460,6 +557,10 @@
       <label class="toggle-row">
         <span>Ghost 표시</span>
         <input id="referenceGhostEnabled" type="checkbox" checked />
+      </label>
+      <label class="toggle-row">
+        <span>Scale / Horizon 가이드</span>
+        <input id="referenceGhostObservationsEnabled" type="checkbox" checked />
       </label>
       <div class="reference-ghost-actions">
         <button id="referenceGhostChooseBtn" type="button" class="text-btn"><span>레퍼런스 이미지 선택</span></button>
@@ -479,6 +580,7 @@
         </select>
       </div>
       <small id="referenceGhostStatus" class="reference-ghost-status">이미지를 선택하면 카메라 프리뷰 위에만 겹쳐 표시합니다.</small>
+      <small id="referenceGhostObservationStatus" class="reference-ghost-status">실선은 레퍼런스 관측, 점선은 현재 카메라 예측입니다.</small>
       <small class="reference-ghost-note">검사용 오버레이이며 프리비즈 렌더와 MP4에는 포함되지 않습니다.</small>
     `;
     const stagePanel = leftPanel.querySelector("details");
@@ -493,7 +595,15 @@
     ghostLayer.hidden = true;
     cameraCanvas.insertAdjacentElement?.("afterend", ghostLayer) || cameraFrame.appendChild(ghostLayer);
 
+    const observationLayer = documentObject.createElement("div");
+    observationLayer.id = "referenceGhostObservationLayer";
+    observationLayer.className = "reference-ghost-observation-layer";
+    observationLayer.setAttribute("aria-hidden", "true");
+    observationLayer.hidden = true;
+    ghostLayer.insertAdjacentElement?.("afterend", observationLayer) || cameraFrame.appendChild(observationLayer);
+
     const enabledInput = panel.querySelector("#referenceGhostEnabled");
+    const observationsInput = panel.querySelector("#referenceGhostObservationsEnabled");
     const chooseButton = panel.querySelector("#referenceGhostChooseBtn");
     const clearButton = panel.querySelector("#referenceGhostClearBtn");
     const fileInput = panel.querySelector("#referenceGhostFileInput");
@@ -501,24 +611,131 @@
     const opacityValue = panel.querySelector("#referenceGhostOpacityValue");
     const fitInput = panel.querySelector("#referenceGhostFit");
     const status = panel.querySelector("#referenceGhostStatus");
+    const observationStatus = panel.querySelector("#referenceGhostObservationStatus");
     const ghostState = {
       dataUrl: "",
       filename: "",
       width: 0,
       height: 0,
       enabled: true,
+      observationsEnabled: true,
       opacity: 0.35,
       fit: "contain",
     };
+    let observationSignature = "";
 
     function setStatus(message) {
       if (status) status.textContent = String(message || "");
     }
 
+    function setObservationStatus(message) {
+      if (observationStatus) observationStatus.textContent = String(message || "");
+    }
+
+    function clearObservationLayer(message = "실선은 레퍼런스 관측, 점선은 현재 카메라 예측입니다.") {
+      observationLayer.innerHTML = "";
+      observationLayer.hidden = true;
+      observationSignature = "";
+      setObservationStatus(message);
+    }
+
+    function addObservationLine({ axis, x, y, length, predicted = false, horizon = false }) {
+      const safeLength = Math.max(1, Number(length) || 1);
+      const line = documentObject.createElement("div");
+      line.className = `reference-ghost-observation-line ${axis}${predicted ? " predicted" : " observed"}${horizon ? " horizon" : ""}`;
+      if (axis === "width") {
+        line.style.left = `${x - safeLength / 2}px`;
+        line.style.top = `${y}px`;
+        line.style.width = `${safeLength}px`;
+      } else {
+        line.style.left = `${x}px`;
+        line.style.top = `${y - safeLength / 2}px`;
+        line.style.height = `${safeLength}px`;
+      }
+      observationLayer.appendChild(line);
+      return line;
+    }
+
+    function renderObservationOverlay(rect, canvasRect, frameRect, targetWidth, targetHeight) {
+      const hasImage = Boolean(ghostState.dataUrl && ghostState.width > 0 && ghostState.height > 0);
+      if (!hasImage || !ghostState.observationsEnabled) {
+        clearObservationLayer(hasImage ? "Scale / Horizon 가이드를 껐습니다." : "Ghost 이미지를 선택하면 저장된 관측을 같은 이미지 좌표로 표시합니다.");
+        return;
+      }
+      const cut = typeof target.currentCut === "function" ? target.currentCut() : null;
+      const blocking = cut?.blocking;
+      if (!blocking) {
+        clearObservationLayer("현재 컷의 Reference Space 데이터를 찾을 수 없습니다.");
+        return;
+      }
+      let model;
+      try {
+        model = buildReferenceGhostObservationModel(blocking, { spatialCore, overlayRect: rect });
+      } catch (error) {
+        clearObservationLayer(error?.message || "Reference 관측 가이드를 만들지 못했습니다.");
+        return;
+      }
+      observationLayer.style.left = `${canvasRect.left - frameRect.left}px`;
+      observationLayer.style.top = `${canvasRect.top - frameRect.top}px`;
+      observationLayer.style.width = `${targetWidth}px`;
+      observationLayer.style.height = `${targetHeight}px`;
+      const signature = JSON.stringify({
+        rect: [rect.x, rect.y, rect.width, rect.height],
+        status: model.status,
+        scales: model.scales.map((entry) => [entry.id, entry.axis, entry.center.x, entry.center.y, entry.observedLengthPx, entry.predictedLengthPx]),
+        horizons: model.horizons.map((entry) => [entry.id, entry.observedYPx, entry.predictedYPx]),
+      });
+      observationLayer.hidden = false;
+      if (signature === observationSignature) return;
+      observationSignature = signature;
+      observationLayer.innerHTML = "";
+
+      model.horizons.forEach((entry) => {
+        const centerX = entry.xPx + entry.widthPx / 2;
+        addObservationLine({ axis: "width", x: centerX, y: entry.observedYPx, length: entry.widthPx, horizon: true });
+        if (Number.isFinite(Number(entry.predictedYPx))) {
+          addObservationLine({ axis: "width", x: centerX, y: Number(entry.predictedYPx), length: entry.widthPx, predicted: true, horizon: true });
+        }
+        const label = documentObject.createElement("span");
+        label.className = "reference-ghost-observation-label horizon";
+        label.style.left = `${Math.max(2, entry.xPx + 4)}px`;
+        label.style.top = `${entry.observedYPx + 3}px`;
+        label.textContent = `HORIZON ${(entry.observedY * 100).toFixed(1)}%${Number.isFinite(Number(entry.predictedY)) ? ` / CUR ${(Number(entry.predictedY) * 100).toFixed(1)}%` : ""}`;
+        observationLayer.appendChild(label);
+      });
+
+      model.scales.forEach((entry) => {
+        addObservationLine({ axis: entry.axis, x: entry.center.x, y: entry.center.y, length: entry.observedLengthPx });
+        if (Number.isFinite(Number(entry.predictedLengthPx))) {
+          addObservationLine({ axis: entry.axis, x: entry.center.x, y: entry.center.y, length: Number(entry.predictedLengthPx), predicted: true });
+        }
+        const dot = documentObject.createElement("span");
+        dot.className = "reference-ghost-observation-dot";
+        dot.style.left = `${entry.center.x}px`;
+        dot.style.top = `${entry.center.y}px`;
+        observationLayer.appendChild(dot);
+        const label = documentObject.createElement("span");
+        label.className = "reference-ghost-observation-label";
+        label.style.left = `${entry.center.x + 5}px`;
+        label.style.top = `${entry.center.y + 5}px`;
+        const axisLabel = entry.axis === "width" ? "W" : "H";
+        label.textContent = `${entry.label} · ${axisLabel} ${(entry.observedFraction * 100).toFixed(1)}%${Number.isFinite(Number(entry.predictedFraction)) ? ` / CUR ${(Number(entry.predictedFraction) * 100).toFixed(1)}%` : ""}`;
+        observationLayer.appendChild(label);
+      });
+
+      const count = model.scales.length + model.horizons.length;
+      setObservationStatus(count
+        ? `관측 ${count} · ${model.status.toUpperCase()} · 실선=Reference / 점선=현재 카메라`
+        : "현재 컷에 표시할 Scale / Horizon 관측이 없습니다.");
+    }
+
     function syncGhostOverlay() {
       const hasImage = Boolean(ghostState.dataUrl && ghostState.width > 0 && ghostState.height > 0);
       ghostLayer.hidden = !(hasImage && ghostState.enabled);
-      if (ghostLayer.hidden) return;
+      if (!hasImage) {
+        clearObservationLayer("Ghost 이미지를 선택하면 저장된 관측을 같은 이미지 좌표로 표시합니다.");
+        return;
+      }
       const frameRect = cameraFrame.getBoundingClientRect();
       const canvasRect = cameraCanvas.getBoundingClientRect();
       const targetWidth = Math.max(1, canvasRect.width || cameraCanvas.clientWidth || cameraCanvas.width || 1);
@@ -530,11 +747,14 @@
         targetHeight,
         fit: ghostState.fit,
       });
-      ghostLayer.style.left = `${canvasRect.left - frameRect.left + rect.x}px`;
-      ghostLayer.style.top = `${canvasRect.top - frameRect.top + rect.y}px`;
-      ghostLayer.style.width = `${rect.width}px`;
-      ghostLayer.style.height = `${rect.height}px`;
-      ghostLayer.style.opacity = String(ghostState.opacity);
+      if (!ghostLayer.hidden) {
+        ghostLayer.style.left = `${canvasRect.left - frameRect.left + rect.x}px`;
+        ghostLayer.style.top = `${canvasRect.top - frameRect.top + rect.y}px`;
+        ghostLayer.style.width = `${rect.width}px`;
+        ghostLayer.style.height = `${rect.height}px`;
+        ghostLayer.style.opacity = String(ghostState.opacity);
+      }
+      renderObservationOverlay(rect, canvasRect, frameRect, targetWidth, targetHeight);
     }
 
     function clearGhost() {
@@ -544,6 +764,7 @@
       ghostState.height = 0;
       ghostLayer.removeAttribute("src");
       ghostLayer.hidden = true;
+      clearObservationLayer("Ghost 이미지를 선택하면 저장된 관측을 같은 이미지 좌표로 표시합니다.");
       if (fileInput) fileInput.value = "";
       setStatus("이미지를 선택하면 카메라 프리뷰 위에만 겹쳐 표시합니다.");
     }
@@ -580,6 +801,11 @@
       ghostState.enabled = enabledInput.checked;
       syncGhostOverlay();
     });
+    observationsInput?.addEventListener("change", () => {
+      ghostState.observationsEnabled = observationsInput.checked;
+      observationSignature = "";
+      syncGhostOverlay();
+    });
     opacityInput?.addEventListener("input", () => {
       ghostState.opacity = Math.max(0.05, Math.min(0.8, Number(opacityInput.value || 35) / 100));
       if (opacityValue) opacityValue.textContent = `${Math.round(ghostState.opacity * 100)}%`;
@@ -587,6 +813,7 @@
     });
     fitInput?.addEventListener("change", () => {
       ghostState.fit = fitInput.value === "cover" ? "cover" : "contain";
+      observationSignature = "";
       syncGhostOverlay();
     });
     fileInput?.addEventListener("change", async () => {
@@ -612,6 +839,7 @@
         ghostState.filename = String(file.name || "reference").slice(0, 160);
         ghostState.width = dimensions.width;
         ghostState.height = dimensions.height;
+        observationSignature = "";
         ghostLayer.src = dataUrl;
         ghostLayer.onload = syncGhostOverlay;
         setStatus(`${ghostState.filename} · ${ghostState.width}×${ghostState.height}px · 프리뷰 검증용`);
@@ -624,6 +852,7 @@
       }
     });
 
+    panel.addEventListener("toggle", () => { if (panel.open) syncGhostOverlay(); });
     if (typeof target.ResizeObserver === "function") {
       const observer = new target.ResizeObserver(syncGhostOverlay);
       observer.observe(cameraFrame);
@@ -631,6 +860,9 @@
     }
     target.addEventListener?.("resize", syncGhostOverlay);
     target.addEventListener?.("frisframe:camera-frame-layout", syncGhostOverlay);
+    target.setInterval?.(() => {
+      if (ghostState.dataUrl && ghostState.observationsEnabled) syncGhostOverlay();
+    }, 1200);
     return true;
   }
 
@@ -668,6 +900,7 @@
     SEEDANCE_REFERENCE_MAX_SECONDS,
     REFERENCE_GHOST_MAX_FILE_BYTES,
     buildReferenceBatchManifest,
+    buildReferenceGhostObservationModel,
     collectReferenceBatchCuts,
     collectSingleReferenceVideo,
     evaluateProjectReferenceReadiness,
