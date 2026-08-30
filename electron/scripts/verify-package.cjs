@@ -14,11 +14,56 @@ function requireFiles(files) {
   }
 }
 
+function runMcpRequest(executable, database, request) {
+  const result = spawnSync(executable, [], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PREVIS_DB_PATH: database,
+      FRISFRAME_MCP_OWNER_LICENSE_HASH: "local",
+      PYTHONUNBUFFERED: "1",
+    },
+    input: `${JSON.stringify(request)}\n`,
+    timeout: 10000,
+    windowsHide: true,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`MCP 실행 확인 실패 (${result.status}): ${result.stderr || result.stdout || "출력 없음"}`);
+  }
+
+  const lines = String(result.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length !== 1) {
+    throw new Error(
+      `MCP 단일 요청 응답 수가 올바르지 않습니다: 요청 id=${request.id}, 응답 ${lines.length}\n` +
+      `stdout=${result.stdout || ""}\nstderr=${result.stderr || ""}`,
+    );
+  }
+
+  let response;
+  try {
+    response = JSON.parse(lines[0]);
+  } catch (error) {
+    throw new Error(`MCP 패키지 응답이 JSON이 아닙니다: ${lines[0]}\n${error.message}`);
+  }
+  if (response.id !== request.id) {
+    throw new Error(`MCP 응답 id가 다릅니다: 요청 ${request.id}, 응답 ${response.id}`);
+  }
+  return response;
+}
+
 function verifyMcpExecutable(executable) {
   const smokeDir = fs.mkdtempSync(path.join(os.tmpdir(), "frisframe-mcp-verify-"));
   const database = path.join(smokeDir, "frisframe.db");
-  const requests = [
-    {
+  try {
+    // Windows PyInstaller stdio executables can drop the final response when
+    // several JSON-RPC lines are delivered together immediately before EOF.
+    // Exercise each protocol path as an independent request/process while
+    // retaining one isolated DB, which also verifies cross-process persistence.
+    const initialized = runMcpRequest(executable, database, {
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
@@ -27,60 +72,27 @@ function verifyMcpExecutable(executable) {
         capabilities: {},
         clientInfo: { name: "FrisFramePackageVerify", version: packageJson.version },
       },
-    },
-    { jsonrpc: "2.0", id: 2, method: "tools/list" },
-    {
-      jsonrpc: "2.0",
-      id: 3,
-      method: "tools/call",
-      params: { name: "list_projects", arguments: {} },
-    },
-  ];
-  try {
-    const result = spawnSync(executable, [], {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        PREVIS_DB_PATH: database,
-        FRISFRAME_MCP_OWNER_LICENSE_HASH: "local",
-        PYTHONUNBUFFERED: "1",
-      },
-      input: `${requests.map((request) => JSON.stringify(request)).join("\n")}\n`,
-      timeout: 10000,
-      windowsHide: true,
     });
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-      throw new Error(`MCP 실행 확인 실패 (${result.status}): ${result.stderr || result.stdout || "출력 없음"}`);
-    }
-
-    const responses = String(result.stdout || "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch (error) {
-          throw new Error(`MCP 패키지 응답이 JSON이 아닙니다: ${line}\n${error.message}`);
-        }
-      });
-    if (responses.length !== requests.length) {
-      throw new Error(`MCP 패키지 응답 수가 다릅니다: 요청 ${requests.length}, 응답 ${responses.length}`);
-    }
-
-    const initialized = responses.find((response) => response.id === 1);
     if (initialized?.result?.serverInfo?.name !== "FrisFramePrevisAuthoring") {
       throw new Error(`MCP initialize 응답이 올바르지 않습니다: ${JSON.stringify(initialized)}`);
     }
 
-    const listed = responses.find((response) => response.id === 2);
+    const listed = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    });
     const toolNames = new Set((listed?.result?.tools || []).map((tool) => tool.name));
     for (const toolName of ["list_projects", "get_project", "apply_stage_layout", "apply_motion_timeline", "apply_motion_macros", "apply_previs_plan"]) {
       if (!toolNames.has(toolName)) throw new Error(`패키지 MCP 도구가 없습니다: ${toolName}`);
     }
 
-    const projectList = responses.find((response) => response.id === 3);
+    const projectList = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "list_projects", arguments: {} },
+    });
     if (projectList?.result?.isError !== false) {
       throw new Error(`패키지 MCP list_projects 호출 실패: ${JSON.stringify(projectList)}`);
     }
