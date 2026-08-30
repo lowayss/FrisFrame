@@ -102,7 +102,7 @@ function controllerHtml(token) {
   const setStatus = (text, kind="") => { status.textContent=text; status.className="pill"+(kind?" "+kind:""); };
   const explainSensor = (extra="") => {
     const secure = window.isSecureContext;
-    sensorInfo.innerHTML = `<strong>폰 기울기:</strong> ${sensorPermission ? "활성" : "대기"} · ${secure ? "보안 컨텍스트" : "HTTP LAN"}${extra ? "<br>"+extra : ""}`;
+    sensorInfo.innerHTML = "<strong>폰 기울기:</strong> " + (sensorPermission ? "활성" : "대기") + " · " + (secure ? "보안 컨텍스트" : "HTTP LAN") + (extra ? "<br>" + extra : "");
   };
   explainSensor(!window.isSecureContext ? "모바일 브라우저 정책에 따라 자이로가 차단될 수 있습니다. 이 경우 오른쪽 조이스틱이 Pan/Tilt를 담당합니다." : "");
 
@@ -114,7 +114,7 @@ function controllerHtml(token) {
       const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
       let x = (event.clientX-cx)/(rect.width*.36), y=(event.clientY-cy)/(rect.height*.36);
       const length = Math.hypot(x,y); if(length>1){x/=length;y/=length;}
-      stick.style.transform=`translate(${x*75}%,${y*75}%)`; onValue(x,y);
+      stick.style.transform = "translate(" + (x*75) + "%," + (y*75) + "%)"; onValue(x,y);
     }
     root.addEventListener("pointerdown", e=>{pointer=e.pointerId;root.setPointerCapture?.(pointer);apply(e);});
     root.addEventListener("pointermove", e=>{if(e.pointerId===pointer)apply(e);});
@@ -162,7 +162,7 @@ function controllerHtml(token) {
     state.seq += 1; const command=state.command; state.command="";
     const payload={...state,command,sentAt:Date.now()};
     try {
-      const response=await fetch(`/input?token=${encodeURIComponent(token)}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"});
+      const response=await fetch("/input?token=" + encodeURIComponent(token),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"});
       if(!response.ok) throw new Error(String(response.status)); setStatus("연결됨","ok");
     } catch { setStatus("연결 끊김","warn"); }
   }
@@ -263,13 +263,22 @@ function createPhoneRemoteBridge({ getWindow, writeLog = () => {} } = {}) {
     }
     let size = 0;
     const chunks = [];
+    let tooLarge = false;
     request.on("data", (chunk) => {
+      if (tooLarge) return;
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) request.destroy();
-      else chunks.push(chunk);
+      if (size > MAX_BODY_BYTES) {
+        tooLarge = true;
+        chunks.length = 0;
+        return;
+      }
+      chunks.push(chunk);
     });
     request.on("end", () => {
-      if (size > MAX_BODY_BYTES) return;
+      if (tooLarge) {
+        respondJson(response, 413, { error: "payload-too-large" });
+        return;
+      }
       try {
         const input = sanitizeInput(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         lastInputAt = Date.now();
