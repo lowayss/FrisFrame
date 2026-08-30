@@ -43,6 +43,16 @@ def main():
         assert extension._image_observation_fields({}) == {}
         assert extension._image_observation_fields({"image_x": 0.27}) == {"image_x": 0.27}
         assert extension._image_observation_fields({"image_x": 0.27, "image_y": 0.63}) == {"image_x": 0.27, "image_y": 0.63}
+        missing_screen_guide = extension._sanitize_spatial_guide_preserving_optional_screen({
+            "anchors": [{"id": "missing-screen", "kind": "structure"}],
+        })
+        assert "imageX" not in missing_screen_guide["anchors"][0]
+        assert "imageY" not in missing_screen_guide["anchors"][0]
+        edge_screen_guide = extension._sanitize_spatial_guide_preserving_optional_screen({
+            "anchors": [{"id": "edge-screen", "kind": "structure", "image_x": 0, "image_y": 0}],
+        })
+        assert edge_screen_guide["anchors"][0]["imageX"] == 0
+        assert edge_screen_guide["anchors"][0]["imageY"] == 0
 
         frame_fraction = 1.78 * 50 / (10 * (36 / (16 / 9)))
         calibration = json.loads(extension.call_tool("calibrate_reference_camera", {
@@ -258,7 +268,7 @@ def main():
         keyed["motion"]["keyframes"] = [{"id": "cam-key", "source": "camera", "time": 0, "pose": dict(keyed["camera"])}]
         assert len(extension._camera_keyframes(keyed)) == 1
 
-        print("reference-space-mcp: calibration, persisted diagnostics, no synthetic screen center, and mass blocking checks passed")
+        print("reference-space-mcp: calibration, persisted diagnostics, optional screen coordinates, and mass blocking checks passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
