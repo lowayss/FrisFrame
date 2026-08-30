@@ -91,6 +91,7 @@ function verifyMcpExecutable(executable) {
       "apply_motion_macros",
       "apply_previs_plan",
       "calibrate_reference_camera",
+      "apply_reference_camera_calibration",
       "apply_reference_mass_blocks",
       "validate_reference_space",
     ]) {
@@ -135,6 +136,7 @@ function verifyWindows() {
     path.join(resources, "server", "_internal", "pose-core.js"),
     path.join(resources, "server", "_internal", "camera-drafting-core.js"),
     path.join(resources, "server", "_internal", "timeline-core.js"),
+    path.join(resources, "server", "_internal", "reference-validation-ui.js"),
     mcpExecutable,
     path.join(resources, "ffmpeg.exe"),
     path.join(licenses, "FrisFrame-LICENSE.txt"),
@@ -158,6 +160,7 @@ function verifyMac() {
     path.join(resources, "server", "_internal", "pose-core.js"),
     path.join(resources, "server", "_internal", "camera-drafting-core.js"),
     path.join(resources, "server", "_internal", "timeline-core.js"),
+    path.join(resources, "server", "_internal", "reference-validation-ui.js"),
     mcpExecutable,
     path.join(resources, "ffmpeg"),
     path.join(licenses, "FrisFrame-LICENSE.txt"),
