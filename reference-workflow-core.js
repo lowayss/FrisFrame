@@ -13,6 +13,7 @@
     const install = () => {
       api.installBatchReferenceExportUi(root);
       api.installReferenceGhostUi(root);
+      api.installReferenceValidationUi(root);
     };
     if (root.document.readyState === "loading") root.addEventListener("DOMContentLoaded", install, { once: true });
     else root.setTimeout?.(install, 0);
@@ -423,6 +424,23 @@
     return true;
   }
 
+  function installReferenceValidationUi(target) {
+    const documentObject = target?.document;
+    if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
+    if (target.FrisFrameReferenceValidationUi?.install) {
+      return target.FrisFrameReferenceValidationUi.install(target);
+    }
+    let script = documentObject.querySelector('script[data-frisframe-reference-validation-ui="1"]');
+    if (script) return true;
+    script = documentObject.createElement("script");
+    script.src = "reference-validation-ui.js";
+    script.defer = true;
+    script.dataset.frisframeReferenceValidationUi = "1";
+    script.addEventListener("load", () => target.FrisFrameReferenceValidationUi?.install?.(target), { once: true });
+    documentObject.head?.appendChild(script);
+    return true;
+  }
+
   function installBatchReferenceExportUi(target) {
     const documentObject = target?.document;
     if (!documentObject || typeof documentObject.querySelector !== "function" || typeof documentObject.createElement !== "function") return false;
@@ -465,6 +483,7 @@
     exportReferenceVideoBatch,
     installBatchReferenceExportUi,
     installReferenceGhostUi,
+    installReferenceValidationUi,
     partitionReferenceBatchByReadiness,
     referenceEntryKey,
     safeFileSlug,
