@@ -44,6 +44,7 @@
       "electron/main.cjs",
       "electron/clipboard.cjs",
       "electron/file-save.cjs",
+      "electron/preload-entry.cjs",
       "electron/preload.cjs",
       "electron/workspace-ux.js",
       "electron/hud-export-ux.js",
