@@ -274,6 +274,78 @@
     return 0.5 + sensorOffsetMm / view.sensorHeightMm;
   }
 
+  function cameraBasis(options = {}) {
+    const panRad = finiteNumber(options.panDeg, 180) * Math.PI / 180;
+    const tiltRad = clamp(options.tiltDeg, -90, 90) * Math.PI / 180;
+    const cosTilt = Math.cos(tiltRad);
+    const sinTilt = Math.sin(tiltRad);
+    const cosPan = Math.cos(panRad);
+    const sinPan = Math.sin(panRad);
+    const forward = {
+      x: cosTilt * cosPan,
+      y: sinTilt,
+      z: cosTilt * sinPan,
+    };
+    // Three.js lookAt keeps camera local +Y as close to world +Y as possible.
+    // For FrisFrame's X/Z ground plane this normalized forward×up direction is
+    // the camera-local +X (screen-right) axis, independent of tilt.
+    const right = {
+      x: -sinPan,
+      y: 0,
+      z: cosPan,
+    };
+    const up = {
+      x: -cosPan * sinTilt,
+      y: cosTilt,
+      z: -sinPan * sinTilt,
+    };
+    return { forward, right, up, panDeg: finiteNumber(options.panDeg, 180), tiltDeg: finiteNumber(options.tiltDeg, 0) };
+  }
+
+  function projectWorldPointToFrame(options = {}) {
+    const view = fieldOfView(options);
+    const camera = options.cameraPosition || options.camera || {};
+    const point = options.worldPoint || options.point || {};
+    const basis = cameraBasis(options);
+    const delta = {
+      x: finiteNumber(point.x, 0) - finiteNumber(camera.x, 0),
+      y: finiteNumber(point.y, 0) - finiteNumber(camera.y, 0),
+      z: finiteNumber(point.z, 0) - finiteNumber(camera.z, 0),
+    };
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const depthM = dot(delta, basis.forward);
+    const rightM = dot(delta, basis.right);
+    const upM = dot(delta, basis.up);
+    if (!(depthM > 1e-6)) {
+      return {
+        frameX: null,
+        frameY: null,
+        depthM,
+        rightM,
+        upM,
+        inFront: false,
+        inFrame: false,
+        basis,
+      };
+    }
+    const frameX = 0.5 + (rightM / depthM) * view.focalMm / view.sensorWidthMm;
+    const frameY = 0.5 - (upM / depthM) * view.focalMm / view.sensorHeightMm;
+    return {
+      frameX,
+      frameY,
+      depthM,
+      rightM,
+      upM,
+      inFront: true,
+      inFrame: frameX >= 0 && frameX <= 1 && frameY >= 0 && frameY <= 1,
+      basis,
+      focalMm: view.focalMm,
+      sensorWidthMm: view.sensorWidthMm,
+      sensorHeightMm: view.sensorHeightMm,
+      aspect: view.aspect,
+    };
+  }
+
   function calibratePerspective(options = {}) {
     const anchor = options.anchor ? normalizeScaleAnchor(options.anchor) : null;
     const sensorWidthMm = positive(options.sensorWidthMm, DEFAULT_SENSOR_WIDTH_MM);
@@ -447,6 +519,8 @@
     frameXFromHorizontalAngle,
     tiltFromHorizon,
     horizonFromTilt,
+    cameraBasis,
+    projectWorldPointToFrame,
     calibratePerspective,
     fitOverlayRect,
     normalizedToOverlayPoint,
