@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const source = fs.readFileSync(path.join(root, "electron/performance-ux.js"), "utf8");
+const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 
 assert.ok(source.includes("function activeDirectEdit()"),
   "performance layer must distinguish direct manipulation from ordinary UI updates");
@@ -49,6 +50,14 @@ assert.match(source, /coalesceDirectRenderer\("renderThreeView"/,
   "3D world rebuilds must be coalesced during direct manipulation");
 assert.match(source, /coalesceDirectRenderer\("renderCameraFramePreview"/,
   "camera-frame preview renders must be coalesced during direct manipulation");
+assert.match(app, /function scheduleAnnotationPreview\(/,
+  "pen previews must be coalesced to animation frames");
+assert.match(app, /function scheduleEraserPoint\(/,
+  "eraser edits must be coalesced to animation frames");
+assert.match(app, /currentAnnoTool === "eraser"[\s\S]*?if \(isAnnoDrawing\) scheduleEraserPoint/,
+  "eraser hover must not repaint the full annotation canvas");
+assert.ok(app.includes("annotation-eraser-cursor"),
+  "eraser hover feedback must use a lightweight cursor layer");
 
 assert.ok(packageJson.build.files.includes("electron/performance-ux.js"),
   "desktop package must include the performance UX layer");

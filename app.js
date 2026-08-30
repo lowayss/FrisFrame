@@ -13990,6 +13990,9 @@ function selectAnnoTool(tool) {
   const overlay = document.getElementById("annotationOverlay");
   if (!overlay) return;
 
+  cancelAnnotationPreview();
+  cancelEraserFrame();
+
   const toolButtons = {
     select: document.getElementById("annoToolSelect"),
     pen: document.getElementById("annoToolPen"),
@@ -14024,11 +14027,13 @@ function selectAnnoTool(tool) {
   } else {
     overlay.classList.remove("active");
     overlay.style.cursor = "default";
+    hideEraserCursor();
     // Clear drag state when fully deactivating
     draggedAnnoId = null;
     draggedAnnoStartPos = null;
     dragStartPointer = null;
   }
+  if (currentAnnoTool !== "eraser") hideEraserCursor();
   // NOTE: selectedAnnoId is intentionally NOT cleared here so
   // delete-selected still works after switching away from select tool.
 
@@ -14176,29 +14181,15 @@ function applyEraserAt(clientX, clientY) {
   return changed;
 }
 
-/** Draws the eraser circle preview on the annotation overlay at the given client position */
+/** Positions the lightweight DOM eraser cursor without repainting the annotation canvas. */
 function drawEraserCursor(clientX, clientY) {
+  if (!eraserCursorEl) return;
   const overlayEl = document.getElementById("annotationOverlay");
   if (!overlayEl) return;
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
   const overlayRect = overlayEl.getBoundingClientRect();
-  const ex = clientX - overlayRect.left;
-  const ey = clientY - overlayRect.top;
-  const ctxAnno = overlayEl.getContext("2d");
-  // Draw eraser preview circle on top of existing annotation canvas content
-  ctxAnno.save();
-  ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctxAnno.beginPath();
-  ctxAnno.arc(ex, ey, ERASER_RADIUS, 0, Math.PI * 2);
-  ctxAnno.strokeStyle = "rgba(255,255,255,0.8)";
-  ctxAnno.lineWidth = 1.5;
-  ctxAnno.setLineDash([3, 3]);
-  ctxAnno.stroke();
-  ctxAnno.beginPath();
-  ctxAnno.arc(ex, ey, 2, 0, Math.PI * 2);
-  ctxAnno.fillStyle = "rgba(255,100,100,0.9)";
-  ctxAnno.fill();
-  ctxAnno.restore();
+  eraserCursorEl.style.left = `${clientX - overlayRect.left - ERASER_RADIUS}px`;
+  eraserCursorEl.style.top = `${clientY - overlayRect.top - ERASER_RADIUS}px`;
+  eraserCursorEl.style.display = "block";
 }
 
 function onAnnoPointerDown(e) {
@@ -14243,14 +14234,10 @@ function onAnnoPointerDown(e) {
 
   if (currentAnnoTool === "eraser") {
     isAnnoDrawing = true;
+    drawEraserCursor(e.clientX, e.clientY);
     if (applyEraserAt(e.clientX, e.clientY)) {
       commit();
-      drawAnnotations();
-      drawEraserCursor(e.clientX, e.clientY);
       draw();
-    } else {
-      drawAnnotations();
-      drawEraserCursor(e.clientX, e.clientY);
     }
     return;
   }
@@ -14339,17 +14326,9 @@ function onAnnoPointerMove(e) {
   if (!overlay) return;
 
   if (currentAnnoTool === "eraser") {
-    // Always show the eraser circle cursor (even when not drawing)
-    drawAnnotations();
+    // Keep the cursor in the DOM; do not repaint the full annotation canvas on hover.
     drawEraserCursor(e.clientX, e.clientY);
-    if (isAnnoDrawing) {
-      if (applyEraserAt(e.clientX, e.clientY)) {
-        commit();
-        drawAnnotations();
-        drawEraserCursor(e.clientX, e.clientY);
-        draw();
-      }
-    }
+    if (isAnnoDrawing) scheduleEraserPoint(e.clientX, e.clientY);
     return;
   }
 
@@ -14414,15 +14393,18 @@ function onAnnoPointerMove(e) {
   const currentY = e.clientY - wrapRect.top;
 
   if (currentAnnoTool === "pen") {
-    annoPoints.push({ x: currentX, y: currentY, clientX: e.clientX, clientY: e.clientY });
-    drawAnnotations({
-      type: "pen",
-      color: currentAnnoColor,
-      size: currentAnnoSize,
-      points: annoPoints
-    });
+    const lastPoint = annoPoints[annoPoints.length - 1];
+    if (!lastPoint || Math.hypot(currentX - lastPoint.x, currentY - lastPoint.y) >= 1.5) {
+      annoPoints.push({ x: currentX, y: currentY, clientX: e.clientX, clientY: e.clientY });
+      scheduleAnnotationPreview({
+        type: "pen",
+        color: currentAnnoColor,
+        size: currentAnnoSize,
+        points: annoPoints
+      });
+    }
   } else if (currentAnnoTool === "arrow") {
-    drawAnnotations({
+    scheduleAnnotationPreview({
       type: "arrow",
       color: currentAnnoColor,
       size: currentAnnoSize,
@@ -14445,7 +14427,9 @@ function onAnnoPointerUp(e) {
 
   if (currentAnnoTool === "eraser") {
     if (isAnnoDrawing) {
+      processEraserPoint();
       isAnnoDrawing = false;
+      cancelEraserFrame();
       const overlay = document.getElementById("annotationOverlay");
       if (overlay) {
         try {
@@ -14520,19 +14504,33 @@ function onAnnoPointerUp(e) {
     // Text input is created in onAnnoPointerDown; nothing to do here.
   }
 
+  cancelAnnotationPreview();
   drawAnnotations();
 }
 
 function onAnnoPointerCancel(e) {
+  cancelAnnotationPreview();
+  cancelEraserFrame();
   isAnnoDrawing = false;
   annoPoints = [];
+  hideEraserCursor();
   drawAnnotations();
 }
 
 function setupAnnotations() {
   const overlay = document.getElementById("annotationOverlay");
   const toolbar = document.getElementById("annotationToolbar");
-  if (!overlay || !toolbar) return;
+  const canvasWrap = document.querySelector(".canvas-wrap");
+  if (!overlay || !toolbar || !canvasWrap) return;
+
+  eraserCursorEl = canvasWrap.querySelector(".annotation-eraser-cursor");
+  if (!eraserCursorEl) {
+    eraserCursorEl = document.createElement("div");
+    eraserCursorEl.className = "annotation-eraser-cursor";
+    eraserCursorEl.setAttribute("aria-hidden", "true");
+    canvasWrap.appendChild(eraserCursorEl);
+  }
+  hideEraserCursor();
 
   resizeAnnotationOverlay();
   window.addEventListener("resize", resizeAnnotationOverlay);
@@ -14712,6 +14710,9 @@ function setupAnnotations() {
   overlay.addEventListener("pointermove", onAnnoPointerMove);
   overlay.addEventListener("pointerup", onAnnoPointerUp);
   overlay.addEventListener("pointercancel", onAnnoPointerCancel);
+  overlay.addEventListener("pointerleave", () => {
+    if (!isAnnoDrawing) hideEraserCursor();
+  });
 }
 
 function round(value, digits = 4) {
@@ -14950,6 +14951,57 @@ let currentAnnoSize = 3;
 let isAnnoDrawing = false;
 let annoPoints = [];
 let annoStartPoint = null;
+let annotationPreviewFrame = 0;
+let pendingAnnotationPreview = null;
+let eraserFrame = 0;
+let pendingEraserPoint = null;
+let eraserCursorEl = null;
+
+function cancelAnnotationPreview() {
+  if (annotationPreviewFrame) cancelAnimationFrame(annotationPreviewFrame);
+  annotationPreviewFrame = 0;
+  pendingAnnotationPreview = null;
+}
+
+function scheduleAnnotationPreview(tempAnno) {
+  pendingAnnotationPreview = tempAnno;
+  if (annotationPreviewFrame) return;
+  annotationPreviewFrame = requestAnimationFrame(() => {
+    annotationPreviewFrame = 0;
+    const preview = pendingAnnotationPreview;
+    pendingAnnotationPreview = null;
+    if (preview) drawAnnotations(preview);
+  });
+}
+
+function cancelEraserFrame() {
+  if (eraserFrame) cancelAnimationFrame(eraserFrame);
+  eraserFrame = 0;
+  pendingEraserPoint = null;
+}
+
+function processEraserPoint() {
+  const point = pendingEraserPoint;
+  pendingEraserPoint = null;
+  if (!point || !isAnnoDrawing || currentAnnoTool !== "eraser") return;
+  if (applyEraserAt(point.x, point.y)) {
+    commit();
+    draw();
+  }
+}
+
+function scheduleEraserPoint(clientX, clientY) {
+  pendingEraserPoint = { x: clientX, y: clientY };
+  if (eraserFrame) return;
+  eraserFrame = requestAnimationFrame(() => {
+    eraserFrame = 0;
+    processEraserPoint();
+  });
+}
+
+function hideEraserCursor() {
+  if (eraserCursorEl) eraserCursorEl.style.display = "none";
+}
 
 function resizeAnnotationOverlay() {
   const overlay = document.getElementById("annotationOverlay");

@@ -8080,6 +8080,31 @@ input[type="checkbox"] {
   pointer-events: auto; /* Intercept pointer events when drawing tool is active */
   cursor: crosshair;
 }
+.annotation-eraser-cursor {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  display: none;
+  box-sizing: border-box;
+  border: 1.5px dashed rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  background: rgba(255, 100, 100, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 100, 100, 0.35);
+  pointer-events: none;
+  z-index: 103;
+  transform: translateZ(0);
+}
+.annotation-eraser-cursor::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 100, 100, 0.9);
+}
 .annotation-toolbar {
   position: absolute;
   top: 16px;
