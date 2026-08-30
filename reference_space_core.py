@@ -90,7 +90,9 @@ def calibrate_reference_camera(data, defaults=None):
     if data.get("horizon_y") is not None:
         horizon_y = min(1.0, max(0.0, float(data["horizon_y"])))
         result["horizon_y"] = horizon_y
-        result["tilt_deg"] = math.degrees(math.atan(((0.5 - horizon_y) * sensor_height_mm) / focal_mm))
+        # FrisFrame cameraDirectionVector uses y = sin(tilt): negative tilt looks down.
+        # A downward-looking camera moves the horizon above frame center (Y < 0.5).
+        result["tilt_deg"] = math.degrees(math.atan(((horizon_y - 0.5) * sensor_height_mm) / focal_mm))
     if data.get("image_x") is not None:
         image_x = min(1.0, max(0.0, float(data["image_x"])))
         result["image_x"] = image_x
@@ -175,4 +177,4 @@ def predicted_frame_fraction(physical_size_m, distance_m, focal_mm, sensor_width
 
 def horizon_from_tilt(tilt_deg, focal_mm, sensor_width_mm, aspect):
     sensor_height = positive(sensor_width_mm, "sensor_width_mm") / aspect_value(aspect)
-    return 0.5 - math.tan(math.radians(float(tilt_deg))) * positive(focal_mm, "focal_mm") / sensor_height
+    return 0.5 + math.tan(math.radians(float(tilt_deg))) * positive(focal_mm, "focal_mm") / sensor_height
