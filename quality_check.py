@@ -35,6 +35,7 @@ def check_python_syntax() -> None:
         ROOT / "reference_space_consistency_mcp.py",
         ROOT / "reference_space_plan_mcp.py",
         ROOT / "reference_space_orientation_mcp.py",
+        ROOT / "tests/seed-packaged-reference-project.py",
         ROOT / "add_license.py",
     ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
