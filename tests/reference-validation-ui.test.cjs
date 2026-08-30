@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const spatial = require("../spatial-scale-core.js");
-const validationUi = require("../reference-validation-ui.js");
+const workflow = require("../reference-workflow-core.js");
 
 const aspect = 16 / 9;
 const stage = spatial.stageWorldSize({ aspect });
@@ -66,7 +66,7 @@ const blocking = {
   },
 };
 
-const ready = validationUi.validateBlocking(blocking, { spatialCore: spatial });
+const ready = workflow.validateReferenceSpaceBlocking(blocking, { spatialCore: spatial });
 assert.equal(ready.status, "ready");
 assert.equal(ready.issues.length, 0);
 assert.equal(ready.projectionChecks.length, 1);
@@ -74,13 +74,13 @@ assert.ok(ready.horizonCheck);
 
 const badProjection = structuredClone(blocking);
 badProjection.spatialGuide.anchors[0].imageHeight += 0.1;
-const reviewProjection = validationUi.validateBlocking(badProjection, { spatialCore: spatial });
+const reviewProjection = workflow.validateReferenceSpaceBlocking(badProjection, { spatialCore: spatial });
 assert.equal(reviewProjection.status, "review");
 assert.ok(reviewProjection.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
 
 const badPosition = structuredClone(blocking);
 badPosition.items[0].x += 0.05;
-const reviewPosition = validationUi.validateBlocking(badPosition, { spatialCore: spatial });
+const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
 assert.ok(reviewPosition.issues.some((issue) => issue.code === "anchor-x-mismatch"));
 
-console.log("reference-validation-ui: anchor, projection, and horizon validation checks passed");
+console.log("reference-validation-ui: inlined anchor, projection, and horizon validation checks passed");
