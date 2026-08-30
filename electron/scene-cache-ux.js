@@ -8,6 +8,10 @@
     staticItemBuilds: 0,
     staticItemReuses: 0,
     staticItemInvalidations: 0,
+    staticEligibilityIndexBuilds: 0,
+    staticEligibilityIndexReuses: 0,
+    staticEligibilityMotionKeysIndexed: 0,
+    staticEligibilityGroupMembersIndexed: 0,
     actorRigBuilds: 0,
     actorRigReuses: 0,
     actorRigTransformUpdates: 0,
@@ -24,12 +28,47 @@
   const actorRigRuntime = new WeakMap();
   let mainRenderDepth = 0;
   let previewRenderDepth = 0;
+  let eligibilityIndex = null;
+
+  function buildStaticEligibilityIndex(renderState = state) {
+    const motionSources = new Set();
+    const groupedItemIds = new Set();
+    const keyframes = renderState.motion?.keyframes || [];
+    const groups = renderState.groups || [];
+    let groupMemberCount = 0;
+
+    keyframes.forEach((keyframe) => {
+      if (keyframe?.source) motionSources.add(keyframe.source);
+    });
+    groups.forEach((group) => {
+      (group.members || []).forEach((member) => {
+        if (!member?.itemId) return;
+        groupedItemIds.add(member.itemId);
+        groupMemberCount += 1;
+      });
+    });
+
+    stats.staticEligibilityIndexBuilds += 1;
+    stats.staticEligibilityMotionKeysIndexed += keyframes.length;
+    stats.staticEligibilityGroupMembersIndexed += groupMemberCount;
+    return { renderState, motionSources, groupedItemIds };
+  }
+
+  function activeStaticEligibilityIndex(renderState) {
+    if (!eligibilityIndex || eligibilityIndex.renderState !== renderState) return null;
+    stats.staticEligibilityIndexReuses += 1;
+    return eligibilityIndex;
+  }
 
   function sourceHasMotion(sourceId, renderState = state) {
+    const index = activeStaticEligibilityIndex(renderState);
+    if (index) return index.motionSources.has(sourceId);
     return Boolean((renderState.motion?.keyframes || []).some((keyframe) => keyframe.source === sourceId));
   }
 
   function itemInManualGroup(itemId, renderState = state) {
+    const index = activeStaticEligibilityIndex(renderState);
+    if (index) return index.groupedItemIds.has(itemId);
     return Boolean((renderState.groups || []).some((group) =>
       (group.members || []).some((member) => member.itemId === itemId),
     ));
@@ -254,6 +293,9 @@
   }
 
   window.FrisFrameSceneCacheUxTest = {
+    buildStaticEligibilityIndex,
+    sourceHasMotion,
+    itemInManualGroup,
     staticItemEligible,
     staticItemSignature,
     actorRigEligible,
@@ -267,10 +309,14 @@
   if (typeof renderThreeView === "function") {
     const originalRenderThreeView = renderThreeView;
     renderThreeView = function cachedSceneRender(...args) {
+      const previousEligibilityIndex = eligibilityIndex;
+      const renderState = args[0] || state;
       mainRenderDepth += 1;
+      eligibilityIndex = buildStaticEligibilityIndex(renderState);
       try {
         return originalRenderThreeView(...args);
       } finally {
+        eligibilityIndex = previousEligibilityIndex;
         mainRenderDepth = Math.max(0, mainRenderDepth - 1);
       }
     };
