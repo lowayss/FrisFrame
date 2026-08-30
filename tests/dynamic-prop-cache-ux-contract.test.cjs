@@ -8,6 +8,16 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const source = fs.readFileSync(path.join(root, "electron/dynamic-prop-cache-ux.js"), "utf8");
 
+assert.match(source, /function buildDynamicEligibilityIndex\(/,
+  "dynamic prop cache must index motion sources and group membership once per editor render");
+assert.match(source, /const motionSources = new Set\(\)/,
+  "dynamic eligibility must use an O(1) motion-source lookup set");
+assert.match(source, /const groupedItemIds = new Set\(\)/,
+  "dynamic eligibility must use an O(1) manual-group lookup set");
+assert.match(source, /eligibilityIndex = buildDynamicEligibilityIndex\(renderState\)/,
+  "the dynamic eligibility index must be built at the render boundary rather than once per prop");
+assert.match(source, /eligibilityIndex\.renderState !== renderState/,
+  "dynamic eligibility lookup must reject an index built for a different evaluated frame");
 assert.match(source, /function dynamicPropEligible\(/,
   "moving/grouped/selected props must have an explicit reusable-rig eligibility contract");
 assert.match(source, /sourceHasMotion\(item\.id, renderState\)/,
@@ -77,6 +87,33 @@ const groupedState = {
 };
 assert.equal(api.dynamicPropEligible(prop, groupedState), true,
   "a grouped prop must remain reusable while following its leader");
+
+const indexedState = {
+  ...sandbox.state,
+  motion: {
+    keyframes: [
+      { id: "p1", source: prop.id, time: 0 },
+      { id: "p2", source: prop.id, time: 1 },
+      { id: "a1", source: "actor-1", time: 0 },
+    ],
+  },
+  groups: [{ id: "g1", members: [{ itemId: prop.id }, { itemId: "actor-1" }] }],
+};
+const indexBuildsBefore = api.stats.eligibilityIndexBuilds;
+const indexedKeysBefore = api.stats.eligibilityMotionKeysIndexed;
+const indexedMembersBefore = api.stats.eligibilityGroupMembersIndexed;
+const eligibilityIndex = api.buildDynamicEligibilityIndex(indexedState);
+assert.equal(api.stats.eligibilityIndexBuilds, indexBuildsBefore + 1,
+  "building one dynamic render index must be observable for performance validation");
+assert.equal(api.stats.eligibilityMotionKeysIndexed, indexedKeysBefore + 3,
+  "dynamic render indexing must inspect every authored key exactly once");
+assert.equal(api.stats.eligibilityGroupMembersIndexed, indexedMembersBefore + 2,
+  "dynamic render indexing must inspect group members exactly once");
+assert.equal(eligibilityIndex.motionSources.has(prop.id), true,
+  "dynamic render index must record moving prop sources");
+assert.equal(eligibilityIndex.groupedItemIds.has(prop.id), true,
+  "dynamic render index must record grouped prop membership");
+
 sandbox.selected = { kind: "item", id: prop.id };
 assert.equal(api.dynamicPropEligible(prop, sandbox.state), true,
   "a selected prop must use the dynamic path so selection helpers can move with it");
@@ -103,4 +140,4 @@ assert.ok(packageJson.build.files.includes("electron/dynamic-prop-cache-ux.js"),
 assert.match(main, /"scene-cache-ux\.js"[\s\S]*"dynamic-prop-cache-ux\.js"[\s\S]*"stage-shell-cache-ux\.js"[\s\S]*"camera-path-cache-ux\.js"/,
   "dynamic props must load after static/actor scene caching and before stage/camera cache layers");
 
-console.log("dynamic-prop-cache-ux-contract: moving, grouped and selected prop rig reuse contracts passed");
+console.log("dynamic-prop-cache-ux-contract: indexed moving, grouped and selected prop rig reuse contracts passed");
