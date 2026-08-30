@@ -31,8 +31,18 @@ assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp\.exe"\)/,
 assert.match(verify, /path\.join\(resources, "mcp", "frisframe-mcp"\)/,
   "macOS release verification must require the packaged MCP executable");
 assert.match(verify, /verifyMcpExecutable\(mcpExecutable\)/,
-  "release verification must smoke-start the packaged MCP process");
+  "release verification must exercise the packaged MCP process");
+assert.match(verify, /method: "initialize"/,
+  "packaged MCP verification must perform an MCP initialize handshake");
+assert.match(verify, /method: "tools\/list"/,
+  "packaged MCP verification must request the real tool manifest");
+assert.match(verify, /name: "list_projects"/,
+  "packaged MCP verification must execute a DB-backed MCP tool call");
+assert.match(verify, /"apply_previs_plan"/,
+  "packaged MCP verification must require the atomic previs-plan tool in the bundled manifest");
 assert.match(verify, /PREVIS_DB_PATH: database/,
-  "MCP package smoke tests must use an isolated temporary database");
+  "MCP package protocol tests must use an isolated temporary database");
+assert.match(verify, /fs\.existsSync\(database\)/,
+  "packaged MCP verification must confirm the SQLite database was really initialized");
 
-console.log("mcp-desktop-runtime-contract: packaged stdio MCP runtime contracts passed");
+console.log("mcp-desktop-runtime-contract: packaged stdio MCP protocol and runtime contracts passed");
