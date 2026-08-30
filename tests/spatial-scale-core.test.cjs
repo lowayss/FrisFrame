@@ -73,6 +73,72 @@ assert.ok(spatial.horizonFromTilt({ tiltDeg: -10, focalMm: 50, sensorWidthMm: 36
 assert.ok(spatial.tiltFromHorizon({ horizonY: 0.4, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 }) < 0,
   "a horizon above frame center must calibrate to negative FrisFrame tilt");
 
+const frontCenter = spatial.projectWorldPointToFrame({
+  cameraPosition: { x: 0, y: 0, z: 0 },
+  worldPoint: { x: 10, y: 0, z: 0 },
+  panDeg: 0,
+  tiltDeg: 0,
+  focalMm: 50,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(frontCenter.frameX - 0.5) < 1e-9 && Math.abs(frontCenter.frameY - 0.5) < 1e-9,
+  "a point on the camera forward axis must project to frame center");
+assert.equal(frontCenter.inFrame, true);
+
+const quarterRight = spatial.projectWorldPointToFrame({
+  cameraPosition: { x: 0, y: 0, z: 0 },
+  worldPoint: { x: 10, y: 0, z: 1.8 },
+  panDeg: 0,
+  tiltDeg: 0,
+  focalMm: 50,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(quarterRight.frameX - 0.75) < 1e-9, "camera-local right must move toward larger normalized frame X");
+assert.ok(Math.abs(quarterRight.frameY - 0.5) < 1e-9);
+
+const quarterUp = spatial.projectWorldPointToFrame({
+  cameraPosition: { x: 0, y: 0, z: 0 },
+  worldPoint: { x: 10, y: 1.0125, z: 0 },
+  panDeg: 0,
+  tiltDeg: 0,
+  focalMm: 50,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(quarterUp.frameY - 0.25) < 1e-9, "camera-local up must move toward smaller normalized frame Y");
+
+const tiltedBasis = spatial.cameraBasis({ panDeg: 270, tiltDeg: -10 });
+const alongTiltedForward = spatial.projectWorldPointToFrame({
+  cameraPosition: { x: 2, y: 1.6, z: 4 },
+  worldPoint: {
+    x: 2 + tiltedBasis.forward.x * 10,
+    y: 1.6 + tiltedBasis.forward.y * 10,
+    z: 4 + tiltedBasis.forward.z * 10,
+  },
+  panDeg: 270,
+  tiltDeg: -10,
+  focalMm: 35,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(alongTiltedForward.frameX - 0.5) < 1e-9 && Math.abs(alongTiltedForward.frameY - 0.5) < 1e-9,
+  "pan/tilt forward axis must remain the projected frame center");
+
+const behind = spatial.projectWorldPointToFrame({
+  cameraPosition: { x: 0, y: 0, z: 0 },
+  worldPoint: { x: -1, y: 0, z: 0 },
+  panDeg: 0,
+  tiltDeg: 0,
+  focalMm: 50,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.equal(behind.inFront, false);
+assert.equal(behind.frameX, null);
+assert.equal(behind.frameY, null);
+
 const overlay = spatial.fitOverlayRect({
   sourceWidth: 1920,
   sourceHeight: 1080,
@@ -99,4 +165,4 @@ assert.equal(contract.schema, "frisframe-reference-space");
 assert.equal(contract.anchors.length, 1);
 assert.equal(contract.overlay.opacity, 0.4);
 
-console.log("spatial-scale-core: metric, anchor, perspective, overlay, and stage-space checks passed");
+console.log("spatial-scale-core: metric, anchor, perspective, world-to-frame projection, overlay, and stage-space checks passed");
