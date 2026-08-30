@@ -66,6 +66,39 @@ def _bounded_json_number(value, name):
     return number
 
 
+def _json_integer(args, name, minimum=0, default=None):
+    if name not in args:
+        if default is not None:
+            return default
+        raise ValueError(f"{name} 값은 JSON integer여야 합니다.")
+    value = args.get(name)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} 값은 JSON integer여야 합니다.")
+    if value < minimum:
+        raise ValueError(f"{name} 값은 {minimum} 이상이어야 합니다.")
+    return value
+
+
+def _json_string(args, name):
+    value = args.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} 값은 비어 있지 않은 JSON string이어야 합니다.")
+    return value.strip()
+
+
+def _validated_orientation_args(args, require_revision=False):
+    if not isinstance(args, dict):
+        raise ValueError("orientation 인자는 JSON object여야 합니다.")
+    validated = dict(args)
+    validated["project_id"] = _json_string(args, "project_id")
+    validated["target_id"] = _json_string(args, "target_id")
+    validated["scene_index"] = _json_integer(args, "scene_index", minimum=0, default=0)
+    validated["cut_index"] = _json_integer(args, "cut_index", minimum=0, default=0)
+    if require_revision:
+        validated["revision"] = _json_integer(args, "revision", minimum=1)
+    return validated
+
+
 def _image_coordinate(value, name):
     return _bounded_json_number(value, name)
 
@@ -102,8 +135,10 @@ def _camera_and_target_world(blocking, target):
 
 
 def _solve_orientation(args, blocking=None):
-    blocking = blocking or reference._blocking(args)
-    target_id = str(args.get("target_id") or "").strip()
+    if blocking is None:
+        args = _validated_orientation_args(args)
+        blocking = reference._blocking(args)
+    target_id = args["target_id"]
     target = base._find_item(blocking, target_id)
     image_x = _image_coordinate(args.get("image_x"), "image_x")
     image_y = _image_coordinate(args.get("image_y"), "image_y")
@@ -216,6 +251,7 @@ def _solve_orientation(args, blocking=None):
 
 
 def _apply_orientation(args):
+    args = _validated_orientation_args(args, require_revision=True)
     blocking = reference._blocking(args)
     allow_keyframed_base_camera = _boolean_override(args, "allow_keyframed_base_camera")
     allow_horizon_mismatch = _boolean_override(args, "allow_horizon_mismatch")
@@ -239,14 +275,14 @@ def _apply_orientation(args):
         "pan_deg": solution["solved"]["pan_deg"],
         "tilt_deg": solution["solved"]["tilt_deg"],
     }]
-    result = base._json_result(core.handle_apply_scene_commands(args.get("project_id"), payload))
+    result = base._json_result(core.handle_apply_scene_commands(args["project_id"], payload))
     if "revision" not in result:
         raise ValueError(result.get("raw", "Reference camera orientation 적용 결과를 읽지 못했습니다."))
     result["reference_camera_orientation"] = solution
     result["validation"] = reference._validate({
-        "project_id": args.get("project_id"),
-        "scene_index": int(args.get("scene_index", 0)),
-        "cut_index": int(args.get("cut_index", 0)),
+        "project_id": args["project_id"],
+        "scene_index": args["scene_index"],
+        "cut_index": args["cut_index"],
     })
     return result
 
