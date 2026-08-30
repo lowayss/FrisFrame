@@ -4,7 +4,6 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 index_path = root / "index.html"
 styles_path = root / "styles.css"
-workflow_path = root / ".github" / "workflows" / "desktop-builds.yml"
 
 index = index_path.read_text(encoding="utf-8")
 old_copy = "2D 동선도, 3D 카메라 프레임, 배경시트 레퍼런스를 준비합니다."
@@ -21,17 +20,5 @@ block = f'''\n\n{marker}\n#blockingPlanBtn,\n#backgroundSheetBtn,\n#productionPa
 if marker not in styles:
     styles = styles.rstrip() + block
 styles_path.write_text(styles, encoding="utf-8")
-
-workflow = workflow_path.read_text(encoding="utf-8")
-anchor = '      - "package-lock.json"\n      - "electron/**"'
-replacement = '      - "package-lock.json"\n      - "app.js"\n      - "index.html"\n      - "styles.css"\n      - "electron/**"'
-count = workflow.count(anchor)
-if count:
-    workflow = workflow.replace(anchor, replacement)
-elif all(f'      - "{name}"' in workflow for name in ("app.js", "index.html", "styles.css")):
-    pass
-else:
-    raise SystemExit("desktop-builds path filter anchor changed")
-workflow_path.write_text(workflow, encoding="utf-8")
 
 print("priority UI hotfix prepared")
