@@ -56,6 +56,7 @@ def main() -> None:
         "camera-drafting-core.js",
         "multi-camera-core.js",
         "spatial-scale-core.js",
+        "electron/preload-entry.cjs",
         "electron/preload.cjs",
         "electron/main.cjs",
         "electron/workspace-ux.js",
