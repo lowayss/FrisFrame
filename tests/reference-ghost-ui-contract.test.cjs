@@ -12,10 +12,17 @@ assert.match(source, /referenceGhostObservationsEnabled/, "Reference observation
 assert.match(source, /function buildReferenceGhostObservationModel\(blocking = \{\}, options = \{\}\)/,
   "Reference Ghost observation geometry must be a deterministic testable model");
 assert.match(source, /normalizedToOverlayPoint/, "Observation guides must reuse shared normalized-image overlay coordinates");
+assert.match(source, /projectWorldPointToFrame/, "Ghost must project the current 3D target center through the deterministic camera model");
+assert.match(source, /screenPositionPolicy: "visual-diagnostic-only"/,
+  "screen-position residuals must remain visual diagnostics until their validation policy is explicitly promoted");
+assert.match(source, /reference-ghost-observation-dot predicted/, "current-camera screen position must have a distinct predicted marker");
+assert.match(source, /reference-ghost-observation-connector/, "observed and current-camera screen centers must be visually connected when separated");
 assert.match(source, /scale-height/, "Ghost observations must understand persisted height anchors");
 assert.match(source, /scale-width/, "Ghost observations must understand persisted width anchors");
 assert.match(source, /kind === "horizon"/, "Ghost observations must understand persisted horizon anchors");
 assert.match(source, /실선=Reference \/ 점선=현재 카메라/, "Ghost UI must explain observed versus current-camera geometry");
+assert.match(source, /화면 위치 차이는 시각 진단만 하며 READY\/REVIEW 판정에는 아직 사용하지 않습니다/,
+  "Ghost UI must disclose that X\/Y residuals are not yet validation blockers");
 assert.match(source, /fitOverlayRect/, "Ghost layout must reuse spatial-scale-core overlay math");
 assert.match(source, /ResizeObserver/, "Ghost layout must follow camera-preview resizing");
 assert.match(source, /setInterval\?\.\(\(\) => \{[\s\S]*ghostState\.observationsEnabled[\s\S]*1200\)/,
@@ -52,4 +59,4 @@ for (const symbol of retiredSpatialSymbols) {
   assert.equal(source.includes(symbol), false, `${symbol} must remain retired from reference-workflow-core.js`);
 }
 
-console.log("reference-ghost-ui-contract: non-destructive Ghost + observed/current Scale-Horizon overlay + validation contracts passed");
+console.log("reference-ghost-ui-contract: non-destructive observed/current position+scale+horizon overlay and validation contracts passed");
