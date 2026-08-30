@@ -10,6 +10,7 @@ const expected = [
   "workspace-ux.js",
   "hud-export-ux.js",
   "interaction-ux.js",
+  "camera-operator-live-ux.js",
   "selection-ux.js",
   "alignment-ux.js",
   "history-safety-ux.js",
