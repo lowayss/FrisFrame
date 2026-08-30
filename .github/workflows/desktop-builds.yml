@@ -1,4 +1,5 @@
 name: Desktop builds
+# UI surface changes intentionally require full native package validation.
 
 on:
   workflow_dispatch:
