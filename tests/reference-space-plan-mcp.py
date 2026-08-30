@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -32,7 +33,14 @@ def first_blocking(project_id):
 
 
 def project_revision(project_id):
-    return int(project_payload(project_id)["storage"]["revision"])
+    connection = sqlite3.connect(os.environ["PREVIS_DB_PATH"])
+    try:
+        row = connection.execute("SELECT revision FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            raise AssertionError(f"project revision row missing: {project_id}")
+        return int(row[0])
+    finally:
+        connection.close()
 
 
 def anchor_fraction(physical_size_m, distance_m, focal_mm, aspect, axis="height"):
@@ -133,6 +141,7 @@ def main():
         assert {"actor-scale", "reference-horizon", "back-wall"} <= anchor_ids
 
         stable_revision = project_revision(project_id)
+        assert stable_revision == result["revision"]
         bad_anchors = [
             consistency_anchors[0],
             {
