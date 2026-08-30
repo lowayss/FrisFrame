@@ -201,6 +201,12 @@ def main():
                 assert versions == [1, 2, 3], versions
                 print("MCP E2E: atomic plan, rollback, UI save, revision conflict, and resumed authoring passed")
             finally:
+                if process.stdin is not None:
+                    try:
+                        process.stdin.close()
+                    except BrokenPipeError:
+                        pass
+                    process.stdin = None
                 try:
                     _stdout_tail, stderr = process.communicate(timeout=5)
                 except subprocess.TimeoutExpired as error:
