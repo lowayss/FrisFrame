@@ -30,6 +30,8 @@ def check_python_syntax() -> None:
         ROOT / "mcp_server.py",
         ROOT / "mcp_previs_server.py",
         ROOT / "mcp_desktop_entry.py",
+        ROOT / "reference_space_core.py",
+        ROOT / "reference_space_mcp.py",
         ROOT / "add_license.py",
     ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -128,6 +130,7 @@ def main() -> None:
 
     run("스토리보드 코어", [node, "--test", "tests/storyboard-core.test.cjs"])
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
+    run("Reference Space MCP", [sys.executable, "tests/reference-space-mcp.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
     run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
     run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
