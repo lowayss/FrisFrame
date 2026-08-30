@@ -38,6 +38,10 @@
 
   const SEEDANCE_REFERENCE_MAX_SECONDS = Number(motionCore.SEEDANCE_REFERENCE_MAX_SECONDS || 30);
   const REFERENCE_GHOST_MAX_FILE_BYTES = 5_500_000;
+  const hasFiniteObservation = (value) => value !== null
+    && value !== undefined
+    && value !== ""
+    && Number.isFinite(Number(value));
   const {
     cloneValue,
     collectReferenceBatchCuts,
@@ -267,7 +271,7 @@
       const id = String(anchor.id || "");
       const kind = String(anchor.kind || "");
       if (kind === "horizon") {
-        if (Number.isFinite(Number(anchor.imageY))) {
+        if (hasFiniteObservation(anchor.imageY)) {
           const observed = Number(anchor.imageY);
           const predicted = spatialCore.horizonFromTilt({ tiltDeg: finite(camera.tiltDeg, 0), focalMm, sensorWidthMm, aspect });
           horizonCheck = { observed, predicted, residual: observed - predicted };
@@ -283,10 +287,10 @@
       }
       const point = worldPoint(item);
       const dimensions = dimensionsFor(item, anchor);
-      if (Number.isFinite(Number(anchor.worldX)) && Math.abs(point.x - Number(anchor.worldX)) > positionToleranceM) {
+      if (hasFiniteObservation(anchor.worldX) && Math.abs(point.x - Number(anchor.worldX)) > positionToleranceM) {
         issues.push({ code: "anchor-x-mismatch", anchorId: id, actualM: point.x, expectedM: Number(anchor.worldX) });
       }
-      if (Number.isFinite(Number(anchor.worldZ)) && Math.abs(point.z - Number(anchor.worldZ)) > positionToleranceM) {
+      if (hasFiniteObservation(anchor.worldZ) && Math.abs(point.z - Number(anchor.worldZ)) > positionToleranceM) {
         issues.push({ code: "anchor-z-mismatch", anchorId: id, actualM: point.z, expectedM: Number(anchor.worldZ) });
       }
       if (anchor.dimensionsM && item.referenceDimensionsM) {
@@ -310,9 +314,9 @@
           issues.push({ code: "scale-anchor-observation-incomplete", anchorId: id, itemId });
         }
 
-        const observedX = Number(anchor.imageX);
-        const observedY = Number(anchor.imageY);
-        if (Number.isFinite(observedX) && Number.isFinite(observedY)) {
+        if (hasFiniteObservation(anchor.imageX) && hasFiniteObservation(anchor.imageY)) {
+          const observedX = Number(anchor.imageX);
+          const observedY = Number(anchor.imageY);
           const bottom = finite(item.verticalOffset ?? item.mountedHeight, 0);
           const centerHeight = bottom + finite(dimensions?.height, item.type === "actor" ? 1.78 : 1) / 2;
           const screen = spatialCore.projectWorldPointToFrame({
@@ -415,8 +419,8 @@
       const kind = String(anchor.kind || "");
       const label = String(anchor.label || id || "Reference").slice(0, 80);
       if (kind === "horizon") {
+        if (!hasFiniteObservation(anchor.imageY)) continue;
         const observedY = Number(anchor.imageY);
-        if (!Number.isFinite(observedY)) continue;
         const observedPoint = spatialCore.normalizedToOverlayPoint({ x: 0.5, y: clamp01(observedY, 0.5) }, overlayRect);
         const predictedY = Number(validation.horizonCheck?.predicted);
         const predictedPoint = Number.isFinite(predictedY)
@@ -439,6 +443,7 @@
       const axis = kind === "scale-width" ? "width" : "height";
       const observedFraction = Number(axis === "width" ? anchor.imageWidth : anchor.imageHeight);
       if (!(Number.isFinite(observedFraction) && observedFraction > 0)) continue;
+      if (!hasFiniteObservation(anchor.imageX) || !hasFiniteObservation(anchor.imageY)) continue;
       const observedNormalized = {
         x: clamp01(anchor.imageX, 0.5),
         y: clamp01(anchor.imageY, 0.5),
