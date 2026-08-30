@@ -142,6 +142,7 @@ def main():
 
         stable_revision = project_revision(project_id)
         assert stable_revision == result["revision"]
+        wrong_focal = float(camera["focal"]) * 0.60
         bad_anchors = [
             consistency_anchors[0],
             {
@@ -149,9 +150,17 @@ def main():
                 "axis": "height",
                 "physical_size_m": 2.0,
                 "distance_m": 8.0,
-                "frame_fraction": anchor_fraction(2.0, 8.0, 85, aspect),
+                "frame_fraction": anchor_fraction(2.0, 8.0, wrong_focal, aspect),
             },
         ]
+        bad_check = space.evaluate_scale_anchor_consistency(
+            bad_anchors,
+            sensor_width_mm=36,
+            aspect=aspect,
+            tolerance_ratio=0.05,
+            expected_focal_mm=camera["focal"],
+        )
+        assert bad_check["consistent"] is False, bad_check
         try:
             plan_extension.call_tool("apply_reference_space_plan", {
                 "project_id": project_id,
