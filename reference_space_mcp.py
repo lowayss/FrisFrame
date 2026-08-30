@@ -110,6 +110,7 @@ REFERENCE_SPACE_TOOLS = [
 ]
 
 _ORIGINAL_CALL_TOOL = base.call_tool
+_ORIGINAL_SPATIAL_GUIDE_SANITIZER = core._sanitize_spatial_guide
 
 
 def _blocking(args):
@@ -156,6 +157,25 @@ def _image_observation_fields(data):
     if isinstance(data, dict) and data.get("image_y") is not None:
         result["image_y"] = float(data["image_y"])
     return result
+
+
+def _has_explicit_anchor_value(anchor, *keys):
+    return isinstance(anchor, dict) and any(
+        key in anchor and anchor.get(key) is not None and anchor.get(key) != ""
+        for key in keys
+    )
+
+
+def _sanitize_spatial_guide_preserving_optional_screen(value):
+    """Keep the existing MCP sanitizer while not converting missing screen X/Y into numeric observations."""
+    sanitized = _ORIGINAL_SPATIAL_GUIDE_SANITIZER(value)
+    raw_anchors = value.get("anchors", []) if isinstance(value, dict) else []
+    for raw_anchor, anchor in zip(raw_anchors, sanitized.get("anchors", [])):
+        if not _has_explicit_anchor_value(raw_anchor, "image_x", "imageX"):
+            anchor.pop("imageX", None)
+        if not _has_explicit_anchor_value(raw_anchor, "image_y", "imageY"):
+            anchor.pop("imageY", None)
+    return sanitized
 
 
 def _dimensions(value):
@@ -584,6 +604,9 @@ def call_tool(name, args):
 def install():
     if getattr(base, "_reference_space_extension_installed", False):
         return
+    if not getattr(core, "_reference_space_optional_screen_sanitizer_installed", False):
+        core._sanitize_spatial_guide = _sanitize_spatial_guide_preserving_optional_screen
+        core._reference_space_optional_screen_sanitizer_installed = True
     names = {tool.get("name") for tool in base.TOOLS}
     base.TOOLS.extend(tool for tool in REFERENCE_SPACE_TOOLS if tool["name"] not in names)
     base.call_tool = call_tool
