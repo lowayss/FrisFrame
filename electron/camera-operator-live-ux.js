@@ -40,6 +40,7 @@
   let startSnapshot = null;
   let startTime = 0;
   let lastSampleTime = -Infinity;
+  let dirty = true;
 
   const currentCameraPose = () => ({
     x: Number(state.camera.x || 0),
@@ -120,9 +121,6 @@
     if (typeof updatePlayheadDisplay === "function") updatePlayheadDisplay(time);
     evaluatedViewState = renderState;
     if (typeof draw === "function") draw(renderState);
-    if (typeof viewMode !== "undefined" && viewMode === "3d" && typeof renderThreeView === "function") {
-      renderThreeView(renderState, true);
-    }
   };
 
   const restoreStartSnapshot = () => {
@@ -158,6 +156,7 @@
     samples = [];
     startSnapshot = null;
     lastSampleTime = -Infinity;
+    dirty = true;
     mode = "idle";
     document.documentElement.classList.remove("frisframe-camera-operator-active");
     updateUi();
@@ -185,13 +184,14 @@
       ? readTimelineTimeInput(state.motion.playhead)
       : Number(state.motion.playhead || 0);
     const cameraKeys = typeof keysForSource === "function" ? keysForSource("camera") : [];
-    const firstKey = cameraKeys.find((keyframe) => (
+    const exactKey = cameraKeys.find((keyframe) => (
       typeof timelineTimesMatch === "function"
         ? timelineTimesMatch(keyframe.time, requestedTime)
         : Math.abs(Number(keyframe.time) - Number(requestedTime)) < 0.0005
     ));
+    const firstKey = exactKey || [...cameraKeys].sort((left, right) => Number(left.time) - Number(right.time))[0];
     if (!firstKey) {
-      notifyApp("먼저 촬영 시작 위치에 카메라 키프레임을 하나 찍어주세요.");
+      notifyApp("먼저 카메라 키프레임을 하나 찍어주세요.");
       return;
     }
 
@@ -216,7 +216,9 @@
     document.documentElement.classList.add("frisframe-camera-operator-active");
     updateUi();
     renderLiveFrame(startTime);
-    notifyApp("Camera Operator STBY · 카메라 프리뷰를 누르면 타임라인과 함께 REC가 시작됩니다.");
+    notifyApp(exactKey
+      ? "Camera Operator STBY · 카메라 프리뷰를 누르면 타임라인과 함께 REC가 시작됩니다."
+      : `Camera Operator STBY · ${startTime.toFixed(2)}초 첫 카메라 키에서 시작합니다. 카메라 프리뷰를 누르세요.`);
   };
 
   const tickRecording = () => {
@@ -225,7 +227,12 @@
     if (typeof ensureDurationCovers === "function") ensureDurationCovers(time);
     state.motion.playhead = time;
     if (time - lastSampleTime >= 1 / 30 || time >= maxTimelineTime()) sampleCurrentPose(time);
-    renderLiveFrame(time);
+    if (dirty) {
+      dirty = false;
+      renderLiveFrame(time);
+    } else if (typeof updatePlayheadDisplay === "function") {
+      updatePlayheadDisplay(time);
+    }
     updateUi();
     if (time >= maxTimelineTime() - 0.0001) {
       finishOperatorTake();
@@ -242,6 +249,7 @@
     recordStartedAt = performance.now();
     samples = [];
     lastSampleTime = -Infinity;
+    dirty = true;
     state.motion.playhead = startTime;
     sampleCurrentPose(startTime);
     updateUi();
@@ -297,6 +305,7 @@
       state.camera.tiltDeg = clamp(Number(state.camera.tiltDeg || 0) - dy * 0.10 * precision, -89, 89);
     }
     if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+    dirty = true;
   };
 
   const applyOperatorWheel = (event) => {
@@ -323,6 +332,7 @@
       );
     }
     if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+    dirty = true;
   };
 
   const finishOperatorTake = () => {

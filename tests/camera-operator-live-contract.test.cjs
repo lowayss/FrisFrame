@@ -15,8 +15,11 @@ assert.match(controller, /state\.motion\.playhead = time;/, "REC must advance th
 assert.match(controller, /updatePlayheadDisplay\(time\)/, "REC must visibly move the timeline playhead every frame");
 assert.match(controller, /interpolateStateAtTime\(time\)/, "REC must evaluate actor and prop motion at the live timeline time");
 assert.match(controller, /applyCameraPose\(livePose, renderState\)/, "live operator camera must override only the evaluated camera pose");
-assert.match(controller, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
-assert.match(controller, /renderThreeView\(renderState, true\)/, "3D view must render the live evaluated scene during REC");
+const liveRenderFrame = controller.match(/const renderLiveFrame = \(time\) => \{[\s\S]*?\n  \};/)?.[0] || "";
+assert.match(liveRenderFrame, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
+assert.doesNotMatch(liveRenderFrame, /renderThreeView\(renderState, true\)/, "the live frame must not render the 3D scene twice");
+assert.match(controller, /if \(dirty\) \{[\s\S]*renderLiveFrame\(time\);[\s\S]*updatePlayheadDisplay\(time\);/, "REC must avoid rebuilding the 3D world when the camera is idle");
+assert.match(controller, /dirty = true;/, "camera input must mark the live frame dirty for the next coalesced render");
 assert.match(controller, /surface\.addEventListener\("pointerup"[\s\S]*releasePointerControl\(event\);[\s\S]*?\}\);/, "releasing the mouse must release control without ending the take");
 assert.doesNotMatch(
   controller.match(/surface\.addEventListener\("pointerup"[\s\S]*?\n  \}\);/)?.[0] || "",
