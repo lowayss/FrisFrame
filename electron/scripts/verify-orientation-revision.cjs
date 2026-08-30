@@ -87,6 +87,15 @@ function currentCamera(projectPayload) {
   return projectPayload?.document?.project?.scenes?.[0]?.cuts?.[0]?.blocking?.camera || null;
 }
 
+function getProject(executable, database, projectId, id, label) {
+  return parseToolJson(runMcpRequest(executable, database, {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name: "get_project", arguments: { project_id: projectId } },
+  }), label);
+}
+
 function main() {
   const executable = packagedMcpExecutable();
   if (!fs.existsSync(executable)) throw new Error(`패키지 MCP 실행 파일이 없습니다: ${executable}`);
@@ -96,6 +105,12 @@ function main() {
     const fixture = seedReferenceProject(database);
     if (!fixture?.project_id || !fixture?.actor_id || Number(fixture?.revision) !== 1) {
       throw new Error(`orientation revision fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
+    }
+    if (!fixture?.horizon_guard?.project_id || !fixture?.horizon_guard?.actor_id || !fixture?.horizon_guard?.revision) {
+      throw new Error(`orientation Horizon fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
+    }
+    if (!fixture?.keyframed?.project_id || !fixture?.keyframed?.actor_id || !fixture?.keyframed?.revision) {
+      throw new Error(`orientation keyframed fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
     }
 
     const applied = runMcpRequest(executable, database, {
@@ -121,12 +136,7 @@ function main() {
       throw new Error(`첫 orientation revision이 올바르지 않습니다: ${JSON.stringify(appliedPayload)}`);
     }
 
-    const beforeStale = parseToolJson(runMcpRequest(executable, database, {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/call",
-      params: { name: "get_project", arguments: { project_id: fixture.project_id } },
-    }), "stale apply 전 프로젝트 조회");
+    const beforeStale = getProject(executable, database, fixture.project_id, 2, "stale apply 전 프로젝트 조회");
     const cameraBefore = JSON.stringify(currentCamera(beforeStale));
     if (Number(beforeStale?.revision) !== currentRevision || !cameraBefore) {
       throw new Error(`stale apply 전 상태가 올바르지 않습니다: ${JSON.stringify(beforeStale)}`);
@@ -151,12 +161,7 @@ function main() {
     });
     expectToolError(staleApply, "패키지 stale orientation apply", "revision_conflict");
 
-    const afterStale = parseToolJson(runMcpRequest(executable, database, {
-      jsonrpc: "2.0",
-      id: 4,
-      method: "tools/call",
-      params: { name: "get_project", arguments: { project_id: fixture.project_id } },
-    }), "stale apply 후 프로젝트 조회");
+    const afterStale = getProject(executable, database, fixture.project_id, 4, "stale apply 후 프로젝트 조회");
     if (Number(afterStale?.revision) !== currentRevision) {
       throw new Error(`stale orientation apply가 revision을 변경했습니다: ${JSON.stringify(afterStale)}`);
     }
@@ -164,7 +169,61 @@ function main() {
       throw new Error("stale orientation apply가 camera state를 변경했습니다.");
     }
 
-    console.log("FrisFrame packaged orientation revision safety: stale revision rejected without mutation");
+    const keyframedFixture = fixture.keyframed;
+    const keyframedBefore = getProject(executable, database, keyframedFixture.project_id, 5, "문자열 camera override 전 프로젝트 조회");
+    const keyframedCameraBefore = JSON.stringify(currentCamera(keyframedBefore));
+    const malformedKeyframedOverride = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: keyframedFixture.project_id,
+          revision: keyframedFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: keyframedFixture.actor_id,
+          image_x: 0.62,
+          image_y: 0.42,
+          allow_keyframed_base_camera: "false",
+        },
+      },
+    });
+    expectToolError(malformedKeyframedOverride, "패키지 문자열 camera override", "JSON boolean true/false");
+    const keyframedAfter = getProject(executable, database, keyframedFixture.project_id, 7, "문자열 camera override 후 프로젝트 조회");
+    if (Number(keyframedAfter?.revision) !== Number(keyframedFixture.revision) || JSON.stringify(currentCamera(keyframedAfter)) !== keyframedCameraBefore) {
+      throw new Error("문자열 camera override가 keyframed 프로젝트를 변경했습니다.");
+    }
+
+    const horizonFixture = fixture.horizon_guard;
+    const horizonBefore = getProject(executable, database, horizonFixture.project_id, 8, "문자열 Horizon override 전 프로젝트 조회");
+    const horizonCameraBefore = JSON.stringify(currentCamera(horizonBefore));
+    const malformedHorizonOverride = runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: {
+        name: "apply_reference_camera_orientation",
+        arguments: {
+          project_id: horizonFixture.project_id,
+          revision: horizonFixture.revision,
+          scene_index: 0,
+          cut_index: 0,
+          target_id: horizonFixture.actor_id,
+          image_x: 0.5,
+          image_y: 0.12,
+          allow_horizon_mismatch: "false",
+        },
+      },
+    });
+    expectToolError(malformedHorizonOverride, "패키지 문자열 Horizon override", "JSON boolean true/false");
+    const horizonAfter = getProject(executable, database, horizonFixture.project_id, 10, "문자열 Horizon override 후 프로젝트 조회");
+    if (Number(horizonAfter?.revision) !== Number(horizonFixture.revision) || JSON.stringify(currentCamera(horizonAfter)) !== horizonCameraBefore) {
+      throw new Error("문자열 Horizon override가 프로젝트를 변경했습니다.");
+    }
+
+    console.log("FrisFrame packaged orientation safety: stale revision and non-boolean overrides rejected without mutation");
   } finally {
     fs.rmSync(smokeDir, { recursive: true, force: true });
   }
