@@ -68,12 +68,12 @@ Electron은 기존 상태 모델을 복제하지 않고 기존 함수/DOM을 감
 - `history-safety-ux.js` — Esc 취소, Undo/Redo, 잠금, autosave 가시성
 - `performance-ux.js` — 직접 조작 중 DOM/렌더 재생성 억제와 프레임 병합
 - `preview-cache-ux.js` — 카메라 프리뷰 World 재사용
-- `scene-cache-ux.js` / `dynamic-prop-cache-ux.js` — 고정/동적 3D 대상 재사용
+- `scene-cache-ux.js` / `dynamic-prop-cache-ux.js` — 고정/동적 3D 대상 재사용. 렌더 시작 시 motion source와 수동 group membership을 각각 한 번 인덱싱하고 같은 렌더의 소품 eligibility 판정에서는 Set 조회를 사용
 - `stage-shell-cache-ux.js` — Grid/Border 재사용
 - `camera-path-cache-ux.js` — Camera Rig/FOV/모션 경로 재사용
 - `helper-raycast-ux.js` — 선택 불가능한 장식 Geometry의 Raycast 제외
 
-캐시는 **빠르지만 틀린 화면**을 만들면 안 됩니다. 이름·색·크기·포즈·키·가시성 등 캐시 결과에 영향을 주는 상태를 변경했을 때 반드시 무효화되어야 합니다. 선택/포즈 편집처럼 정확성이 우선되는 경우 캐시를 우회할 수 있습니다.
+캐시는 **빠르지만 틀린 화면**을 만들면 안 됩니다. 이름·색·크기·포즈·키·가시성 등 캐시 결과에 영향을 주는 상태를 변경했을 때 반드시 무효화되어야 합니다. 선택/포즈 편집처럼 정확성이 우선되는 경우 캐시를 우회할 수 있습니다. 렌더별 eligibility 인덱스도 다른 `renderState`에 재사용하지 않으며, 활성 렌더 밖에서는 정확한 원본 스캔 경로를 fallback으로 유지합니다.
 
 ## 변경 전후 확인
 
@@ -94,8 +94,9 @@ python3 quality_check.py
 5. 2D 확대·이동과 3D 오빗·팬·줌, 작은 대상 선택과 겹친 대상 순환
 6. 포즈 프리셋·관절 직접 편집과 키프레임 반영
 7. 현재/기준 프레임, 첫·끝 프레임, H.264 프리비즈 MP4와 필요 시 전체 컷 MP4 ZIP
-8. MCP로 무대/모션 명령을 적용하고 같은 프로젝트 revision이 UI에 반영되는지 확인
-9. 생성형 이미지·최종 Prompt 기능이 FrisFrame 내부 사용자 경로에 나타나지 않는지 확인
+8. 데스크톱 `도움말 → MCP 실행 경로 복사`로 실제 설치 경로를 얻고 외부 MCP 클라이언트에 stdio command로 등록. `list_projects` → `get_project`로 같은 프로젝트/revision을 확인한 뒤 MCP 무대/모션 명령을 적용하고 UI에 반영되는지 확인
+9. UI에서 수동 저장을 끼운 뒤 오래된 revision의 MCP 수정이 `revision_conflict`로 거부되고, 최신 revision을 다시 읽은 뒤 작업을 재개할 수 있는지 확인
+10. 생성형 이미지·최종 Prompt 기능이 FrisFrame 내부 사용자 경로에 나타나지 않는지 확인
 
 ## 프로젝트 형식
 
@@ -110,6 +111,7 @@ python3 quality_check.py
 ## Electron 연결 원칙
 
 - Electron 메인 프로세스는 창, 앱 메뉴, 로컬 서버 시작·종료와 파일 저장 등 셸 책임만 담당합니다.
+- 설치본 MCP 실행 경로 노출은 renderer에 새 Node/IPC 권한을 주지 않고 신뢰된 메인 프로세스 앱 메뉴에서 처리합니다.
 - 렌더러는 Node 기능을 직접 노출하지 않습니다.
 - `contextIsolation`은 켜고 `nodeIntegration`은 끕니다.
 - `sandbox`와 `webSecurity`를 유지합니다.
@@ -136,7 +138,7 @@ npm run desktop:verify
 - macOS Apple Silicon과 Windows x64를 각각 빌드합니다.
 - 프로젝트 DB는 앱 패키지 밖의 플랫폼별 사용자 데이터 폴더에 저장합니다.
 - unsigned 개발 빌드에서도 `desktop:verify`가 서버, FFmpeg, MCP 실행파일과 필수 리소스를 검사합니다.
-- MCP는 임시 DB로 실제 stdio 프로세스 smoke-start를 통과해야 합니다.
+- MCP는 임시 DB를 사용해 실제 번들 stdio 프로세스의 `initialize` → `tools/list` → DB-backed `list_projects` JSON-RPC 왕복을 통과해야 합니다. Windows에서는 한국어 도구 metadata가 UTF-8로 정상 출력되는지도 함께 검사합니다.
 - 정식 외부 배포에서는 macOS Developer ID/notarization과 Windows Authenticode 서명을 별도로 적용합니다.
 
 ## 현재 범위 고정
