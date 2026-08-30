@@ -73,7 +73,18 @@ const ready = workflow.validateReferenceSpaceBlocking(blocking, { spatialCore: s
 assert.equal(ready.status, "ready");
 assert.equal(ready.issues.length, 0);
 assert.equal(ready.projectionChecks.length, 1);
+assert.equal(ready.screenPositionPolicy, "diagnostic-only-no-readiness-impact");
+assert.equal(ready.screenPositionChecks.length, 1);
 assert.ok(ready.horizonCheck);
+const readyScreen = ready.screenPositionChecks[0];
+assert.equal(readyScreen.anchorId, "scale-actor-a");
+assert.equal(readyScreen.itemId, actor.id);
+assert.equal(readyScreen.inFront, true);
+assert.equal(readyScreen.inFrame, true);
+assert.ok(Math.abs(readyScreen.predictedX - 0.5) < 1e-8);
+assert.ok(Math.abs(readyScreen.predictedY - 0.5) < 1e-8);
+assert.ok(Math.abs(readyScreen.residualX) < 1e-8);
+assert.ok(Math.abs(readyScreen.residualY) < 1e-8);
 
 const overlayRect = { x: 100, y: 50, width: 960, height: 540 };
 const ghostReady = workflow.buildReferenceGhostObservationModel(blocking, { spatialCore: spatial, overlayRect });
@@ -109,7 +120,12 @@ const shiftedImageObservation = structuredClone(blocking);
 shiftedImageObservation.spatialGuide.anchors[0].imageX = 0.62;
 shiftedImageObservation.spatialGuide.anchors[0].imageY = 0.42;
 const unchangedValidation = workflow.validateReferenceSpaceBlocking(shiftedImageObservation, { spatialCore: spatial });
-assert.equal(unchangedValidation.status, "ready", "screen-position residual must remain visual-only in this slice");
+assert.equal(unchangedValidation.status, "ready", "screen-position residual must remain diagnostic-only in this slice");
+assert.equal(unchangedValidation.issues.length, 0);
+assert.equal(unchangedValidation.screenPositionChecks.length, 1);
+const shiftedCheck = unchangedValidation.screenPositionChecks[0];
+assert.ok(Math.abs(shiftedCheck.residualX - 0.12) < 1e-8);
+assert.ok(Math.abs(shiftedCheck.residualY + 0.08) < 1e-8);
 const shiftedGhost = workflow.buildReferenceGhostObservationModel(shiftedImageObservation, { spatialCore: spatial, overlayRect });
 assert.equal(shiftedGhost.status, "ready");
 assert.ok(Math.abs(shiftedGhost.scales[0].center.x - shiftedGhost.scales[0].predictedCenter.x) > 100,
@@ -124,4 +140,4 @@ badPosition.items[0].x += 0.05;
 const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
 assert.ok(reviewPosition.issues.some((issue) => issue.code === "anchor-x-mismatch"));
 
-console.log("reference-validation-ui: scale/horizon validation plus observed/current screen-position Ghost projection passed");
+console.log("reference-validation-ui: local scale/horizon/screen diagnostics plus Ghost projection passed");
