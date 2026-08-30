@@ -51,6 +51,7 @@ def main() -> None:
         "scene-blocking-core.js",
         "previs-runtime-core.js",
         "reference-workflow-core.js",
+        "reference-validation-ui.js",
         "timeline-core.js",
         "project-recovery-core.js",
         "manual-guide-core.js",
@@ -79,6 +80,8 @@ def main() -> None:
         "electron/performance-ux.js",
         "electron/scripts/smoke-package.cjs",
         "electron/scripts/verify-runtime-source-parity.cjs",
+        "electron/scripts/verify-package.cjs",
+        "electron/scripts/build-python-runtime.cjs",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
@@ -92,6 +95,7 @@ def main() -> None:
         "tests/reference-batch-policy.test.cjs",
         "tests/reference-readiness.test.cjs",
         "tests/reference-ghost-ui-contract.test.cjs",
+        "tests/reference-validation-ui.test.cjs",
         "tests/scene-blocking-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
