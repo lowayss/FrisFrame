@@ -67,6 +67,15 @@ def _image_coordinate(value, name):
     return number
 
 
+def _boolean_override(args, name):
+    if name not in args:
+        return False
+    value = args.get(name)
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} 값은 JSON boolean true/false여야 합니다.")
+    return value
+
+
 def _angle_distance_degrees(left, right):
     return abs(((float(left) - float(right) + 180.0) % 360.0) - 180.0)
 
@@ -205,15 +214,17 @@ def _solve_orientation(args, blocking=None):
 
 def _apply_orientation(args):
     blocking = reference._blocking(args)
+    allow_keyframed_base_camera = _boolean_override(args, "allow_keyframed_base_camera")
+    allow_horizon_mismatch = _boolean_override(args, "allow_horizon_mismatch")
     camera_keys = reference._camera_keyframes(blocking)
-    if camera_keys and not bool(args.get("allow_keyframed_base_camera", False)):
+    if camera_keys and not allow_keyframed_base_camera:
         raise ValueError(
             "camera-keyframes-present: 이 컷에는 카메라 키프레임이 있습니다. "
             "베이스 카메라 방향만 바꾸면 기존 프리비즈 타이밍과 달라질 수 있으므로 적용을 중단했습니다."
         )
     solution = _solve_orientation(args, blocking)
     horizon_check = solution["horizon_check"]
-    if not horizon_check["consistent"] and not bool(args.get("allow_horizon_mismatch", False)):
+    if not horizon_check["consistent"] and not allow_horizon_mismatch:
         raise ValueError(
             "reference-horizon-conflict: 요청한 screen X/Y를 맞추는 tilt가 저장된 Horizon 관측과 충돌합니다. "
             "외부 분석을 다시 확인하거나 allow_horizon_mismatch=true를 명시하세요."
