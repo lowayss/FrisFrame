@@ -40,6 +40,9 @@ def main():
             "validate_reference_space",
         } <= names
         assert base.call_tool is extension.call_tool
+        assert extension._image_observation_fields({}) == {}
+        assert extension._image_observation_fields({"image_x": 0.27}) == {"image_x": 0.27}
+        assert extension._image_observation_fields({"image_x": 0.27, "image_y": 0.63}) == {"image_x": 0.27, "image_y": 0.63}
 
         frame_fraction = 1.78 * 50 / (10 * (36 / (16 / 9)))
         calibration = json.loads(extension.call_tool("calibrate_reference_camera", {
@@ -203,11 +206,59 @@ def main():
         assert abs(diagnostic_only["screen_position_checks"][0]["residual_x"]) > 0.1
         assert abs(diagnostic_only["screen_position_checks"][0]["residual_y"]) > 0.1
 
+        no_screen_created = json.loads(core.handle_create_project("Reference Space No Screen Guess"))
+        no_screen_project_id = no_screen_created["project_id"]
+        no_screen_revision = no_screen_created["revision"]
+        no_screen_blocking = first_blocking(no_screen_project_id)
+        no_screen_actor = no_screen_blocking["items"][0]
+        no_screen_actor_id = no_screen_actor["id"]
+        no_screen_dims = extension._target_dimensions(no_screen_actor, "height", 1.78)
+        no_screen_distance = extension._target_distance(no_screen_blocking, no_screen_actor_id, no_screen_dims)
+        no_screen_camera = no_screen_blocking["camera"]
+        no_screen_sensor = (no_screen_blocking.get("cameraSetup") or {}).get("sensorWidthMm", 36)
+        no_screen_aspect = space.aspect_value(no_screen_blocking["aspect"])
+        no_screen_fraction = space.predicted_frame_fraction(
+            1.78,
+            no_screen_distance,
+            no_screen_camera["focal"],
+            no_screen_sensor,
+            no_screen_aspect,
+            "height",
+        )
+        no_screen_applied = json.loads(extension.call_tool("apply_reference_camera_calibration", {
+            "project_id": no_screen_project_id,
+            "revision": no_screen_revision,
+            "scene_index": 0,
+            "cut_index": 0,
+            "target_id": no_screen_actor_id,
+            "anchor_id": "actor-scale-no-screen",
+            "axis": "height",
+            "physical_size_m": 1.78,
+            "frame_fraction": no_screen_fraction,
+            "apply_distance": False,
+            "apply_focal": False,
+            "apply_tilt": False,
+            "source_name": "external-reference-no-screen-observation",
+        }))
+        assert no_screen_applied["revision"] == no_screen_revision + 1
+        no_screen_updated = first_blocking(no_screen_project_id)
+        no_screen_anchor = next(anchor for anchor in no_screen_updated["spatialGuide"]["anchors"] if anchor["id"] == "actor-scale-no-screen")
+        assert no_screen_anchor.get("imageX") is None, no_screen_anchor
+        assert no_screen_anchor.get("imageY") is None, no_screen_anchor
+        no_screen_validation = json.loads(extension.call_tool("validate_reference_space", {
+            "project_id": no_screen_project_id,
+            "scene_index": 0,
+            "cut_index": 0,
+        }))
+        assert no_screen_validation["status"] == "ready", no_screen_validation
+        assert len(no_screen_validation["projection_checks"]) == 1
+        assert no_screen_validation["screen_position_checks"] == [], no_screen_validation
+
         keyed = first_blocking(project_id)
         keyed["motion"]["keyframes"] = [{"id": "cam-key", "source": "camera", "time": 0, "pose": dict(keyed["camera"])}]
         assert len(extension._camera_keyframes(keyed)) == 1
 
-        print("reference-space-mcp: calibration, persisted scale/horizon/screen diagnostics, and mass blocking checks passed")
+        print("reference-space-mcp: calibration, persisted diagnostics, no synthetic screen center, and mass blocking checks passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
