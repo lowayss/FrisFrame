@@ -148,6 +148,16 @@ def _anchor_id(value, fallback):
     return candidate
 
 
+def _image_observation_fields(data):
+    """Preserve only screen observations explicitly supplied by the external analysis."""
+    result = {}
+    if isinstance(data, dict) and data.get("image_x") is not None:
+        result["image_x"] = float(data["image_x"])
+    if isinstance(data, dict) and data.get("image_y") is not None:
+        result["image_y"] = float(data["image_y"])
+    return result
+
+
 def _dimensions(value):
     if not isinstance(value, dict):
         return None
@@ -322,8 +332,6 @@ def _apply_camera_calibration(args):
         "id": anchor_id,
         "label": str(args.get("label") or target.get("name") or target_id)[:80],
         "kind": f"scale-{axis}",
-        "image_x": float(args.get("image_x", 0.5)),
-        "image_y": float(args.get("image_y", 0.5)),
         "image_width": fraction if axis == "width" else 0,
         "image_height": fraction if axis == "height" else 0,
         "world_x_m": target_world_x,
@@ -332,13 +340,13 @@ def _apply_camera_calibration(args):
         "confidence": min(1.0, max(0.0, float(args.get("confidence", 1.0)))),
         "attached_item_id": target_id,
     }
+    scale_anchor.update(_image_observation_fields(args))
     anchors = [scale_anchor]
     if args.get("horizon_y") is not None:
         anchors.append({
             "id": _anchor_id(args.get("horizon_anchor_id"), "reference-horizon"),
             "label": "Reference horizon",
             "kind": "horizon",
-            "image_x": 0.5,
             "image_y": float(args["horizon_y"]),
             "confidence": min(1.0, max(0.0, float(args.get("confidence", 1.0)))),
         })
