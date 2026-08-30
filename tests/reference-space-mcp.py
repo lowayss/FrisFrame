@@ -101,16 +101,38 @@ def main():
         target_dims = extension._target_dimensions(actor, "height", 1.78)
         actual_distance = extension._target_distance(blocking, actor_id, target_dims)
         camera = blocking["camera"]
+        sensor_width = (blocking.get("cameraSetup") or {}).get("sensorWidthMm", 36)
         aspect = space.aspect_value(blocking["aspect"])
         observed_fraction = space.predicted_frame_fraction(
             1.78,
             actual_distance,
             camera["focal"],
-            36,
+            sensor_width,
             aspect,
             "height",
         )
-        observed_horizon = space.horizon_from_tilt(camera["tiltDeg"], camera["focal"], 36, aspect)
+        observed_horizon = space.horizon_from_tilt(camera["tiltDeg"], camera["focal"], sensor_width, aspect)
+        stage_width, stage_depth = space.stage_dimensions(blocking["aspect"])
+        actor_world_x, actor_world_z = extension._world_xy(blocking, actor)
+        observed_screen = space.project_world_point_to_frame(
+            {
+                "x": (float(camera.get("x", 0.5)) - 0.5) * stage_width,
+                "y": float(camera.get("height", 1.6)),
+                "z": (float(camera.get("y", 0.5)) - 0.5) * stage_depth,
+            },
+            {
+                "x": actor_world_x,
+                "y": extension._target_center_height(actor, target_dims),
+                "z": actor_world_z,
+            },
+            pan_deg=camera.get("panDeg", 180),
+            tilt_deg=camera.get("tiltDeg", 0),
+            focal_mm=camera["focal"],
+            sensor_width_mm=sensor_width,
+            aspect=blocking["aspect"],
+        )
+        assert observed_screen["in_front"] is True
+        assert observed_screen["frame_x"] is not None and observed_screen["frame_y"] is not None
 
         applied = json.loads(extension.call_tool("apply_reference_camera_calibration", {
             "project_id": project_id,
@@ -122,6 +144,8 @@ def main():
             "axis": "height",
             "physical_size_m": 1.78,
             "frame_fraction": observed_fraction,
+            "image_x": observed_screen["frame_x"],
+            "image_y": observed_screen["frame_y"],
             "horizon_y": observed_horizon,
             "apply_distance": True,
             "apply_focal": True,
@@ -147,12 +171,43 @@ def main():
         assert validation["status"] == "ready", validation
         assert len(validation["projection_checks"]) == 1
         assert validation["horizon_check"] is not None
+        assert validation["screen_position_policy"] == "diagnostic-only-no-readiness-impact"
+        assert len(validation["screen_position_checks"]) == 1
+        screen_check = validation["screen_position_checks"][0]
+        assert screen_check["anchor_id"] == "actor-scale"
+        assert screen_check["item_id"] == actor_id
+        assert screen_check["in_front"] is True
+        assert abs(screen_check["residual_x"]) < 1e-9, screen_check
+        assert abs(screen_check["residual_y"]) < 1e-9, screen_check
+
+        diagnostic_x = 0.1 if screen_check["predicted_x"] > 0.5 else 0.9
+        diagnostic_y = 0.1 if screen_check["predicted_y"] > 0.5 else 0.9
+        diagnostic_only = json.loads(extension.call_tool("validate_reference_space", {
+            "project_id": project_id,
+            "scene_index": 0,
+            "cut_index": 0,
+            "horizon_y": validation["horizon_check"]["predicted"],
+            "scale_anchors": [{
+                "id": "actor-scale-diagnostic",
+                "axis": "height",
+                "physical_size_m": 1.78,
+                "frame_fraction": validation["projection_checks"][0]["predicted"],
+                "target_id": actor_id,
+                "dimensions_m": updated_actor["referenceDimensionsM"],
+                "image_x": diagnostic_x,
+                "image_y": diagnostic_y,
+            }],
+        }))
+        assert diagnostic_only["status"] == "ready", diagnostic_only
+        assert diagnostic_only["issues"] == []
+        assert abs(diagnostic_only["screen_position_checks"][0]["residual_x"]) > 0.1
+        assert abs(diagnostic_only["screen_position_checks"][0]["residual_y"]) > 0.1
 
         keyed = first_blocking(project_id)
         keyed["motion"]["keyframes"] = [{"id": "cam-key", "source": "camera", "time": 0, "pose": dict(keyed["camera"])}]
         assert len(extension._camera_keyframes(keyed)) == 1
 
-        print("reference-space-mcp: calibration, camera apply, persisted validation, and mass blocking checks passed")
+        print("reference-space-mcp: calibration, persisted scale/horizon/screen diagnostics, and mass blocking checks passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
