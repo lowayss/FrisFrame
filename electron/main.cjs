@@ -63,6 +63,38 @@ function resolveServerLaunch() {
   };
 }
 
+function resolveMcpLaunch() {
+  if (app.isPackaged) {
+    const mcpName = process.platform === "win32" ? "frisframe-mcp.exe" : "frisframe-mcp";
+    return {
+      command: packagedRuntimePath(path.join("mcp", mcpName)),
+      args: [],
+    };
+  }
+  return {
+    command: process.env.FRISFRAME_PYTHON || (process.platform === "win32" ? "python" : "python3.11"),
+    args: [path.join(app.getAppPath(), "mcp_desktop_entry.py")],
+  };
+}
+
+function copyMcpLaunchPath() {
+  const launch = resolveMcpLaunch();
+  if (app.isPackaged && !fs.existsSync(launch.command)) {
+    throw new Error(`MCP 실행 파일을 찾을 수 없습니다: ${launch.command}`);
+  }
+  clipboard.writeText(launch.command);
+  const detail = launch.args.length
+    ? `command: ${launch.command}\nargs: ${launch.args.join(" ")}`
+    : launch.command;
+  dialog.showMessageBox({
+    type: "info",
+    title: "FrisFrame MCP",
+    message: "MCP 실행 경로를 클립보드에 복사했습니다.",
+    detail: `${detail}\n\n외부 MCP 클라이언트의 stdio 서버 command에 이 경로를 등록하세요.`,
+    buttons: ["확인"],
+  }).catch((error) => writeLog(`MCP path dialog failed: ${error.stack || error}`));
+}
+
 function ensureUserDataDatabase(databasePath) {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   if (fs.existsSync(databasePath) || app.isPackaged) return;
@@ -250,6 +282,22 @@ function buildApplicationMenu() {
     { label: "편집", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
     { label: "보기", submenu: [{ role: "reload" }, { role: "togglefullscreen" }] },
     { label: "창", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }] },
+    {
+      label: "도움말",
+      submenu: [
+        {
+          label: "MCP 실행 경로 복사",
+          click: () => {
+            try {
+              copyMcpLaunchPath();
+            } catch (error) {
+              writeLog(`MCP path copy failed: ${error.stack || error}`);
+              dialog.showErrorBox("FrisFrame MCP", error.message || String(error));
+            }
+          },
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
