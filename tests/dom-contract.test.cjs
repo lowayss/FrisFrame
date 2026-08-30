@@ -49,8 +49,6 @@ assert.equal(app.includes("index / (frameCount - 1)"), false, "MP4 evaluation mu
 assert.match(app, /exportRangeResetBtn[\s\S]*?state\.motion\.exportRange = \{ start: 0, end: state\.motion\.duration \}/, "MP4 export needs a one-click full-range reset");
 assert.match(app, /const \{\s*collisionEpsilon: timelineCollisionEpsilon,[\s\S]*?\} = timelineCore;/, "timeline collision helpers must come from the timeline core");
 assert.ok(app.includes("const PROJECT_SCHEMA_VERSION = 11;"), "continuity and cut snapshots require project schema v11");
-assert.ok(app.includes("function exportMultiCameraPreview("), "multi-camera preview needs a preview-first export action");
-assert.ok(app.includes("function exportMultiCameraVideo("), "multi-camera needs a preview-first MP4 export action");
 for (const retiredId of [
   "multiCamPreviewBtn",
   "multiCamPreviewPanelBtn",
@@ -60,6 +58,12 @@ for (const retiredId of [
 ]) {
   assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
 }
+assert.equal(app.includes("function exportMultiCameraPreview("), false,
+  "retired multi-camera contact-sheet export must stay removed");
+assert.equal(app.includes("function renderMultiCameraContactSheet("), false,
+  "retired multi-camera contact-sheet renderer must stay removed");
+assert.equal(app.includes("function exportMultiCameraVideo("), false,
+  "retired multi-camera video export must stay removed");
 assert.ok(app.includes("function exportSelectedCutFrame("), "selected cut needs a still-frame export action");
 assert.ok(app.includes("function exportSelectedCutVideo("), "selected cut needs an MP4 export action");
 assert.equal(app.includes("maxConcurrency = 6"), false, "MP4 frame uploads must not fan out concurrently");
@@ -108,10 +112,7 @@ assert.ok(app.includes("const spatialScaleCore = window.FrisFrameSpatialScaleCor
 assert.ok(app.includes("function actorPhysicalDimensions("), "actor framing must use physical dimensions");
 assert.ok(app.includes("fitThreeBodyToPhysicalBounds"), "prop meshes must be fitted to physical catalog dimensions");
 assert.ok(ids.has("physicalScaleReadout") && app.includes("실측 스케일"), "properties must expose the resolved metric dimensions");
-assert.ok(app.includes("function cameraPerspectiveForSubject(") && app.includes("Perspective scale check:"), "AI handoff must preserve metric perspective checks");
-assert.ok(app.includes('"vertical_offset", "pitch_deg"'), "CSV export must preserve actor elevation and pitch");
-assert.ok(app.includes("function blenderCameraTarget("), "Blender export must use camera pan and tilt directly");
-assert.ok(app.includes("obj.rotation_euler[0] = math.radians"), "Blender export must preserve actor pitch");
+assert.ok(app.includes("function cameraPerspectiveForSubject("), "metric perspective checks must remain available to the editor");
 assert.ok(app.includes("function updateThreePoseDrag("), "3D actors need direct joint dragging");
 assert.ok(app.includes("function updateExistingSourceKeyframe(sourceId, time"), "pose edits should update an existing key without creating an implicit one");
 assert.equal(app.includes("function autoSaveDraggedPose(sourceId)"), false, "drag edits must not expose an implicit keyframe save path");
@@ -163,27 +164,35 @@ assert.equal(ids.has("videoExportMode"), false, "video export should only create
 for (const retiredId of [
   "blockingPlanBtn",
   "blockingPlanPanelBtn",
-]) {
-  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
-}
-assert.ok(app.includes("function exportBlockingPlanImage("), "2D blocking export needs a preview-first renderer");
-for (const retiredId of [
+  "backgroundSheetBtn",
+  "backgroundSheetPanelBtn",
   "productionPackBtn",
   "productionPackPanelBtn",
 ]) {
   assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
 }
-assert.ok(app.includes('presentExport(zip, `${slug(project?.title || state.sceneTitle)}_production_pack.zip`'), "production data must use the preview-first export dialog");
-assert.ok(app.includes('"project/cut_list.csv"') && app.includes('"docs/continuity_report.md"'), "production data must include cut and continuity reports");
-assert.ok(app.includes('"project/multi_camera_plan.json"') && app.includes("function buildMultiCameraPlan("), "production data must include per-camera plans");
-assert.ok(app.includes('"camera_id"'), "motion CSV must identify the camera that owns each camera key");
-assert.ok(app.includes('"#productionPackBtn": "촬영 자료 ZIP"'), "production data must participate in the single-flight export lock");
-assert.ok(app.includes('caption: "현재 컷 2D 동선도"') && app.includes('caption: "현재 재생 위치 카메라 프레임"'), "production preview must show actual rendered media");
-for (const retiredId of [
-  "backgroundSheetBtn",
-  "backgroundSheetPanelBtn",
+for (const retiredFunction of [
+  "exportBlockingPlanImage",
+  "exportBackgroundSheetReference",
+  "exportProductionPack",
 ]) {
-  assert.equal(ids.has(retiredId), false, `${retiredId} must stay physically removed from shared HTML`);
+  assert.equal(app.includes(`function ${retiredFunction}(`), false,
+    `${retiredFunction} must stay physically removed from shared app source`);
+}
+for (const retiredFunction of [
+  "buildProductionPack",
+  "buildProductionPackPreview",
+  "buildAiGenerationBrief",
+  "buildSeedancePrompt",
+  "buildMotionCsv",
+  "buildBlenderPrevisScript",
+  "buildBackgroundSheetManifest",
+  "buildBackgroundSheetReadme",
+  "renderBackgroundStageOverviewBlob",
+  "renderBackgroundPlanBlob",
+]) {
+  assert.equal(app.includes(`function ${retiredFunction}(`), false,
+    `${retiredFunction} must stay physically removed from shared app source`);
 }
 for (const retiredSpatialId of [
   "spatialReferenceStatus",
@@ -191,14 +200,11 @@ for (const retiredSpatialId of [
   "spatialReferencePreview",
   "clearSpatialReferenceBtn",
 ]) {
-  assert.equal(ids.has(retiredSpatialId), false, `${retiredSpatialId} must stay physically removed from shared HTML`);
+  assert.equal(ids.has(retiredSpatialId), false,
+    `${retiredSpatialId} must stay physically removed from shared HTML`);
 }
 assert.equal(html.includes("spatial-reference-panel"), false,
-  "in-app background-image reference panel must stay physically removed");
-assert.ok(app.includes("function exportBackgroundSheetReference("), "background-sheet export needs a preview-first renderer");
-assert.ok(app.includes('handoff: "codex-background-sheet"') && app.includes('path: "scene_manifest.json"'), "background-sheet export must include Codex handoff metadata");
-assert.ok(app.includes('path: "media/background_hero.png"') && app.includes('path: "media/topdown_plan.png"'), "background-sheet export must include clean reference views");
-assert.ok(app.includes('filter((item) => item.type !== "actor")'), "background-sheet reference must filter actor dummies from stage views");
+  "in-app background-image reference panel must stay removed");
 assert.equal(app.includes("function downloadUrl("), false, "exports must not bypass the preview dialog");
 assert.equal(app.includes("function downloadBlob("), false, "blob exports must not bypass the preview dialog");
 const retiredMotionPanelId = ["prompt", "Block", "Panel"].join("");

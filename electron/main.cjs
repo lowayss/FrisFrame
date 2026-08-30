@@ -63,6 +63,38 @@ function resolveServerLaunch() {
   };
 }
 
+function resolveMcpLaunch() {
+  if (app.isPackaged) {
+    const mcpName = process.platform === "win32" ? "frisframe-mcp.exe" : "frisframe-mcp";
+    return {
+      command: packagedRuntimePath(path.join("mcp", mcpName)),
+      args: [],
+    };
+  }
+  return {
+    command: process.env.FRISFRAME_PYTHON || (process.platform === "win32" ? "python" : "python3.11"),
+    args: [path.join(app.getAppPath(), "mcp_desktop_entry.py")],
+  };
+}
+
+function copyMcpLaunchPath() {
+  const launch = resolveMcpLaunch();
+  if (app.isPackaged && !fs.existsSync(launch.command)) {
+    throw new Error(`MCP 실행 파일을 찾을 수 없습니다: ${launch.command}`);
+  }
+  clipboard.writeText(launch.command);
+  const detail = launch.args.length
+    ? `command: ${launch.command}\nargs: ${launch.args.join(" ")}`
+    : launch.command;
+  dialog.showMessageBox({
+    type: "info",
+    title: "FrisFrame MCP",
+    message: "MCP 실행 경로를 클립보드에 복사했습니다.",
+    detail: `${detail}\n\n외부 MCP 클라이언트의 stdio 서버 command에 이 경로를 등록하세요.`,
+    buttons: ["확인"],
+  }).catch((error) => writeLog(`MCP path dialog failed: ${error.stack || error}`));
+}
+
 function ensureUserDataDatabase(databasePath) {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   if (fs.existsSync(databasePath) || app.isPackaged) return;
@@ -250,6 +282,22 @@ function buildApplicationMenu() {
     { label: "편집", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
     { label: "보기", submenu: [{ role: "reload" }, { role: "togglefullscreen" }] },
     { label: "창", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }] },
+    {
+      label: "도움말",
+      submenu: [
+        {
+          label: "MCP 실행 경로 복사",
+          click: () => {
+            try {
+              copyMcpLaunchPath();
+            } catch (error) {
+              writeLog(`MCP path copy failed: ${error.stack || error}`);
+              dialog.showErrorBox("FrisFrame MCP", error.message || String(error));
+            }
+          },
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -294,6 +342,17 @@ function createMainWindow(origin) {
   window.webContents.on("will-redirect", preventExternalNavigation);
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
+  window.webContents.on("did-finish-load", () => {
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
+      const uxPath = path.join(__dirname, filename);
+      try {
+        const source = fs.readFileSync(uxPath, "utf8");
+        window.webContents.executeJavaScript(source, true).catch((error) => writeLog(`${filename} injection failed: ${error.stack || error}`));
+      } catch (error) {
+        writeLog(`${filename} file failed: ${error.stack || error}`);
+      }
+    }
+  });
   window.loadURL(`${origin}/`);
   return window;
 }

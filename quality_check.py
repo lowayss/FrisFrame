@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent
 
 
@@ -26,7 +25,13 @@ def run(label: str, command: list[str]) -> None:
 
 def check_python_syntax() -> None:
     print("\n[검사] Python 문법")
-    for path in (ROOT / "server.py", ROOT / "mcp_server.py", ROOT / "add_license.py"):
+    for path in (
+        ROOT / "server.py",
+        ROOT / "mcp_server.py",
+        ROOT / "mcp_previs_server.py",
+        ROOT / "mcp_desktop_entry.py",
+        ROOT / "add_license.py",
+    ):
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         print(f"  확인: {path.name}")
 
@@ -51,6 +56,21 @@ def main() -> None:
         "camera-drafting-core.js",
         "multi-camera-core.js",
         "spatial-scale-core.js",
+        "electron/preload.cjs",
+        "electron/main.cjs",
+        "electron/workspace-ux.js",
+        "electron/hud-export-ux.js",
+        "electron/interaction-ux.js",
+        "electron/selection-ux.js",
+        "electron/alignment-ux.js",
+        "electron/history-safety-ux.js",
+        "electron/scene-cache-ux.js",
+        "electron/dynamic-prop-cache-ux.js",
+        "electron/stage-shell-cache-ux.js",
+        "electron/camera-path-cache-ux.js",
+        "electron/helper-raycast-ux.js",
+        "electron/preview-cache-ux.js",
+        "electron/performance-ux.js",
     ):
         run(f"JavaScript 문법 · {filename}", [node, "--check", filename])
 
@@ -63,7 +83,6 @@ def main() -> None:
         "tests/reference-batch-export.test.cjs",
         "tests/reference-batch-policy.test.cjs",
         "tests/reference-readiness.test.cjs",
-        "tests/reference-prompt-guide.test.cjs",
         "tests/scene-blocking-core.test.cjs",
         "tests/previs-runtime-core.test.cjs",
         "tests/timeline-core.test.cjs",
@@ -73,6 +92,21 @@ def main() -> None:
         "tests/camera-drafting.test.cjs",
         "tests/multi-camera-core.test.cjs",
         "tests/spatial-scale-core.test.cjs",
+        "tests/selection-ux.test.cjs",
+        "tests/alignment-ux.test.cjs",
+        "tests/history-safety-contract.test.cjs",
+        "tests/scene-cache-ux-contract.test.cjs",
+        "tests/dynamic-prop-cache-ux-contract.test.cjs",
+        "tests/stage-shell-cache-ux-contract.test.cjs",
+        "tests/camera-path-cache-ux-contract.test.cjs",
+        "tests/helper-raycast-ux-contract.test.cjs",
+        "tests/preview-cache-ux-contract.test.cjs",
+        "tests/performance-ux-contract.test.cjs",
+        "tests/large-scene-performance.test.cjs",
+        "tests/spawn-layout-contract.test.cjs",
+        "tests/desktop-ux-manifest.test.cjs",
+        "tests/mcp-desktop-runtime-contract.test.cjs",
+        "tests/mcp-first-product-boundary.test.cjs",
         "tests/dom-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
@@ -81,6 +115,8 @@ def main() -> None:
     run("스토리보드 코어", [node, "--test", "tests/storyboard-core.test.cjs"])
     run("프로젝트·보안·MP4 서버", [sys.executable, "-m", "unittest", "tests.test_server_security"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
+    run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
+    run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:

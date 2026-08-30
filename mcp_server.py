@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import contextvars
 import os
 import sqlite3
 import uuid
@@ -50,6 +51,10 @@ MCP_POSE_PRESETS = {
 }
 MCP_PATH_MODES = {"straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"}
 MCP_TRANSITIONS = {"smooth", "linear", "hold", "cut"}
+
+# During an atomic previs plan, existing command handlers reuse the outer
+# transaction's in-memory project instead of opening/committing nested DB writes.
+_ATOMIC_MUTATION_CONTEXT = contextvars.ContextVar("frisframe_atomic_mutation", default=None)
 
 # Helper function to find the database path
 def get_db_path():
@@ -167,12 +172,17 @@ def archive_project_version(cursor, row):
     )
 
 
-def save_mutated_document(cursor, row, document, expected_revision):
+def ensure_expected_revision(row, expected_revision):
     current_revision = int(row["revision"] or 1)
     if current_revision != expected_revision:
         raise ValueError(
             f"revision_conflict: 현재 revision은 {current_revision}입니다. 프로젝트를 다시 불러와 주세요."
         )
+    return current_revision
+
+
+def save_mutated_document(cursor, row, document, expected_revision):
+    current_revision = ensure_expected_revision(row, expected_revision)
     project_obj = validate_managed_document(document)
     now_str = utc_now()
     project_obj["updatedAt"] = now_str
@@ -204,11 +214,32 @@ def save_mutated_document(cursor, row, document, expected_revision):
 def mutate_project(project_id, revision, mutation):
     project_id = project_id_or_error(project_id)
     expected_revision = expected_revision_or_error(revision)
+
+    atomic_context = _ATOMIC_MUTATION_CONTEXT.get()
+    if atomic_context is not None:
+        if project_id != atomic_context["project_id"]:
+            raise ValueError("atomic mutation은 하나의 프로젝트에서만 실행할 수 있습니다.")
+        if expected_revision != atomic_context["revision"]:
+            raise ValueError(
+                f"revision_conflict: atomic plan revision은 {atomic_context['revision']}입니다."
+            )
+        detail = mutation(atomic_context["project"])
+        return json.dumps({
+            "project_id": project_id,
+            "revision": expected_revision,
+            "updated_at": atomic_context["updated_at"],
+            "message": detail,
+        }, ensure_ascii=False)
+
     conn = connect_db()
     try:
         cursor = conn.cursor()
         cursor.execute("BEGIN IMMEDIATE")
         row = load_project_row(cursor, project_id)
+        # Reject stale clients before running mutation-specific validation. This
+        # guarantees the caller sees revision_conflict instead of a misleading
+        # "target/key not found" error caused by a newer UI/MCP edit.
+        ensure_expected_revision(row, expected_revision)
         document = project_document(json.loads(row["content"]))
         detail = mutation(document["project"])
         next_revision, updated_at = save_mutated_document(cursor, row, document, expected_revision)
@@ -224,6 +255,26 @@ def mutate_project(project_id, revision, mutation):
         raise
     finally:
         conn.close()
+
+
+def mutate_project_atomic(project_id, revision, mutation):
+    """Run several existing MCP mutations as one DB transaction/revision."""
+    project_id = project_id_or_error(project_id)
+    expected_revision = expected_revision_or_error(revision)
+
+    def atomic_mutation(project_obj):
+        token = _ATOMIC_MUTATION_CONTEXT.set({
+            "project_id": project_id,
+            "revision": expected_revision,
+            "project": project_obj,
+            "updated_at": utc_now(),
+        })
+        try:
+            return mutation(project_obj)
+        finally:
+            _ATOMIC_MUTATION_CONTEXT.reset(token)
+
+    return mutate_project(project_id, expected_revision, atomic_mutation)
 
 # JSON Helper to output logs to stderr safely
 def log_debug(message):

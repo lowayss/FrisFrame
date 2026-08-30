@@ -14,6 +14,7 @@ const runtimeConfigs = {
     bundledPython: ["python", "bin", "python3"],
     venvPython: ["bin", "python"],
     serverExecutable: "frisframe-server",
+    mcpExecutable: "frisframe-mcp",
     targetArch: "arm64",
   },
   "win32-x64": {
@@ -22,6 +23,7 @@ const runtimeConfigs = {
     bundledPython: ["python", "python.exe"],
     venvPython: ["Scripts", "python.exe"],
     serverExecutable: "frisframe-server.exe",
+    mcpExecutable: "frisframe-mcp.exe",
     targetArch: null,
   },
 };
@@ -95,9 +97,34 @@ if (!fs.existsSync(venvPython)) run(python, ["-m", "venv", venv]);
 const probe = spawnSync(venvPython, ["-m", "PyInstaller", "--version"], { cwd: root, stdio: "ignore", windowsHide: true });
 if (probe.status !== 0) run(venvPython, ["-m", "pip", "install", "--disable-pip-version-check", "pyinstaller==6.21.0"]);
 
-fs.mkdirSync(path.join(root, "dist-runtime"), { recursive: true });
-fs.rmSync(path.join(root, "dist-runtime", "frisframe-server"), { recursive: true, force: true });
-const dataFiles = [
+const distRuntime = path.join(root, "dist-runtime");
+fs.mkdirSync(distRuntime, { recursive: true });
+const addDataSeparator = process.platform === "win32" ? ";" : ":";
+
+function buildTarget({ name, entrypoint, dataFiles = [], dataDirectories = [] }) {
+  fs.rmSync(path.join(distRuntime, name), { recursive: true, force: true });
+  const args = [
+    "-m", "PyInstaller",
+    "--noconfirm",
+    "--clean",
+    "--onedir",
+    "--name", name,
+    "--distpath", distRuntime,
+    "--workpath", path.join(root, "build", `pyinstaller-work-${name}-${platformKey}`),
+    "--specpath", path.join(root, "build", `pyinstaller-spec-${name}-${platformKey}`),
+  ];
+  if (runtimeConfig.targetArch) args.push("--target-arch", runtimeConfig.targetArch);
+  for (const filename of dataFiles) {
+    args.push("--add-data", `${path.join(root, filename)}${addDataSeparator}.`);
+  }
+  for (const [source, destination] of dataDirectories) {
+    args.push("--add-data", `${path.join(root, source)}${addDataSeparator}${destination}`);
+  }
+  args.push(path.join(root, entrypoint));
+  run(venvPython, args);
+}
+
+const serverDataFiles = [
   "index.html",
   "styles.css",
   "app.js",
@@ -116,23 +143,24 @@ const dataFiles = [
   "spatial-scale-core.js",
   "license_activation.html",
 ];
-const args = [
-  "-m", "PyInstaller",
-  "--noconfirm",
-  "--clean",
-  "--onedir",
-  "--name", "frisframe-server",
-  "--distpath", path.join(root, "dist-runtime"),
-  "--workpath", path.join(root, "build", `pyinstaller-work-${platformKey}`),
-  "--specpath", path.join(root, "build", `pyinstaller-spec-${platformKey}`),
-];
-if (runtimeConfig.targetArch) args.push("--target-arch", runtimeConfig.targetArch);
-const addDataSeparator = process.platform === "win32" ? ";" : ":";
-for (const filename of dataFiles) args.push("--add-data", `${path.join(root, filename)}${addDataSeparator}.`);
-args.push("--add-data", `${path.join(root, "vendor")}${addDataSeparator}vendor`, path.join(root, "server.py"));
-run(venvPython, args);
 
-const serverExecutable = path.join(root, "dist-runtime", "frisframe-server", runtimeConfig.serverExecutable);
-if (!fs.existsSync(serverExecutable)) throw new Error(`PyInstaller 서버 실행 파일이 없습니다: ${serverExecutable}`);
-if (process.platform !== "win32") fs.chmodSync(serverExecutable, 0o755);
-console.log(`FrisFrame Python 런타임 생성: ${platformKey} · ${serverExecutable}`);
+buildTarget({
+  name: "frisframe-server",
+  entrypoint: "server.py",
+  dataFiles: serverDataFiles,
+  dataDirectories: [["vendor", "vendor"]],
+});
+
+buildTarget({
+  name: "frisframe-mcp",
+  entrypoint: "mcp_desktop_entry.py",
+  dataFiles: ["package.json"],
+});
+
+const serverExecutable = path.join(distRuntime, "frisframe-server", runtimeConfig.serverExecutable);
+const mcpExecutable = path.join(distRuntime, "frisframe-mcp", runtimeConfig.mcpExecutable);
+for (const executable of [serverExecutable, mcpExecutable]) {
+  if (!fs.existsSync(executable)) throw new Error(`PyInstaller 실행 파일이 없습니다: ${executable}`);
+  if (process.platform !== "win32") fs.chmodSync(executable, 0o755);
+}
+console.log(`FrisFrame Python 런타임 생성: ${platformKey} · server=${serverExecutable} · mcp=${mcpExecutable}`);
