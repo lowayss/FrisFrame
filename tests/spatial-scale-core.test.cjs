@@ -28,4 +28,71 @@ assert.ok(perspective.horizontalFovDeg > 39 && perspective.horizontalFovDeg < 40
 assert.ok(perspective.verticalFovDeg > 22 && perspective.verticalFovDeg < 23);
 assert.ok(perspective.normalizedFrameHeight > 0.4 && perspective.normalizedFrameHeight < 0.5);
 
-console.log("spatial-scale-core: metric actor, prop, fit, and perspective checks passed");
+const stage = spatial.stageWorldSize({ aspect: 16 / 9 });
+assert.equal(stage.width, 36);
+assert.equal(Number(stage.depth.toFixed(2)), 20.25);
+assert.deepEqual(
+  Object.fromEntries(Object.entries(spatial.stageNormalizedToWorld({ x: 0.75, y: 0.25 }, stage)).map(([key, value]) => [key, Number(value.toFixed(4))])),
+  { x: 9, z: -5.0625, y: 0 },
+);
+const normalized = spatial.worldToStageNormalized({ x: 9, z: -5.0625 }, stage);
+assert.equal(Number(normalized.x.toFixed(4)), 0.75);
+assert.equal(Number(normalized.y.toFixed(4)), 0.25);
+
+const anchorFraction = perspective.normalizedFrameHeight;
+const anchor = spatial.solveScaleAnchor({
+  id: "actor-a",
+  label: "actor height",
+  axis: "height",
+  physicalSizeM: 1.78,
+  frameFraction: anchorFraction,
+}, {
+  focalMm: 50,
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(anchor.inferredDistanceM - 10) < 1e-9, "scale anchor must recover camera distance from known focal length");
+
+const solvedFocal = spatial.calibratePerspective({
+  anchor: {
+    axis: "height",
+    physicalSizeM: 1.78,
+    frameFraction: anchorFraction,
+    distanceM: 10,
+  },
+  sensorWidthMm: 36,
+  aspect: 16 / 9,
+});
+assert.ok(Math.abs(solvedFocal.focalMm - 50) < 1e-9, "perspective calibration must recover focal length from known distance");
+
+const horizon = spatial.horizonFromTilt({ tiltDeg: 10, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 });
+const recoveredTilt = spatial.tiltFromHorizon({ horizonY: horizon, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 });
+assert.ok(Math.abs(recoveredTilt - 10) < 1e-9, "horizon calibration must round-trip camera tilt");
+
+const overlay = spatial.fitOverlayRect({
+  sourceWidth: 1920,
+  sourceHeight: 1080,
+  targetWidth: 1000,
+  targetHeight: 1000,
+  fit: "contain",
+});
+assert.ok(Math.abs(overlay.width - 1000) < 1e-9);
+assert.equal(Number(overlay.height.toFixed(2)), 562.5);
+assert.equal(Number(overlay.y.toFixed(2)), 218.75);
+const overlayPoint = spatial.normalizedToOverlayPoint({ x: 0.25, y: 0.75 }, overlay);
+const overlayNormalized = spatial.overlayPointToNormalized(overlayPoint, overlay);
+assert.equal(Number(overlayNormalized.x.toFixed(6)), 0.25);
+assert.equal(Number(overlayNormalized.y.toFixed(6)), 0.75);
+
+const contract = spatial.normalizeReferenceSpaceSpec({
+  source: { widthPx: 1920, heightPx: 1080, label: "reference" },
+  camera: { focalMm: 35, horizonY: 0.42 },
+  anchors: [{ id: "door", physicalSizeM: 2.1, frameFraction: 0.31 }],
+  overlay: { opacity: 0.4 },
+  sourceModel: "external-gpt",
+});
+assert.equal(contract.schema, "frisframe-reference-space");
+assert.equal(contract.anchors.length, 1);
+assert.equal(contract.overlay.opacity, 0.4);
+
+console.log("spatial-scale-core: metric, anchor, perspective, overlay, and stage-space checks passed");
