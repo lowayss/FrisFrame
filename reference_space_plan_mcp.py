@@ -9,6 +9,7 @@ import mcp_previs_server as base
 import mcp_server as core
 import reference_space_core as space
 import reference_space_mcp as reference
+import reference_space_consistency_mcp as consistency
 
 
 CAMERA_PLAN_SCHEMA = {
@@ -35,7 +36,7 @@ REFERENCE_SPACE_PLAN_TOOL = {
     "description": (
         "외부 GPT/Claude/Codex가 확정한 Scale Anchor/카메라 보정과 큰 공간 Mass Blocking을 "
         "하나의 FrisFrame scene revision으로 원자 적용합니다. FrisFrame은 이미지를 분석하지 않습니다. "
-        "카메라 키프레임 보호 규칙은 apply_reference_camera_calibration과 동일합니다."
+        "선택적으로 여러 Scale Anchor의 shared-focal 일관성을 적용 전에 검사할 수 있습니다."
     ),
     "inputSchema": {
         "type": "object",
@@ -48,6 +49,15 @@ REFERENCE_SPACE_PLAN_TOOL = {
                 "maxItems": 100,
                 "items": {"type": "object"},
             },
+            "consistency_anchors": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 32,
+                "items": consistency.ANCHOR_SCHEMA,
+            },
+            "consistency_tolerance_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+            "consistency_expected_focal_mm": {"type": "number", "exclusiveMinimum": 0},
+            "require_anchor_consistency": {"type": "boolean"},
             "allow_outside_stage": {"type": "boolean"},
             "validate_after_apply": {"type": "boolean"},
         },
@@ -182,18 +192,51 @@ def _camera_plan(blocking, camera_args):
     }
 
 
+def _consistency_preflight(args, blocking, camera_plan):
+    anchors = args.get("consistency_anchors") or []
+    if not anchors:
+        return None
+    if not isinstance(anchors, list):
+        raise ValueError("consistency_anchors는 배열이어야 합니다.")
+
+    defaults = reference._camera_defaults(blocking)
+    expected_focal = args.get("consistency_expected_focal_mm")
+    if expected_focal is None and camera_plan.get("summary"):
+        expected_focal = camera_plan["summary"]["calibration"].get("focal_mm")
+
+    result = space.evaluate_scale_anchor_consistency(
+        anchors,
+        sensor_width_mm=defaults.get("sensor_width_mm", space.DEFAULT_SENSOR_WIDTH_MM),
+        aspect=defaults.get("aspect", "16:9"),
+        tolerance_ratio=args.get("consistency_tolerance_ratio", 0.08),
+        expected_focal_mm=expected_focal,
+    )
+    if bool(args.get("require_anchor_consistency", True)) and not result["consistent"]:
+        issue_ids = ", ".join(str(issue.get("id") or issue.get("code")) for issue in result["issues"][:5])
+        raise ValueError(
+            "reference-anchor-inconsistent: 여러 Scale Anchor가 같은 카메라 focal을 지지하지 않습니다. "
+            f"적용 전 외부 분석의 크기/거리/화면 점유율을 다시 확인하세요. issues={issue_ids}"
+        )
+    return result
+
+
 def _apply_reference_space_plan(args):
     blocking = reference._blocking(args)
     camera_args = args.get("camera_calibration")
     masses = args.get("masses") or []
+    consistency_anchors = args.get("consistency_anchors") or []
     if camera_args is None and not masses:
         raise ValueError("camera_calibration 또는 masses 중 하나 이상이 필요합니다.")
     if camera_args is not None and not isinstance(camera_args, dict):
         raise ValueError("camera_calibration은 객체여야 합니다.")
     if not isinstance(masses, list):
         raise ValueError("masses는 배열이어야 합니다.")
+    if consistency_anchors and not isinstance(consistency_anchors, list):
+        raise ValueError("consistency_anchors는 배열이어야 합니다.")
 
     camera_plan = _camera_plan(blocking, camera_args)
+    consistency_result = _consistency_preflight(args, blocking, camera_plan)
+
     mass_plan = {
         "stage": None,
         "operations": [],
@@ -228,6 +271,7 @@ def _apply_reference_space_plan(args):
 
     result["reference_space_plan"] = {
         "camera": camera_plan["summary"],
+        "anchor_consistency": consistency_result,
         "masses": [anchor["id"] for anchor in mass_plan.get("anchors", [])],
         "stage": mass_plan.get("stage"),
         "issues": mass_plan.get("issues", []),
