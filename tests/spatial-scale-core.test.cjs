@@ -68,6 +68,10 @@ assert.ok(Math.abs(solvedFocal.focalMm - 50) < 1e-9, "perspective calibration mu
 const horizon = spatial.horizonFromTilt({ tiltDeg: 10, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 });
 const recoveredTilt = spatial.tiltFromHorizon({ horizonY: horizon, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 });
 assert.ok(Math.abs(recoveredTilt - 10) < 1e-9, "horizon calibration must round-trip camera tilt");
+assert.ok(spatial.horizonFromTilt({ tiltDeg: -10, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 }) < 0.5,
+  "negative FrisFrame tilt looks down and must move the horizon above frame center");
+assert.ok(spatial.tiltFromHorizon({ horizonY: 0.4, focalMm: 50, sensorWidthMm: 36, aspect: 16 / 9 }) < 0,
+  "a horizon above frame center must calibrate to negative FrisFrame tilt");
 
 const overlay = spatial.fitOverlayRect({
   sourceWidth: 1920,
