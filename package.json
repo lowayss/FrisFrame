@@ -17,9 +17,9 @@
     "desktop:dir": "npm run desktop:dir:mac",
     "desktop:build": "npm run desktop:build:mac",
     "desktop:dir:mac": "npm run desktop:prepare && electron-builder --mac dir --arm64",
-    "desktop:build:mac": "npm run desktop:prepare && electron-builder --mac dmg zip --arm64",
+    "desktop:build:mac": "npm run desktop:prepare && electron-builder --mac dmg zip --arm64 --publish never",
     "desktop:dir:win": "npm run desktop:prepare && electron-builder --win dir --x64",
-    "desktop:build:win": "npm run desktop:prepare && electron-builder --win nsis --x64",
+    "desktop:build:win": "npm run desktop:prepare && electron-builder --win nsis --x64 --publish never",
     "desktop:migrate-data": "node electron/scripts/migrate-local-data.cjs",
     "desktop:verify": "node electron/scripts/verify-package.cjs && node electron/scripts/smoke-package.cjs",
     "check": "python3 quality_check.py && node tests/electron-contract.test.cjs"
