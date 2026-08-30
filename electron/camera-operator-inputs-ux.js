@@ -28,6 +28,8 @@
   let lastGamepadButtons = [];
   let phoneSensorAnchor = null;
   let installed = false;
+  let phoneConfig = null;
+  let phoneStartPromise = null;
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, Number(value) || 0));
   const normalizeAngle = (value) => {
@@ -58,13 +60,21 @@
     };
   }
 
+  function focalRange() {
+    return {
+      minimum: Number.isFinite(Number(globalThis.CAMERA_FOCAL_MIN)) ? Number(globalThis.CAMERA_FOCAL_MIN) : 8,
+      maximum: Number.isFinite(Number(globalThis.CAMERA_FOCAL_MAX)) ? Number(globalThis.CAMERA_FOCAL_MAX) : 300,
+    };
+  }
+
   function applyPose(pose, targetState = state) {
+    const focal = focalRange();
     targetState.camera.x = Number(pose.x);
     targetState.camera.y = Number(pose.y);
     targetState.camera.height = clamp(pose.height, 0.4, 35);
     targetState.camera.panDeg = normalizeAngle(pose.panDeg);
     targetState.camera.tiltDeg = clamp(pose.tiltDeg, -89, 89);
-    targetState.camera.focal = clamp(pose.focal, 8, 300);
+    targetState.camera.focal = clamp(pose.focal, focal.minimum, focal.maximum);
     targetState.camera.trackingTargetId = "";
     if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(targetState.camera, targetState);
   }
@@ -86,6 +96,19 @@
   function moveCamera(axes, dt) {
     const op = operator();
     if (!op || op.mode !== "recording") return;
+    const sensorActive = selectedMode === "phone"
+      && phoneState.sensorActive
+      && Date.now() - phoneState.receivedAt < 350;
+    const axisMagnitude = Math.max(
+      Math.abs(Number(axes.moveX || 0)),
+      Math.abs(Number(axes.moveY || 0)),
+      Math.abs(Number(axes.lookX || 0)),
+      Math.abs(Number(axes.lookY || 0)),
+      Math.abs(Number(axes.height || 0)),
+      Math.abs(Number(axes.focal || 0)),
+    );
+    if (axisMagnitude < 0.0001 && !sensorActive) return;
+
     const precision = keyState.has("ControlLeft") || keyState.has("ControlRight") || keyState.has("MetaLeft") || keyState.has("MetaRight") ? 0.35 : 1;
     const boost = keyState.has("ShiftLeft") || keyState.has("ShiftRight") ? 1.8 : 1;
     const speed = boost * precision;
@@ -102,6 +125,7 @@
     const size = typeof stageWorldSize === "function" ? stageWorldSize(state) : { width: 10, depth: 10 };
     const minimum = Number.isFinite(Number(STAGE_COORD_MIN)) ? Number(STAGE_COORD_MIN) : -0.25;
     const maximum = Number.isFinite(Number(STAGE_COORD_MAX)) ? Number(STAGE_COORD_MAX) : 1.25;
+    const focalRangeValue = focalRange();
     const moveX = clamp(axes.moveX, -1, 1);
     const moveY = clamp(axes.moveY, -1, 1);
     const metersX = (rightX * moveX + forwardX * moveY) * travelSpeed * dt;
@@ -109,9 +133,13 @@
     state.camera.x = clamp(Number(state.camera.x || 0) + metersX / Math.max(0.01, Number(size.width || 10)), minimum, maximum);
     state.camera.y = clamp(Number(state.camera.y || 0) + metersY / Math.max(0.01, Number(size.depth || 10)), minimum, maximum);
     state.camera.height = clamp(Number(state.camera.height || 1.6) + clamp(axes.height, -1, 1) * heightSpeed * dt, 0.4, 35);
-    state.camera.focal = clamp(Number(state.camera.focal || 35) + clamp(axes.focal, -1, 1) * focalSpeed * dt, 8, 300);
+    state.camera.focal = clamp(
+      Number(state.camera.focal || 35) + clamp(axes.focal, -1, 1) * focalSpeed * dt,
+      focalRangeValue.minimum,
+      focalRangeValue.maximum,
+    );
 
-    if (selectedMode === "phone" && phoneState.sensorActive && Date.now() - phoneState.receivedAt < 350) {
+    if (sensorActive) {
       if (!phoneSensorAnchor) {
         phoneSensorAnchor = {
           panDeg: Number(state.camera.panDeg || 0),
@@ -165,6 +193,7 @@
     if (!op) return;
     const surface = document.querySelector(".frisframe-camera-operator-surface");
     if (!surface) return;
+    phoneSensorAnchor = null;
     const dispatch = () => {
       if (op.mode !== "armed") return;
       const rect = surface.getBoundingClientRect();
@@ -235,17 +264,77 @@
   let modeButtons = [];
   let statusLine = null;
   let phonePanel = null;
-  let phoneUrl = null;
+
+  function renderPhonePanel(message = "") {
+    if (!phonePanel) return;
+    if (message) {
+      phonePanel.innerHTML = `<div class="frisframe-phone-url">${message}</div>`;
+      return;
+    }
+    const firstUrl = Array.isArray(phoneConfig?.urls) ? phoneConfig.urls[0] : "";
+    if (!firstUrl) {
+      phonePanel.innerHTML = '<div class="frisframe-phone-url">LAN 주소를 찾지 못했습니다. 컴퓨터와 폰이 같은 Wi‑Fi인지 확인하세요.</div>';
+      return;
+    }
+    phonePanel.innerHTML = `<div>페어링 <span class="frisframe-phone-code">${String(phoneConfig.pairingCode || "")}</span></div><div class="frisframe-phone-url"></div><button type="button" class="text-btn" data-copy-phone-url>주소 복사</button>`;
+    const urlElement = phonePanel.querySelector(".frisframe-phone-url");
+    if (urlElement) urlElement.textContent = firstUrl;
+    phonePanel.querySelector("[data-copy-phone-url]")?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(firstUrl);
+        if (typeof notifyApp === "function") notifyApp("폰 Camera Operator 주소를 복사했습니다.");
+      } catch {
+        if (typeof notifyApp === "function") notifyApp("주소 복사 권한이 없어 화면의 주소를 직접 복사하세요.");
+      }
+    });
+  }
+
+  async function startPhoneBridge() {
+    if (phoneConfig) return phoneConfig;
+    if (phoneStartPromise) return phoneStartPromise;
+    const api = window.frisframePhoneRemote;
+    if (!api?.start) {
+      renderPhonePanel("이 빌드에는 Phone Camera Remote 브리지가 없습니다.");
+      return null;
+    }
+    renderPhonePanel("Phone Camera Remote 여는 중…");
+    phoneStartPromise = api.start()
+      .then((config) => {
+        phoneConfig = config || null;
+        renderPhonePanel();
+        return phoneConfig;
+      })
+      .catch((error) => {
+        phoneConfig = null;
+        renderPhonePanel(`Phone Camera Remote를 열지 못했습니다: ${String(error?.message || error)}`);
+        return null;
+      })
+      .finally(() => { phoneStartPromise = null; });
+    return phoneStartPromise;
+  }
+
+  async function stopPhoneBridge() {
+    phoneConfig = null;
+    phoneStartPromise = null;
+    phoneSensorAnchor = null;
+    if (window.frisframePhoneRemote?.stop) {
+      try { await window.frisframePhoneRemote.stop(); } catch { /* app may already be closing */ }
+    }
+  }
 
   function setMode(mode) {
     if (!MODES.includes(mode)) return;
+    const previousMode = selectedMode;
     selectedMode = mode;
     localStorage.setItem(STORAGE_KEY, mode);
+    keyState.clear();
     phoneSensorAnchor = null;
     modeButtons.forEach((button) => button.classList.toggle("is-active", button.dataset.mode === selectedMode));
     if (phonePanel) phonePanel.hidden = selectedMode !== "phone";
     const cameraFrame = document.getElementById("cameraFrame");
     cameraFrame?.classList.toggle("frisframe-camera-operator-nonmouse", selectedMode !== "keyboard");
+    if (selectedMode === "phone") startPhoneBridge();
+    else if (previousMode === "phone" || phoneConfig || phoneStartPromise) stopPhoneBridge();
     updateStatus(firstGamepad());
   }
 
@@ -284,7 +373,7 @@
       .frisframe-phone-pairing[hidden] { display:none !important; }
       .frisframe-phone-url { user-select:text; overflow-wrap:anywhere; color:#c7d0d9; font-size:8px; line-height:1.35; }
       .frisframe-phone-code { color:#ffbe76; font-weight:900; letter-spacing:.08em; }
-      #cameraFrame.frisframe-camera-operator-nonmouse .frisframe-camera-operator-surface { pointer-events:none !important; cursor:default; }
+      #cameraFrame.frisframe-camera-operator-nonmouse { pointer-events:none !important; }
     `;
     document.head.append(style);
 
@@ -300,21 +389,7 @@
     phonePanel = document.createElement("div");
     phonePanel.className = "frisframe-phone-pairing";
     phonePanel.hidden = true;
-    const config = window.__FRISFRAME_PHONE_REMOTE__ || null;
-    const firstUrl = Array.isArray(config?.urls) ? config.urls[0] : "";
-    phonePanel.innerHTML = firstUrl
-      ? `<div>페어링 <span class="frisframe-phone-code">${String(config.pairingCode || "")}</span></div><div class="frisframe-phone-url"></div><button type="button" class="text-btn" data-copy-phone-url>주소 복사</button>`
-      : `<div class="frisframe-phone-url">LAN 주소를 찾지 못했습니다. 컴퓨터와 폰이 같은 Wi‑Fi인지 확인하세요.</div>`;
-    phoneUrl = phonePanel.querySelector(".frisframe-phone-url");
-    if (phoneUrl && firstUrl) phoneUrl.textContent = firstUrl;
-    phonePanel.querySelector("[data-copy-phone-url]")?.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(firstUrl);
-        if (typeof notifyApp === "function") notifyApp("폰 Camera Operator 주소를 복사했습니다.");
-      } catch {
-        if (typeof notifyApp === "function") notifyApp("주소 복사 권한이 없어 화면의 주소를 직접 복사하세요.");
-      }
-    });
+    renderPhonePanel("Phone Camera Remote 대기");
     head.insertAdjacentElement("afterend", selector);
     selector.insertAdjacentElement("afterend", statusLine);
     statusLine.insertAdjacentElement("afterend", phonePanel);
@@ -353,6 +428,9 @@
     else if (detail.command === "zero") phoneSensorAnchor = null;
     updateStatus(firstGamepad());
   });
+  window.addEventListener("beforeunload", () => {
+    if (selectedMode === "phone" || phoneConfig) window.frisframePhoneRemote?.stop?.();
+  });
 
   function installWhenReady(attempt = 0) {
     if (installUi()) {
@@ -363,6 +441,7 @@
         setMode,
         get gamepadConnected() { return Boolean(firstGamepad()); },
         get phoneConnected() { return Date.now() - phoneState.receivedAt < 900; },
+        get phoneRemoteOpen() { return Boolean(phoneConfig); },
         multiInput: true,
       };
       return;
