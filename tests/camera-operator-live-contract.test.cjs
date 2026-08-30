@@ -5,7 +5,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const controller = fs.readFileSync(path.join(root, "electron", "camera-operator-live-ux.js"), "utf8");
+const controllerPath = path.join(root, "electron", "camera-operator-live-ux.js");
+const controller = fs.readFileSync(controllerPath, "utf8");
+const splineCore = require(controllerPath);
 const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
@@ -29,8 +31,10 @@ assert.match(controller, /threeCanvas\?\.addEventListener\("pointerdown", beginW
 assert.match(controller, /recordInput !== "preview"/, "world camera recording must not reinterpret 3D rig movement as pan/tilt preview drag");
 assert.match(controller, /const stabilizationStrength = Math\.max\(cleanupStrength, 0\.16\)/, "mouse-driven takes must have a baseline stabilization pass");
 assert.match(controller, /core\.resampleSamples\(smoothed, 1 \/ 15\)/, "mouse-driven takes must use a stable sample clock before key reduction");
-assert.match(controller, /maxGap: 0\.28 \+ cleanupStrength \* 0\.22/, "camera take key reduction must keep motion segments temporally dense enough for smooth playback");
+assert.match(controller, /maxGap: 0\.42 \+ cleanupStrength \* 0\.18/, "camera take key reduction must leave enough time between operator spline keys");
 assert.match(controller, /keyframe\.operatorContinuity = true;/, "recorded camera keys must opt into continuous pose interpolation");
+assert.match(controller, /interpolateCameraOperatorPose = interpolateOperatorVectorPose;/, "Camera Operator must replace scalar PCHIP playback with its vector spline policy");
+assert.match(controller, /vectorSpline: true/, "runtime must expose that vector spline playback is active");
 const liveRenderFrame = controller.match(/const renderLiveFrame = \(time\) => \{[\s\S]*?\n  \};/)?.[0] || "";
 assert.match(liveRenderFrame, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
 assert.doesNotMatch(liveRenderFrame, /renderThreeView\(renderState, true\)/, "the live frame must not render the 3D scene twice");
@@ -45,9 +49,60 @@ assert.doesNotMatch(
 assert.match(controller, /else finishOperatorTake\(\);/, "the Camera Operator button must explicitly stop and commit an active take");
 assert.match(controller, /liveTimeline: true/, "runtime must expose that the live timeline controller is active");
 
+assert.equal(typeof splineCore.interpolatePose, "function", "vector spline core must expose camera pose interpolation for numeric regression tests");
+const pose = (x, y, panDeg = 0) => ({ x, y, height: 1.6, panDeg, tiltDeg: 0, focal: 35 });
+const p0 = pose(0.70, 0.15, 170);
+const p1 = pose(0.82, 0.38, 176);
+const p2 = pose(0.86, 0.68, 183);
+const p3 = pose(0.84, 0.94, 190);
+const p4 = pose(0.76, 1.12, 197);
+const leftContinuity = {
+  previous: p0,
+  next: p3,
+  previousTime: 0,
+  startTime: 1,
+  endTime: 2,
+  nextTime: 3,
+};
+const rightContinuity = {
+  previous: p1,
+  next: p4,
+  previousTime: 1,
+  startTime: 2,
+  endTime: 3,
+  nextTime: 4,
+};
+const epsilon = 0.001;
+const leftNear = splineCore.interpolatePose(p1, p2, 1 - epsilon, leftContinuity);
+const rightNear = splineCore.interpolatePose(p2, p3, epsilon, rightContinuity);
+const leftVelocity = {
+  x: (p2.x - leftNear.x) / epsilon,
+  y: (p2.y - leftNear.y) / epsilon,
+};
+const rightVelocity = {
+  x: (rightNear.x - p2.x) / epsilon,
+  y: (rightNear.y - p2.y) / epsilon,
+};
+assert.ok(Math.hypot(leftVelocity.x, leftVelocity.y) > 0.1,
+  "a normal curved operator path must not brake to zero merely because one planar axis changes sign");
+assert.ok(Math.abs(leftVelocity.x - rightVelocity.x) < 0.01,
+  `operator x velocity must stay continuous across a key: ${leftVelocity.x} vs ${rightVelocity.x}`);
+assert.ok(Math.abs(leftVelocity.y - rightVelocity.y) < 0.01,
+  `operator y velocity must stay continuous across a key: ${leftVelocity.y} vs ${rightVelocity.y}`);
+
+const stopped = splineCore.vectorJoinTangent(
+  pose(0.2, 0.2),
+  pose(0.4, 0.4),
+  pose(0.4, 0.4),
+  0,
+  1,
+  2,
+);
+assert.deepEqual(stopped, { x: 0, y: 0 }, "an intentional operator hold must still be allowed to stop the camera");
+
 const injection = main.indexOf('"camera-operator-live-ux.js"');
 const interaction = main.indexOf('"interaction-ux.js"');
 assert.ok(interaction >= 0 && injection > interaction, "live Camera Operator controller must inject after interaction-ux.js");
 assert.ok(pkg.build.files.includes("electron/camera-operator-live-ux.js"), "desktop package must include the live Camera Operator controller");
 
-console.log("Camera Operator live timeline contract passed");
+console.log("Camera Operator live timeline/vector spline contract passed");
