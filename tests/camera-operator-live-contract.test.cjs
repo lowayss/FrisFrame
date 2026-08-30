@@ -35,6 +35,13 @@ assert.match(controller, /maxGap: 0\.42 \+ cleanupStrength \* 0\.18/, "camera ta
 assert.match(controller, /keyframe\.operatorContinuity = true;/, "recorded camera keys must opt into continuous pose interpolation");
 assert.match(controller, /interpolateCameraOperatorPose = interpolateOperatorVectorPose;/, "Camera Operator must replace scalar PCHIP playback with its vector spline policy");
 assert.match(controller, /vectorSpline: true/, "runtime must expose that vector spline playback is active");
+assert.doesNotMatch(controller, /Camera Operator는 트래킹을 해제한 자유 카메라에서 사용하세요/, "Camera Operator must allow a tracked camera take");
+assert.match(controller, /트래킹 방향 유지/, "tracked Camera Operator takes must communicate the direction lock");
+assert.match(controller, /maintainCameraTracking/, "tracked Camera Operator poses must preserve target orientation");
+assert.match(controller, /dollyMeters/, "tracked mouse drags must move camera distance instead of changing pan\/tilt");
+assert.match(controller, /firstKey\.pose = \{ \.\.\.firstKey\.pose, trackingTargetId:/, "a tracked take must persist its target on the first camera key");
+assert.match(controller, /trackingFrame = interpolateStateAtTime\(Number\(time\)\)/, "tracked takes must evaluate animated target positions at the live playhead");
+assert.match(controller, /maintainTracking: maintainCameraTracking/, "input devices must share the tracking-aware camera operator runtime");
 const liveRenderFrame = controller.match(/const renderLiveFrame = \(time\) => \{[\s\S]*?\n  \};/)?.[0] || "";
 assert.match(liveRenderFrame, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
 assert.doesNotMatch(liveRenderFrame, /renderThreeView\(renderState, true\)/, "the live frame must not render the 3D scene twice");

@@ -591,6 +591,7 @@
     const cleanup = panel.querySelector("#cameraOperatorCleanup");
     const cleanupValue = panel.querySelector("#cameraOperatorCleanupValue");
     const monitorHud = surface.querySelector("#cameraOperatorMonitorHud");
+    const operatorHelp = panel.querySelector(".frisframe-camera-operator-help");
     const cleanupStorageKey = "frisframe.cameraOperator.jitterRemoval";
     const savedCleanup = Number(localStorage.getItem(cleanupStorageKey));
     if (Number.isFinite(savedCleanup)) cleanup.value = String(operatorClamp(savedCleanup, 0, 40));
@@ -617,6 +618,14 @@
       focal: Number(state.camera.focal || 35),
     });
 
+    const maintainCameraTracking = (targetState = state) => {
+      if (targetState?.camera?.trackingTargetId && typeof applyCameraTracking === "function") {
+        applyCameraTracking(targetState);
+      } else if (typeof syncCameraDerivedAim === "function" && targetState?.camera) {
+        syncCameraDerivedAim(targetState.camera, targetState);
+      }
+    };
+
     const applyCameraPose = (pose) => {
       state.camera.x = Number(pose.x);
       state.camera.y = Number(pose.y);
@@ -624,7 +633,7 @@
       state.camera.panDeg = normalizeOperatorAngle(pose.panDeg);
       state.camera.tiltDeg = operatorClamp(pose.tiltDeg, -90, 90);
       state.camera.focal = Number(pose.focal || state.camera.focal || 35);
-      if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+      maintainCameraTracking(state);
     };
 
     const operatorTime = () => Math.min(
@@ -646,6 +655,11 @@
       surface.classList.toggle("is-recording", mode === "recording");
       cameraFrame.classList.toggle("frisframe-camera-operator-monitor", mode !== "idle");
       cameraFrame.classList.toggle("frisframe-camera-operator-recording", mode === "recording");
+      if (operatorHelp) {
+        operatorHelp.textContent = state.camera.trackingTargetId
+          ? "트래킹 방향 유지 · 드래그 좌우 Truck · 상하 Dolly(거리) · Shift+드래그 Pedestal · 휠 Dolly · Alt/Option+휠 높이 · Ctrl/⌘ 미세 조작"
+          : "드래그 Pan/Tilt · Shift+드래그 Truck/Pedestal · 휠 Dolly · Alt/Option+휠 높이 · Ctrl/⌘ 미세 조작";
+      }
       if (mode === "idle") {
         button.textContent = "● 직접 촬영";
         status.textContent = "첫 카메라 키를 찍고 시작";
@@ -708,10 +722,6 @@
     const armOperator = () => {
       if (mode !== "idle") return;
       if (typeof state === "undefined" || !state?.camera || !state?.motion) return;
-      if (state.camera.trackingTargetId) {
-        notifyApp("Camera Operator는 트래킹을 해제한 자유 카메라에서 사용하세요.");
-        return;
-      }
       if (["position", "orientation", "height"].some((field) => typeof cameraFieldLocked === "function" && cameraFieldLocked(field))) {
         notifyApp("Camera Operator를 쓰려면 카메라 위치·방향·높이 잠금을 해제하세요.");
         return;
@@ -746,6 +756,10 @@
       if (typeof setActiveSource === "function") setActiveSource("camera");
       if (typeof selectSourceOnStage === "function") selectSourceOnStage("camera");
       state.motion.playhead = startTime;
+      if (state.camera.trackingTargetId && firstKey?.pose) {
+        firstKey.pose = { ...firstKey.pose, trackingTargetId: state.camera.trackingTargetId };
+        maintainCameraTracking(state);
+      }
       mode = "armed";
       document.documentElement.classList.add("frisframe-camera-operator-active");
       updateOperatorUi();
@@ -774,6 +788,7 @@
         const time = operatorTime();
         if (typeof ensureDurationCovers === "function") ensureDurationCovers(time);
         state.motion.playhead = time;
+        if (state.camera.trackingTargetId) maintainCameraTracking(state);
         if (time - lastSampleTime >= 1 / 30 || time >= (Number(MAX_TIMELINE_DURATION) || 60)) {
           sampleCurrentPose(time);
         }
@@ -803,7 +818,29 @@
       lastClientY = event.clientY;
       const precision = event.ctrlKey || event.metaKey ? 0.35 : 1;
 
-      if (event.shiftKey) {
+      if (state.camera.trackingTargetId && !event.shiftKey) {
+        const direction = typeof cameraDirection === "function" ? cameraDirection(state.camera) : { x: 1, z: 0 };
+        const horizontal = Math.max(0.0001, Math.hypot(Number(direction.x || 0), Number(direction.z || 0)));
+        const forwardX = Number(direction.x || 0) / horizontal;
+        const forwardY = Number(direction.z || 0) / horizontal;
+        const rightX = -forwardY;
+        const rightY = forwardX;
+        const size = typeof stageWorldSize === "function" ? stageWorldSize(state) : { width: 10, depth: 10 };
+        const frameWidth = Math.max(240, cameraFrame.getBoundingClientRect().width || 480);
+        const metersPerPixel = Math.max(0.001, Math.min(Number(size.width || 10), Number(size.depth || 10)) / frameWidth * 0.32) * precision;
+        const truckMeters = dx * metersPerPixel;
+        const dollyMeters = -dy * metersPerPixel * 1.4;
+        state.camera.x = operatorClamp(
+          Number(state.camera.x || 0) + (rightX * truckMeters + forwardX * dollyMeters) / Math.max(0.01, Number(size.width || 10)),
+          Number.isFinite(Number(STAGE_COORD_MIN)) ? Number(STAGE_COORD_MIN) : -0.25,
+          Number.isFinite(Number(STAGE_COORD_MAX)) ? Number(STAGE_COORD_MAX) : 1.25,
+        );
+        state.camera.y = operatorClamp(
+          Number(state.camera.y || 0) + (rightY * truckMeters + forwardY * dollyMeters) / Math.max(0.01, Number(size.depth || 10)),
+          Number.isFinite(Number(STAGE_COORD_MIN)) ? Number(STAGE_COORD_MIN) : -0.25,
+          Number.isFinite(Number(STAGE_COORD_MAX)) ? Number(STAGE_COORD_MAX) : 1.25,
+        );
+      } else if (event.shiftKey) {
         const direction = typeof cameraDirection === "function" ? cameraDirection(state.camera) : { x: 1, z: 0 };
         const horizontal = Math.max(0.0001, Math.hypot(Number(direction.x || 0), Number(direction.z || 0)));
         const rightX = -Number(direction.z || 0) / horizontal;
@@ -826,7 +863,7 @@
         state.camera.panDeg = normalizeOperatorAngle(Number(state.camera.panDeg || 0) + dx * 0.12 * precision);
         state.camera.tiltDeg = operatorClamp(Number(state.camera.tiltDeg || 0) - dy * 0.10 * precision, -89, 89);
       }
-      if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+      maintainCameraTracking(state);
       dirty = true;
     };
 
@@ -853,7 +890,7 @@
           Number.isFinite(Number(STAGE_COORD_MAX)) ? Number(STAGE_COORD_MAX) : 1.25,
         );
       }
-      if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+      maintainCameraTracking(state);
       dirty = true;
     };
 

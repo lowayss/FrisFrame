@@ -53,6 +53,7 @@ STATIC_FILES = {
     "/spatial-scale-core.js",
     "/vendor/three.min.js",
     "/vendor/lucide.min.js",
+    "/vendor/qrcode-generator.js",
 }
 
 SUPPORTED_PROJECT_SCHEMA_VERSION = 11

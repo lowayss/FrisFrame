@@ -31,7 +31,7 @@ function privateIpv4Addresses() {
 }
 
 function sanitizeInput(payload = {}) {
-  const command = ["", "toggle-record", "stop", "cancel", "zero"].includes(String(payload.command || ""))
+  const command = ["", "toggle-record", "stop", "cancel"].includes(String(payload.command || ""))
     ? String(payload.command || "")
     : "";
   return {
@@ -43,9 +43,6 @@ function sanitizeInput(payload = {}) {
     lookY: clamp(payload.lookY, -1, 1),
     height: clamp(payload.height, -1, 1),
     focal: clamp(payload.focal, -1, 1),
-    sensorActive: payload.sensorActive === true,
-    sensorYaw: clamp(payload.sensorYaw, -720, 720),
-    sensorPitch: clamp(payload.sensorPitch, -180, 180),
     axisSwap: payload.axisSwap === true,
     command,
   };
@@ -65,9 +62,9 @@ function controllerHtml(token) {
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;min-height:100vh;overscroll-behavior:none;background:radial-gradient(circle at 50% 10%,#18212a,#0b0f12 52%);touch-action:none}
 .app{min-height:100vh;display:grid;grid-template-rows:auto auto 1fr auto;gap:12px;padding:14px;max-width:820px;margin:auto}
 .top{display:flex;align-items:center;justify-content:space-between;gap:8px}.brand{font-weight:900;letter-spacing:.02em}.pill{padding:6px 9px;border:1px solid #2b3742;border-radius:999px;font-size:12px;color:#aeb8c2;background:#111820}.pill.ok{color:#a8f0bf;border-color:#315c3e}.pill.warn{color:#ffd18a;border-color:#614a28}
-.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}button{min-height:46px;border:1px solid #34404b;border-radius:10px;background:#161d24;color:#edf2f6;font-weight:850;font-size:14px}button:active,button.on{background:#27333e;border-color:#6f879c}.rec{border-color:#713a3a;color:#ffd3d3}.stop{border-color:#5e4c2e;color:#ffe1aa}
-.controls{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center}.padWrap{display:grid;gap:8px;place-items:center}.label{font-size:12px;color:#8f9aa5;font-weight:800}.pad{position:relative;width:min(42vw,260px);aspect-ratio:1;border:1px solid #34414c;border-radius:50%;background:radial-gradient(circle,#18222b 0 22%,#111820 23% 52%,#0e141a 53%);box-shadow:inset 0 0 28px #0008}.stick{position:absolute;width:34%;aspect-ratio:1;border-radius:50%;left:33%;top:33%;background:radial-gradient(circle at 35% 30%,#596775,#28333d 62%,#1a222a);border:1px solid #758391;box-shadow:0 8px 22px #0008;transform:translate(0,0)}
-.trim{display:grid;grid-template-columns:1fr 1fr;gap:8px}.trim button{min-height:40px;font-size:12px}.sensorInfo{min-height:42px;padding:9px 10px;border:1px solid #26313a;border-radius:9px;color:#8d99a4;background:#0f151b;font-size:11px;line-height:1.45}.sensorInfo strong{color:#d9e0e7}.footer{font-size:10px;color:#65717c;text-align:center;line-height:1.45}
+.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}button{min-height:46px;border:1px solid #34404b;border-radius:10px;background:#161d24;color:#edf2f6;font-weight:850;font-size:14px}button:active,button.on{background:#27333e;border-color:#6f879c}.rec{border-color:#713a3a;color:#ffd3d3}.stop{border-color:#5e4c2e;color:#ffe1aa}
+.shoulders{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shoulders button{min-height:42px}.l1{border-color:#455873;color:#c9ddff}.r1{border-color:#6d4e39;color:#ffd3ad}.controls{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center}.padWrap{display:grid;gap:8px;place-items:center}.label{font-size:12px;color:#8f9aa5;font-weight:800;text-align:center}.pad{position:relative;width:min(42vw,260px);aspect-ratio:1;border:1px solid #34414c;border-radius:50%;background:radial-gradient(circle,#18222b 0 22%,#111820 23% 52%,#0e141a 53%);box-shadow:inset 0 0 28px #0008}.stick{position:absolute;width:34%;aspect-ratio:1;border-radius:50%;left:33%;top:33%;background:radial-gradient(circle at 35% 30%,#596775,#28333d 62%,#1a222a);border:1px solid #758391;box-shadow:0 8px 22px #0008;transform:translate(0,0)}
+.trim{display:grid;grid-template-columns:1fr 1fr;gap:8px}.trim button{min-height:40px;font-size:12px}.footer{font-size:10px;color:#65717c;text-align:center;line-height:1.45}
 @media(max-width:560px){.app{padding:10px;gap:9px}.actions{grid-template-columns:1fr 1fr}.controls{gap:8px}.pad{width:min(44vw,230px)}}
 </style>
 </head>
@@ -75,36 +72,27 @@ function controllerHtml(token) {
 <div class="app">
   <div class="top"><div class="brand">FrisFrame · PHONE CAMERA</div><div id="status" class="pill">연결 중</div></div>
   <div class="actions">
-    <button id="sensorBtn">센서 시작</button><button id="zeroBtn">ZERO</button><button id="recBtn" class="rec">● REC</button><button id="stopBtn" class="stop">■ STOP</button>
+    <button id="recBtn" class="rec">● REC</button><button id="stopBtn" class="stop">■ STOP</button>
+  </div>
+  <div class="shoulders">
+    <button id="l1Btn" class="l1">L1 · 높이 낮춤</button><button id="r1Btn" class="r1">R1 · 높이 높임</button>
   </div>
   <div class="controls">
-    <div class="padWrap"><div class="label">이동 · Truck / Dolly</div><div id="movePad" class="pad"><div class="stick"></div></div></div>
-    <div class="padWrap"><div class="label">시선 · Pan / Tilt</div><div id="lookPad" class="pad"><div class="stick"></div></div></div>
+    <div class="padWrap"><div class="label">왼쪽 조이스틱 · 거리 / Dolly In · Out</div><div id="movePad" class="pad"><div class="stick"></div></div></div>
+    <div class="padWrap"><div class="label">오른쪽 조이스틱 · 앵글 / Pan · Tilt</div><div id="lookPad" class="pad"><div class="stick"></div></div></div>
   </div>
   <div>
     <div class="trim"><button id="downBtn">▼ 카메라 낮춤</button><button id="upBtn">▲ 카메라 높임</button><button id="wideBtn">− Wide</button><button id="teleBtn">＋ Tele</button></div>
-    <div id="sensorInfo" class="sensorInfo"></div>
-    <div class="footer">같은 Wi‑Fi에서 사용하세요. 센서 회전이 막힌 브라우저에서도 두 조이스틱으로 전체 운용이 가능합니다.</div>
+    <div class="footer">같은 Wi‑Fi에서 사용하세요. 게임패드처럼 왼쪽은 거리, 오른쪽은 앵글, L1/R1은 높이를 조절합니다.</div>
   </div>
 </div>
 <script>
 (() => {
   "use strict";
   const token = ${safeToken};
-  const state = { moveX:0,moveY:0,lookX:0,lookY:0,height:0,focal:0,sensorActive:false,sensorYaw:0,sensorPitch:0,axisSwap:false,command:"",seq:0 };
+  const state = { moveX:0,moveY:0,lookX:0,lookY:0,height:0,focal:0,axisSwap:false,command:"",seq:0 };
   const status = document.getElementById("status");
-  const sensorInfo = document.getElementById("sensorInfo");
-  let sensorPermission = false;
-  let sensorBase = null;
-  let lastSensor = null;
-
-  const shortest = (from,to) => { let d = Number(to||0)-Number(from||0); while(d>180)d-=360; while(d<-180)d+=360; return d; };
   const setStatus = (text, kind="") => { status.textContent=text; status.className="pill"+(kind?" "+kind:""); };
-  const explainSensor = (extra="") => {
-    const secure = window.isSecureContext;
-    sensorInfo.innerHTML = "<strong>폰 기울기:</strong> " + (sensorPermission ? "활성" : "대기") + " · " + (secure ? "보안 컨텍스트" : "HTTP LAN") + (extra ? "<br>" + extra : "");
-  };
-  explainSensor(!window.isSecureContext ? "모바일 브라우저 정책에 따라 자이로가 차단될 수 있습니다. 이 경우 오른쪽 조이스틱이 Pan/Tilt를 담당합니다." : "");
 
   function setupPad(root, onValue) {
     const stick = root.querySelector(".stick");
@@ -121,7 +109,7 @@ function controllerHtml(token) {
     const release=e=>{if(pointer!==null && (e.pointerId==null||e.pointerId===pointer)){pointer=null;stick.style.transform="translate(0,0)";onValue(0,0);}};
     root.addEventListener("pointerup",release);root.addEventListener("pointercancel",release);
   }
-  setupPad(document.getElementById("movePad"),(x,y)=>{state.moveX=x;state.moveY=-y;});
+  setupPad(document.getElementById("movePad"),(_x,y)=>{state.moveX=0;state.moveY=-y;});
   setupPad(document.getElementById("lookPad"),(x,y)=>{state.lookX=x;state.lookY=-y;});
 
   function holdButton(id, field, value) {
@@ -130,31 +118,8 @@ function controllerHtml(token) {
     const release=e=>{if(pointer!==null&&(e.pointerId==null||e.pointerId===pointer)){pointer=null;state[field]=0;}};
     button.addEventListener("pointerup",release);button.addEventListener("pointercancel",release);
   }
-  holdButton("upBtn","height",1); holdButton("downBtn","height",-1); holdButton("teleBtn","focal",1); holdButton("wideBtn","focal",-1);
+  holdButton("r1Btn","height",1); holdButton("l1Btn","height",-1); holdButton("teleBtn","focal",1); holdButton("wideBtn","focal",-1);
 
-  async function enableSensors() {
-    try {
-      if (!window.isSecureContext) throw new Error("브라우저가 HTTP LAN에서 방향 센서를 허용하지 않을 수 있습니다.");
-      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission !== "granted") throw new Error("방향 센서 권한이 거부되었습니다.");
-      }
-      window.addEventListener("deviceorientation", onOrientation, { passive:true });
-      sensorPermission = true; state.sensorActive = true; sensorBase = null;
-      document.getElementById("sensorBtn").classList.add("on"); explainSensor("ZERO를 누르면 현재 폰 각도를 카메라 기준점으로 다시 잡습니다.");
-    } catch (error) {
-      sensorPermission=false;state.sensorActive=false;explainSensor(String(error.message||error));
-    }
-  }
-  function onOrientation(event) {
-    if (!sensorPermission) return;
-    const yaw = Number(event.alpha); const pitch = Number(event.beta);
-    if (!Number.isFinite(yaw) || !Number.isFinite(pitch)) return;
-    lastSensor={yaw,pitch}; if(!sensorBase) sensorBase={yaw,pitch};
-    state.sensorYaw=shortest(sensorBase.yaw,yaw); state.sensorPitch=Math.max(-90,Math.min(90,pitch-sensorBase.pitch));
-  }
-  document.getElementById("sensorBtn").addEventListener("click",()=>{ if(sensorPermission){sensorPermission=false;state.sensorActive=false;document.getElementById("sensorBtn").classList.remove("on");explainSensor("오른쪽 조이스틱으로 Pan/Tilt를 조작합니다.");}else enableSensors(); });
-  document.getElementById("zeroBtn").addEventListener("click",()=>{if(lastSensor)sensorBase={...lastSensor};state.sensorYaw=0;state.sensorPitch=0;state.command="zero";});
   document.getElementById("recBtn").addEventListener("click",()=>{state.command="toggle-record";});
   document.getElementById("stopBtn").addEventListener("click",()=>{state.command="stop";});
 
@@ -307,7 +272,7 @@ function createPhoneRemoteBridge({ getWindow, writeLog = () => {} } = {}) {
         resolve();
       });
     });
-    writeLog(`phone remote ready port=${port}`);
+    writeLog(`phone remote ready protocol=http port=${port}`);
     return getConfig();
   }
 
@@ -328,6 +293,8 @@ function createPhoneRemoteBridge({ getWindow, writeLog = () => {} } = {}) {
     const addresses = privateIpv4Addresses();
     return {
       port,
+      protocol: "http",
+      secure: false,
       pairingCode: token.slice(0, 6).toUpperCase(),
       urls: addresses.map((address) => `http://${address}:${port}/?token=${encodeURIComponent(token)}`),
       hasLanAddress: addresses.length > 0,

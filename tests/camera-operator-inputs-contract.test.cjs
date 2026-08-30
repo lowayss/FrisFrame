@@ -9,6 +9,8 @@ const inputs = fs.readFileSync(path.join(root, "electron", "camera-operator-inpu
 const phoneRemote = fs.readFileSync(path.join(root, "electron", "phone-remote.cjs"), "utf8");
 const phonePreload = fs.readFileSync(path.join(root, "electron", "phone-remote-preload.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
+const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const server = fs.readFileSync(path.join(root, "server.py"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const { sanitizeInput } = require(path.join(root, "electron", "phone-remote.cjs"));
 
@@ -27,8 +29,15 @@ assert.match(inputs, /if \(pressed\(1\)/, "gamepad B must cancel an active take"
 assert.match(inputs, /KeyW/, "keyboard mode must support forward movement");
 assert.match(inputs, /ArrowRight/, "keyboard mode must support camera look controls");
 assert.match(inputs, /frisframe:phone-remote-input/, "phone remote input must be isolated behind a dedicated renderer event");
-assert.match(inputs, /phoneState\.sensorActive/, "phone mode must accept orientation-sensor camera rotation");
+assert.match(inputs, /moveX: phoneState\.moveX/, "phone mode must use the virtual-pad movement X axis");
+assert.match(inputs, /lookX: phoneState\.lookX/, "phone mode must use the virtual-pad pan X axis");
+assert.match(inputs, /왼쪽 조이스틱/, "phone mode must label the left virtual joystick");
+assert.match(inputs, /오른쪽 조이스틱/, "phone mode must label the right virtual joystick");
+assert.doesNotMatch(inputs, /sensorActive|sensorYaw|sensorPitch|sensorMoveX|sensorMoveY|phoneSensorAnchor|자이로|센서|ZERO|zero/, "phone mode must not retain sensor controls");
 assert.match(inputs, /window\.frisframePhoneRemote/, "phone mode must use the narrow desktop phone-remote bridge");
+assert.match(inputs, /window\.qrcode/, "phone pairing must use the bundled QR generator");
+assert.match(inputs, /createSvgTag/, "phone pairing must render the connection URL as an SVG QR code");
+assert.match(inputs, /frisframe-phone-qr/, "phone pairing must include a visible QR container");
 assert.match(inputs, /if \(selectedMode === "phone"\) startPhoneBridge\(\)/, "selecting Phone must open the LAN bridge on demand");
 assert.match(inputs, /else if \(previousMode === "phone" \|\| phoneConfig \|\| phoneStartPromise\) stopPhoneBridge\(\)/,
   "leaving Phone mode must close the LAN bridge");
@@ -37,12 +46,22 @@ assert.match(inputs, /multiInput:\s*true/, "multi-input runtime marker must iden
 
 assert.match(phoneRemote, /crypto\.randomBytes\(24\)/, "phone pairing must use a high-entropy random token");
 assert.match(phoneRemote, /crypto\.timingSafeEqual/, "phone pairing token comparison must be timing-safe");
+assert.match(phoneRemote, /http\.createServer\(handleRequest\)/, "phone virtual-pad bridge must use a simple HTTP listener");
+assert.match(phoneRemote, /http:\/\/\$\{address\}/, "phone pairing must advertise a simple HTTP URL");
+assert.doesNotMatch(phoneRemote, /https\.createServer|createLocalTlsCredentials|subjectAltName=|openssl|DeviceOrientationEvent|DeviceMotionEvent|deviceorientation|devicemotion|rotationRate|isSecureContext|자이로|센서|ZERO|zero/, "phone virtual-pad bridge must not retain sensor or TLS controls");
 assert.match(phoneRemote, /server\.listen\(0, "0\.0\.0\.0"/, "only the dedicated phone controller may listen on the LAN");
 assert.match(phoneRemote, /MAX_BODY_BYTES = 8192/, "phone input payload size must be bounded");
 assert.match(phoneRemote, /content-security-policy/, "phone controller page must ship its own restrictive CSP");
 assert.match(phoneRemote, /frame-ancestors 'none'/, "phone controller must not be frameable by another origin");
-assert.match(phoneRemote, /DeviceOrientationEvent\.requestPermission/, "phone controller must request sensor permission when the platform requires it");
-assert.match(phoneRemote, /window\.isSecureContext/, "phone controller must detect browser sensor security restrictions");
+assert.match(phoneRemote, /id="movePad"/, "phone controller must expose a left virtual movement pad");
+assert.match(phoneRemote, /id="lookPad"/, "phone controller must expose a right virtual look pad");
+assert.match(phoneRemote, /id="l1Btn"/, "phone controller must expose an L1 height button");
+assert.match(phoneRemote, /id="r1Btn"/, "phone controller must expose an R1 height button");
+assert.match(phoneRemote, /state\.moveX=0;state\.moveY=-y/, "left virtual joystick must map to dolly distance only");
+assert.match(phoneRemote, /holdButton\("r1Btn","height",1\)/, "R1 must raise the camera");
+assert.match(phoneRemote, /holdButton\("l1Btn","height",-1\)/, "L1 must lower the camera");
+assert.match(phoneRemote, /id="recBtn"/, "phone controller must expose a REC button");
+assert.match(phoneRemote, /id="stopBtn"/, "phone controller must expose a STOP button");
 assert.doesNotMatch(phoneRemote, /api\/projects|api\/export|api\/mcp/, "phone bridge must not expose project, export, or MCP endpoints");
 
 const sanitized = sanitizeInput({
@@ -52,8 +71,6 @@ const sanitized = sanitizeInput({
   lookY: -3,
   height: 9,
   focal: -9,
-  sensorYaw: 900,
-  sensorPitch: -900,
   command: "not-allowed",
 });
 assert.equal(sanitized.moveX, 1);
@@ -62,10 +79,9 @@ assert.equal(sanitized.lookX, 1);
 assert.equal(sanitized.lookY, -1);
 assert.equal(sanitized.height, 1);
 assert.equal(sanitized.focal, -1);
-assert.equal(sanitized.sensorYaw, 720);
-assert.equal(sanitized.sensorPitch, -180);
 assert.equal(sanitized.command, "");
 assert.equal(sanitizeInput({ command: "toggle-record" }).command, "toggle-record");
+assert.equal(sanitizeInput({ command: "zero" }).command, "");
 
 assert.match(phonePreload, /const \{ contextBridge, ipcRenderer \} = require\("electron"\)/,
   "phone bridge must remain compatible with Electron sandboxed preload restrictions");
@@ -97,5 +113,7 @@ assert.ok(pkg.build.files.includes("electron/phone-remote-preload.cjs"));
 assert.equal(pkg.build.files.includes("electron/preload-entry.cjs"), false);
 assert.ok(pkg.build.files.includes("electron/camera-operator-inputs-ux.js"));
 assert.ok(pkg.build.files.includes("electron/phone-remote.cjs"));
+assert.match(index, /vendor\/qrcode-generator\.js\?v=1\.4\.4/, "the QR generator must be loaded as a bundled offline vendor asset");
+assert.match(server, /"\/vendor\/qrcode-generator\.js"/, "the local server must allow the bundled QR asset");
 
 console.log("Camera Operator keyboard/gamepad/phone input contract passed");
