@@ -1,0 +1,54 @@
+name: Robust Windows MCP E2E process cleanup
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Run robust Windows MCP E2E process cleanup'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply robust cleanup
+        run: python tools/one_shot_windows_e2e_process_cleanup.py
+
+      - name: Verify MCP E2E on Windows
+        timeout-minutes: 2
+        run: python tests/mcp-previs-e2e.py
+
+      - name: Verify full project contracts
+        timeout-minutes: 5
+        run: python quality_check.py
+
+      - name: Verify patch whitespace
+        run: git diff --check
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/mcp-previs-e2e.py
+          git commit -m "Harden MCP E2E resource cleanup on Windows"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
