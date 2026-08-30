@@ -41,11 +41,15 @@
   let startTime = 0;
   let lastSampleTime = -Infinity;
   let dirty = true;
+  let mouseFallbackActive = false;
 
   const pointerToken = (event) => event?.pointerId == null ? "mouse" : event.pointerId;
   const isActivePointer = (event) => (
     pointerId != null && (pointerId === "mouse" || pointerToken(event) === pointerId)
   );
+  const isCameraFrameControlTarget = (target) => Boolean(target?.closest?.(
+    "#cameraFrameMoveHandle, #cameraFrameResizeHandle, #cameraFrameModeBtn",
+  ));
 
   const currentCameraPose = () => ({
     x: Number(state.camera.x || 0),
@@ -163,6 +167,7 @@
     if (animationFrame) cancelAnimationFrame(animationFrame);
     animationFrame = 0;
     releasePointerControl();
+    mouseFallbackActive = false;
     samples = [];
     startSnapshot = null;
     lastSampleTime = -Infinity;
@@ -326,6 +331,36 @@
     dirty = true;
   };
 
+  // Capture at the frame parent too. On some macOS/Electron input paths the
+  // native mouse sequence can miss the transparent preview overlay entirely.
+  const beginCameraFramePointerControl = (event) => {
+    if (isCameraFrameControlTarget(event.target)) return;
+    beginPointerControl(event);
+  };
+  const applyCameraFramePointerDrag = (event) => {
+    if (isCameraFrameControlTarget(event.target)) return;
+    applyOperatorDrag(event);
+  };
+  const releaseCameraFramePointerControl = (event) => {
+    if (isCameraFrameControlTarget(event.target)) return;
+    if (!isActivePointer(event)) return;
+    releasePointerControl(event);
+  };
+  const beginMouseFallback = (event) => {
+    if (event.button !== 0 || isCameraFrameControlTarget(event.target) || pointerId != null) return;
+    mouseFallbackActive = true;
+    beginPointerControl(event);
+  };
+  const applyMouseFallback = (event) => {
+    if (!mouseFallbackActive || pointerId !== "mouse" || mode !== "recording") return;
+    applyOperatorDrag(event);
+  };
+  const releaseMouseFallback = (event) => {
+    if (!mouseFallbackActive) return;
+    mouseFallbackActive = false;
+    if (pointerId === "mouse") releasePointerControl(event);
+  };
+
   const applyOperatorWheel = (event) => {
     if (mode !== "recording") return;
     event.preventDefault();
@@ -414,6 +449,13 @@
     else if (mode === "armed") cancelOperator();
     else finishOperatorTake();
   });
+  cameraFrame.addEventListener("pointerdown", beginCameraFramePointerControl, true);
+  cameraFrame.addEventListener("pointermove", applyCameraFramePointerDrag, true);
+  cameraFrame.addEventListener("pointerup", releaseCameraFramePointerControl, true);
+  cameraFrame.addEventListener("pointercancel", releaseCameraFramePointerControl, true);
+  cameraFrame.addEventListener("mousedown", beginMouseFallback, true);
+  window.addEventListener("mousemove", applyMouseFallback, true);
+  window.addEventListener("mouseup", releaseMouseFallback, true);
   surface.addEventListener("pointerdown", beginPointerControl);
   surface.addEventListener("pointermove", applyOperatorDrag);
   surface.addEventListener("pointerup", (event) => {

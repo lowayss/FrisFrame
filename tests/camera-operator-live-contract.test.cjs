@@ -21,6 +21,9 @@ assert.match(controller, /const pointerToken = \(event\) => event\?\.pointerId =
 assert.match(controller, /const isActivePointer = \(event\) => \([\s\S]*pointerId === "mouse"/, "live drag must accept the active mouse pointer consistently");
 assert.match(controller, /if \(event && !isActivePointer\(event\)\) return;/, "runtime reset must release the pointer even when no event is supplied");
 assert.match(controller, /const canStartAtRequestedTime = requestedTime < maxTimelineTime\(\) - 0\.0005;/, "recording at the timeline endpoint must fall back to the first camera key");
+assert.match(controller, /cameraFrame\.addEventListener\("pointerdown", beginCameraFramePointerControl, true\)/, "camera frame parent must catch preview pointerdown when the overlay misses it");
+assert.match(controller, /cameraFrame\.addEventListener\("mousedown", beginMouseFallback, true\)/, "native mouse down must start recording when pointer events are unavailable");
+assert.match(controller, /window\.addEventListener\("mousemove", applyMouseFallback, true\)/, "native mouse drag must continue outside the preview overlay");
 const liveRenderFrame = controller.match(/const renderLiveFrame = \(time\) => \{[\s\S]*?\n  \};/)?.[0] || "";
 assert.match(liveRenderFrame, /draw\(renderState\)/, "the live evaluated scene must be drawn during REC");
 assert.doesNotMatch(liveRenderFrame, /renderThreeView\(renderState, true\)/, "the live frame must not render the 3D scene twice");
