@@ -7,6 +7,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const inputs = fs.readFileSync(path.join(root, "electron", "camera-operator-inputs-ux.js"), "utf8");
 const phoneRemote = fs.readFileSync(path.join(root, "electron", "phone-remote.cjs"), "utf8");
+const preloadEntry = fs.readFileSync(path.join(root, "electron", "preload-entry.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const { sanitizeInput } = require(path.join(root, "electron", "phone-remote.cjs"));
@@ -27,6 +28,10 @@ assert.match(inputs, /KeyW/, "keyboard mode must support forward movement");
 assert.match(inputs, /ArrowRight/, "keyboard mode must support camera look controls");
 assert.match(inputs, /frisframe:phone-remote-input/, "phone remote input must be isolated behind a dedicated renderer event");
 assert.match(inputs, /phoneState\.sensorActive/, "phone mode must accept orientation-sensor camera rotation");
+assert.match(inputs, /window\.frisframePhoneRemote/, "phone mode must use the narrow desktop phone-remote bridge");
+assert.match(inputs, /if \(selectedMode === "phone"\) startPhoneBridge\(\)/, "selecting Phone must open the LAN bridge on demand");
+assert.match(inputs, /else if \(previousMode === "phone" \|\| phoneConfig \|\| phoneStartPromise\) stopPhoneBridge\(\)/,
+  "leaving Phone mode must close the LAN bridge");
 assert.match(inputs, /window\.FrisFrameCameraOperatorInputs/, "multi-input runtime must expose a smoke-testable marker");
 assert.match(inputs, /multiInput:\s*true/, "multi-input runtime marker must identify the new controller");
 
@@ -62,14 +67,26 @@ assert.equal(sanitized.sensorPitch, -180);
 assert.equal(sanitized.command, "");
 assert.equal(sanitizeInput({ command: "toggle-record" }).command, "toggle-record");
 
+assert.match(preloadEntry, /require\("\.\/preload\.cjs"\)/, "phone preload entry must preserve the existing hardened preload");
+assert.match(preloadEntry, /contextBridge\.exposeInMainWorld\("frisframePhoneRemote"/, "phone bridge must expose only a dedicated narrow API");
+assert.match(preloadEntry, /ipcRenderer\.invoke\("phone-remote:start"\)/);
+assert.match(preloadEntry, /ipcRenderer\.invoke\("phone-remote:stop"\)/);
+assert.match(preloadEntry, /ipcRenderer\.invoke\("phone-remote:status"\)/);
+
 assert.match(main, /createPhoneRemoteBridge/, "Electron main must own the isolated phone bridge");
-assert.match(main, /phoneRemoteBridge\.start\(\)/, "desktop startup must start the phone controller bridge");
+assert.match(main, /ipcMain\.handle\("phone-remote:start"/, "phone LAN listener must be opened only through an explicit renderer request");
+assert.match(main, /ipcMain\.handle\("phone-remote:stop"/, "phone LAN listener must have an explicit close path");
+assert.match(main, /rendererEventAllowed\(event\)/, "phone IPC must verify the calling renderer origin");
+assert.match(main, /preload:\s*path\.join\(__dirname, "preload-entry\.cjs"\)/, "desktop must use the composed hardened preload entry");
 assert.match(main, /phoneRemoteBridge\?\.stop\?\.\(\)/, "desktop quit must close the phone controller bridge");
-assert.match(main, /window\.__FRISFRAME_PHONE_REMOTE__=/, "renderer must receive only the pairing metadata it needs");
+const readyBlock = main.match(/app\.whenReady\(\)\.then\(async \(\) => \{[\s\S]*?\n  \}\);/)?.[0] || "";
+assert.doesNotMatch(readyBlock, /phoneRemoteBridge\.start\(\)/,
+  "ordinary app startup must not open a LAN listener before the user selects Phone mode");
 const liveIndex = main.indexOf('"camera-operator-live-ux.js"');
 const inputsIndex = main.indexOf('"camera-operator-inputs-ux.js"');
 assert.ok(liveIndex >= 0 && inputsIndex > liveIndex, "multi-input UX must inject after the live Camera Operator controller");
 assert.match(main, /--host", "127\.0\.0\.1"/, "project/MCP HTTP runtime must remain loopback-only");
+assert.ok(pkg.build.files.includes("electron/preload-entry.cjs"));
 assert.ok(pkg.build.files.includes("electron/camera-operator-inputs-ux.js"));
 assert.ok(pkg.build.files.includes("electron/phone-remote.cjs"));
 
