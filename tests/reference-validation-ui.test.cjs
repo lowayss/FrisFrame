@@ -87,7 +87,16 @@ assert.ok(Math.abs(readyScreen.residualX) < 1e-8);
 assert.ok(Math.abs(readyScreen.residualY) < 1e-8);
 
 const overlayRect = { x: 100, y: 50, width: 960, height: 540 };
-const ghostReady = workflow.buildReferenceGhostObservationModel(blocking, { spatialCore: spatial, overlayRect });
+let ghostProjectionCalls = 0;
+const countedSpatial = {
+  ...spatial,
+  projectWorldPointToFrame(options) {
+    ghostProjectionCalls += 1;
+    return spatial.projectWorldPointToFrame(options);
+  },
+};
+const ghostReady = workflow.buildReferenceGhostObservationModel(blocking, { spatialCore: countedSpatial, overlayRect });
+assert.equal(ghostProjectionCalls, 1, "Ghost must reuse the screen projection calculated by local validation instead of projecting the same anchor twice");
 assert.equal(ghostReady.status, "ready");
 assert.equal(ghostReady.scales.length, 1);
 assert.equal(ghostReady.horizons.length, 1);
@@ -140,4 +149,4 @@ badPosition.items[0].x += 0.05;
 const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
 assert.ok(reviewPosition.issues.some((issue) => issue.code === "anchor-x-mismatch"));
 
-console.log("reference-validation-ui: local scale/horizon/screen diagnostics plus Ghost projection passed");
+console.log("reference-validation-ui: local screen diagnostics are shared with Ghost and remain readiness-neutral");
