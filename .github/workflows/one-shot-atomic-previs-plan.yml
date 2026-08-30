@@ -1,0 +1,50 @@
+name: One-shot atomic previs plan hardening
+
+on:
+  push:
+    branches:
+      - refactor/mcp-first-previs-workflow
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.event.head_commit.message == 'Run one-shot atomic previs plan hardening'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/mcp-first-previs-workflow
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply atomic plan hardening
+        run: python3 tools/one_shot_atomic_previs_plan.py
+
+      - name: Verify MCP E2E
+        run: python3 tests/mcp-previs-e2e.py
+
+      - name: Verify full project contracts
+        run: python3 quality_check.py
+
+      - name: Verify patch whitespace
+        run: git diff --check
+
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mcp_server.py mcp_previs_server.py quality_check.py MCP_FIRST_WORKFLOW.md tests/mcp-previs-e2e.py tests/mcp-first-product-boundary.test.cjs
+          git commit -m "Make apply_previs_plan atomic and add MCP E2E"
+          git push origin HEAD:refactor/mcp-first-previs-workflow
