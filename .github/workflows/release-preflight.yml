@@ -1,0 +1,44 @@
+name: Release preflight
+
+on:
+  push:
+    branches:
+      - release/v0.6.0-preflight
+
+permissions:
+  contents: read
+
+jobs:
+  signing-secrets:
+    name: Check signing secret presence
+    runs-on: ubuntu-latest
+    env:
+      MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+    steps:
+      - name: Validate required production signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            MAC_CSC_LINK \
+            MAC_CSC_KEY_PASSWORD \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID \
+            WIN_CSC_LINK \
+            WIN_CSC_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is missing"
+              missing=1
+            else
+              echo "$name: configured"
+            fi
+          done
+          exit "$missing"
