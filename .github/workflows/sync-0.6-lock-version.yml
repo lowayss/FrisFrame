@@ -1,0 +1,42 @@
+name: Sync 0.6 lockfile version
+
+on:
+  push:
+    branches:
+      - chore/frisframe-0.6.0-version
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/frisframe-0.6.0-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sync package-lock root version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          lock.version = pkg.version;
+          lock.packages[''].version = pkg.version;
+          fs.writeFileSync('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`);
+          NODE
+          git diff --check
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock version already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: sync lockfile version to 0.6.0"
+          git push origin HEAD:chore/frisframe-0.6.0-version
