@@ -8,9 +8,11 @@ on:
       - "package-lock.json"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
+      - "tests/desktop-publish-contract.test.cjs"
       - "SIGNING.md"
       - "README.md"
       - ".github/workflows/desktop-builds.yml"
+      - ".github/workflows/release-preflight.yml"
   push:
     branches:
       - main
@@ -21,9 +23,11 @@ on:
       - "package-lock.json"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
+      - "tests/desktop-publish-contract.test.cjs"
       - "SIGNING.md"
       - "README.md"
       - ".github/workflows/desktop-builds.yml"
+      - ".github/workflows/release-preflight.yml"
 
 concurrency:
   group: desktop-builds-${{ github.ref }}
