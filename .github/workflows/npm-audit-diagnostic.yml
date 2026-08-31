@@ -1,4 +1,4 @@
-name: NPM audit diagnostic
+name: NPM audit lockfile fix
 
 on:
   push:
@@ -6,70 +6,43 @@ on:
       - security/npm-audit-2026-08-31
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  audit:
+  fix-and-verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: security/npm-audit-2026-08-31
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Capture audit reports
+      - name: Apply audit fixes to lockfile only
+        run: npm audit fix --package-lock-only
+      - name: Reinstall exact fixed lockfile
+        run: npm ci
+      - name: Require zero high-severity audit findings
         shell: bash
         run: |
-          set +e
-          npm audit --json > npm-audit-full.json
-          npm audit --omit=dev --json > npm-audit-runtime.json
-          npm audit fix --dry-run --json > npm-audit-fix-dry-run.json
-          exit 0
-      - name: Summarize findings
+          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
+      - name: Run project contracts
+        run: npm run check
+      - name: Commit lockfile security update
         shell: bash
         run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          function load(path) {
-            try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
-            catch (error) { return { parseError: String(error) }; }
-          }
-          function summarize(label, report) {
-            const meta = report.metadata?.vulnerabilities || {};
-            console.log(`\n=== ${label} ===`);
-            console.log('counts:', JSON.stringify(meta));
-            const vulns = report.vulnerabilities || {};
-            for (const [name, v] of Object.entries(vulns)) {
-              console.log(JSON.stringify({
-                name,
-                severity: v.severity,
-                direct: v.isDirect,
-                range: v.range,
-                nodes: v.nodes,
-                via: (v.via || []).map((item) => typeof item === 'string' ? item : {
-                  source: item.source,
-                  name: item.name,
-                  severity: item.severity,
-                  title: item.title,
-                  range: item.range,
-                  url: item.url
-                }),
-                effects: v.effects,
-                fixAvailable: v.fixAvailable
-              }));
-            }
-          }
-          summarize('FULL AUDIT', load('npm-audit-full.json'));
-          summarize('RUNTIME AUDIT (--omit=dev)', load('npm-audit-runtime.json'));
-          const dry = load('npm-audit-fix-dry-run.json');
-          console.log('\n=== FIX DRY RUN METADATA ===');
-          console.log(JSON.stringify(dry.metadata?.vulnerabilities || dry.metadata || dry, null, 2));
-          NODE
-      - name: Upload audit reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-audit-reports
-          path: npm-audit-*.json
-          if-no-files-found: error
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock already contains all available safe audit fixes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: refresh transitive dependencies for npm audit"
+          git push origin HEAD:security/npm-audit-2026-08-31
