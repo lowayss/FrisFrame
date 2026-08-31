@@ -67,8 +67,8 @@ FrisFrame은 하나의 소스에서 macOS와 Windows 두 플랫폼을 빌드합�
 
 | 플랫폼 | 지원 환경 | 설치 파일 |
 | --- | --- | --- |
-| macOS | Apple Silicon | `FrisFrame-0.5.0-arm64.dmg` + ZIP |
-| Windows | x64 | `FrisFrame-0.5.0-x64.exe` |
+| macOS | Apple Silicon | `FrisFrame-0.6.0-arm64.dmg` + ZIP |
+| Windows | x64 | `FrisFrame-0.6.0-x64.exe` |
 
 GitHub Actions에서는 두 개의 네이티브 빌드가 따로 실행됩니다.
 
@@ -80,7 +80,7 @@ GitHub Actions에서는 두 개의 네이티브 빌드가 따로 실행됩니다
 - `FrisFrame-macOS-arm64`
 - `FrisFrame-Windows-x64`
 
-`v0.5.0` 같은 버전 태그를 만들면 GitHub Releases를 통해 Mac/Windows 버전을 함께 배포할 수 있습니다. 이후 버전도 버전 번호만 바뀌고 같은 이름 규칙을 사용합니다.
+`v0.6.0` 같은 버전 태그를 만들면 GitHub Releases를 통해 Mac/Windows 버전을 함께 배포할 수 있습니다. 이후 버전도 버전 번호만 바뀌고 같은 이름 규칙을 사용합니다.
 
 정식 태그 릴리스는 다음 서명 절차를 사용할 수 있도록 구성되어 있습니다.
 
