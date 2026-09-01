@@ -89,6 +89,29 @@ GitHub Actions에서는 두 개의 네이티브 빌드가 따로 실행됩니다
 
 배포 서명 설정은 [`SIGNING.md`](SIGNING.md)에 정리되어 있습니다.
 
+### `v0.6.0-beta` 설치 시 보안 경고
+
+`v0.6.0-beta`는 테스트를 위한 **unsigned 프리릴리즈**입니다. 따라서 운영체제가 앱을 처음 실행할 때 보안 경고를 표시할 수 있습니다. 아래 방법은 **이 저장소의 공식 GitHub Release에서 받은 FrisFrame 설치본에만** 사용하세요.
+
+#### macOS
+
+1. DMG를 열고 `FrisFrame.app`을 **응용 프로그램(Applications)** 폴더로 옮깁니다.
+2. 먼저 Finder에서 앱을 Control-클릭(또는 우클릭) → **열기**를 시도하거나, **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기(Open Anyway)**를 사용합니다.
+3. 그래도 차단되면 터미널에서 다음 명령을 실행합니다.
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/FrisFrame.app"
+open "/Applications/FrisFrame.app"
+```
+
+`xattr` 명령은 해당 앱에 붙은 macOS 격리(quarantine) 속성을 제거합니다. FrisFrame을 다른 위치에 설치했다면 명령의 경로를 실제 앱 위치에 맞게 바꾸세요.
+
+#### Windows
+
+Windows Defender SmartScreen에서 **Windows의 PC 보호** 경고가 표시될 수 있습니다. 이 저장소의 공식 Release에서 받은 설치파일인지 확인한 뒤 **추가 정보(More info) → 실행(Run anyway)**을 선택하면 됩니다.
+
+정식 production 릴리즈는 macOS Developer ID/공증과 Windows Authenticode 서명을 적용하도록 구성되어 있으며, unsigned 우회는 beta 프리릴리즈에만 허용합니다.
+
 ### 설치본의 MCP 실행파일
 
 데스크톱 패키지에는 로컬 편집 서버와 FFmpeg뿐 아니라 **독립적인 stdio MCP 실행파일**도 포함됩니다. 일반 사용자가 별도로 Python을 설치할 필요가 없습니다.
