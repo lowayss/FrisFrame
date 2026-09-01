@@ -21,9 +21,11 @@ assert.match(workflow, /GH_TOKEN:\s*\$\{\{ github\.token \}\}/,
   "the dedicated release job must use the scoped GitHub token");
 assert.match(workflow, /gh release (?:upload|create)/,
   "release assets must be published explicitly with the GitHub CLI");
+assert.match(workflow, /--prerelease/,
+  "beta tags must publish as GitHub prereleases");
 
 const builderCommands = workflow.match(/(?:npx\s+)?electron-builder[^\n]*/g) || [];
-assert.ok(builderCommands.length >= 4, "expected desktop package commands for unsigned and tagged builds");
+assert.ok(builderCommands.length >= 4, "expected desktop package commands for unsigned and production builds");
 for (const command of builderCommands) {
   assert.match(command, /--publish never/,
     `electron-builder must never own GitHub publishing in CI: ${command.trim()}`);
@@ -35,12 +37,24 @@ assert.equal(tagGuards.length, 2,
 assert.match(workflow, /GITHUB_REF_NAME/,
   "tagged builds must compare the actual Git ref name");
 assert.match(workflow, /require\('\.\/package\.json'\)\.version/,
-  "tagged builds must derive the expected release tag from package.json");
+  "tagged builds must derive the allowed release tags from package.json");
+assert.ok(workflow.includes('beta_tag="${production_tag}-beta"'),
+  "macOS release guard must allow the exact package beta tag");
+assert.ok(workflow.includes('$betaTag = "$productionTag-beta"'),
+  "Windows release guard must allow the exact package beta tag");
+
+const unsignedBetaConditions = workflow.match(/!startsWith\(github\.ref, 'refs\/tags\/v'\) \|\| endsWith\(github\.ref_name, '-beta'\)/g) || [];
+assert.equal(unsignedBetaConditions.length, 2,
+  "both desktop jobs must build beta tags through the unsigned path");
+
+const productionOnlyConditions = workflow.match(/startsWith\(github\.ref, 'refs\/tags\/v'\) && !endsWith\(github\.ref_name, '-beta'\)/g) || [];
+assert.ok(productionOnlyConditions.length >= 6,
+  "signing, secret validation, and signature checks must remain production-only");
 
 assert.match(releasePreflight, /workflow_dispatch/,
-  "release signing preflight must be manually runnable before creating a tag");
+  "release signing preflight must be manually runnable before creating a production tag");
 assert.match(releasePreflight, /release_tag/,
-  "release preflight must take the intended release tag as explicit input");
+  "release preflight must take the intended production release tag as explicit input");
 assert.match(releasePreflight, /Secret values were not printed/,
   "release preflight must document that secret values are never printed");
 
@@ -57,4 +71,4 @@ for (const secretName of [
     `release preflight must check ${secretName}`);
 }
 
-console.log("desktop-publish-contract: publishing isolated, release tag guarded, and signing preflight covered");
+console.log("desktop-publish-contract: beta prerelease is unsigned, production signing remains enforced, and publishing stays isolated");
