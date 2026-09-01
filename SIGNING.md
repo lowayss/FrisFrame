@@ -35,13 +35,22 @@ In the GitHub repository, open **Settings → Secrets and variables → Actions 
 
 Do not paste the actual secret values into an issue, pull request, workflow file, README, commit message, or chat transcript.
 
+## Release preflight
+
+Before creating a production tag, run **Actions → Release preflight → Run workflow** on `main` and enter the intended tag, for example `v0.6.0`.
+
+The preflight checks only release metadata and whether all seven required signing secrets are present. It never prints secret values. It also requires the requested tag to equal `v` plus the version in `package.json`.
+
+Passing the preflight proves that the required secret entries exist, but it does not prove that the certificates or Apple credentials are valid. The tagged production build remains the final authority because it performs the actual signing, notarization, and signature verification.
+
 ## Release flow
 
 1. Merge a fully tested change into `main`.
-2. Create and push a release tag such as `v0.4.0`.
-3. `Desktop builds` runs `macOS · Apple Silicon` and `Windows · x64`.
-4. The macOS job signs, notarizes, and validates the app.
-5. The Windows job signs and validates the installer and executable.
-6. Only if both jobs succeed does `Publish GitHub Release` upload the DMG/ZIP and EXE.
+2. Run `Release preflight` on `main` with the intended tag and require it to pass.
+3. Create and push the exact release tag matching `package.json`, such as `v0.6.0` for package version `0.6.0`.
+4. `Desktop builds` independently re-checks that the Git tag matches `package.json` before any tagged package is built.
+5. The macOS job signs, notarizes, and validates the app.
+6. The Windows job signs and validates the installer and executable.
+7. Only if both jobs succeed does `Publish GitHub Release` upload the DMG/ZIP and EXE.
 
 A missing or invalid production signing secret intentionally fails the tagged build instead of publishing an unsigned installer.
