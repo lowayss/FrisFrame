@@ -74,6 +74,29 @@ GitHub Actions runs separate native jobs for **macOS · Apple Silicon** and **Wi
 
 Production tagged releases are configured to require Developer ID signing + Hardened Runtime + Apple notarization on macOS and Authenticode signing on Windows. See [`SIGNING.md`](SIGNING.md).
 
+### Security warnings when installing `v0.6.0-beta`
+
+`v0.6.0-beta` is an intentionally **unsigned prerelease** for testing. The operating system may therefore show a security warning the first time the app is launched. Use the steps below **only for FrisFrame packages downloaded from this repository's official GitHub Release**.
+
+#### macOS
+
+1. Open the DMG and move `FrisFrame.app` to the **Applications** folder.
+2. First try Control-click/right-click → **Open**, or use **System Settings → Privacy & Security → Open Anyway**.
+3. If macOS still blocks the app, run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/FrisFrame.app"
+open "/Applications/FrisFrame.app"
+```
+
+The `xattr` command removes the macOS quarantine attribute from that app. If FrisFrame is installed somewhere else, change the path to the app's actual location.
+
+#### Windows
+
+Microsoft Defender SmartScreen may display a **Windows protected your PC** warning. After confirming that the installer came from this repository's official Release, choose **More info → Run anyway**.
+
+Production releases are configured to use macOS Developer ID signing/notarization and Windows Authenticode signing. The unsigned exception is limited to beta prereleases.
+
 ### Packaged MCP executable
 
 Desktop packages include a dedicated **stdio MCP executable** alongside the local editor server and FFmpeg. Users do not need a separate Python installation.
