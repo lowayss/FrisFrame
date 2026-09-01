@@ -59,16 +59,17 @@ jobs:
         shell: bash
         run: |
           package_version="$(node -p "require('./package.json').version")"
-          expected_tag="v${package_version}"
-          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
-            echo "::error::Release tag $GITHUB_REF_NAME does not match package version $package_version (expected $expected_tag)."
+          production_tag="v${package_version}"
+          beta_tag="${production_tag}-beta"
+          if [ "$GITHUB_REF_NAME" != "$production_tag" ] && [ "$GITHUB_REF_NAME" != "$beta_tag" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match an allowed tag for package version $package_version (expected $production_tag or $beta_tag)."
             exit 1
           fi
       - name: Verify source contracts
         run: npm run check
 
       - name: Build unsigned macOS package
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') || endsWith(github.ref_name, '-beta') }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
@@ -76,7 +77,7 @@ jobs:
           npx electron-builder --mac dmg zip --arm64 --publish never
 
       - name: Validate macOS release secrets
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         env:
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -87,14 +88,14 @@ jobs:
           missing=0
           for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
             if [ -z "${!name:-}" ]; then
-              echo "::error::$name GitHub Actions secret is required for tagged macOS releases."
+              echo "::error::$name GitHub Actions secret is required for production macOS releases."
               missing=1
             fi
           done
           exit "$missing"
 
       - name: Build signed and notarized macOS package
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -109,7 +110,7 @@ jobs:
         run: npm run desktop:verify
 
       - name: Verify Apple signature and notarization
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         run: |
           APP="release/mac-arm64/FrisFrame.app"
           codesign --verify --deep --strict --verbose=2 "$APP"
@@ -151,21 +152,22 @@ jobs:
         shell: pwsh
         run: |
           $packageVersion = node -p "require('./package.json').version"
-          $expectedTag = "v$packageVersion"
-          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
-            throw "Release tag $env:GITHUB_REF_NAME does not match package version $packageVersion (expected $expectedTag)."
+          $productionTag = "v$packageVersion"
+          $betaTag = "$productionTag-beta"
+          if (($env:GITHUB_REF_NAME -ne $productionTag) -and ($env:GITHUB_REF_NAME -ne $betaTag)) {
+            throw "Release tag $env:GITHUB_REF_NAME does not match an allowed tag for package version $packageVersion (expected $productionTag or $betaTag)."
           }
       - name: Verify source contracts
         run: npm run check
 
       - name: Build unsigned Windows package
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') || endsWith(github.ref_name, '-beta') }}
         run: |
           npm run desktop:prepare
           npx electron-builder --win nsis --x64 --publish never
 
       - name: Validate Windows release secrets
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         shell: pwsh
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -175,11 +177,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) { $missing += "WIN_CSC_LINK" }
           if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) { $missing += "WIN_CSC_KEY_PASSWORD" }
           if ($missing.Count -gt 0) {
-            throw "Missing GitHub Actions secrets for tagged Windows release: $($missing -join ', ')"
+            throw "Missing GitHub Actions secrets for production Windows release: $($missing -join ', ')"
           }
 
       - name: Build signed Windows package
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
@@ -191,7 +193,7 @@ jobs:
         run: npm run desktop:verify
 
       - name: Verify Windows Authenticode signatures
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-beta') }}
         shell: pwsh
         run: |
           $targets = @(
@@ -231,9 +233,14 @@ jobs:
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release-assets/* --generate-notes --title "FrisFrame $GITHUB_REF_NAME"
+            release_args=(--generate-notes --title "FrisFrame $GITHUB_REF_NAME")
+            if [[ "$GITHUB_REF_NAME" == *-beta ]]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "$GITHUB_REF_NAME" release-assets/* "${release_args[@]}"
           fi
