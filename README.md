@@ -25,6 +25,12 @@ Seedance가 최종 영상 생성
 [![Quality and security](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/quality-security.yml)
 [![Desktop builds](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml/badge.svg)](https://github.com/lowayss/FrisFrame/actions/workflows/desktop-builds.yml)
 
+## 튜토리얼 영상
+
+FrisFrame의 기본 사용 흐름과 실제 작업 방법은 아래 영상에서 확인할 수 있습니다.
+
+▶️ **[FrisFrame 튜토리얼 영상 보기](https://www.youtube.com/watch?v=MrU2jYmMLTg)**
+
 ## FrisFrame은 무엇을 위한 프로그램인가요?
 
 ```text
