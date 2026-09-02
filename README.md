@@ -29,7 +29,9 @@ Seedance가 최종 영상 생성
 
 FrisFrame의 기본 사용 흐름과 실제 작업 방법은 아래 영상에서 확인할 수 있습니다.
 
-▶️ **[FrisFrame 튜토리얼 영상 보기](https://www.youtube.com/watch?v=MrU2jYmMLTg)**
+[![FrisFrame 튜토리얼 영상](https://img.youtube.com/vi/MrU2jYmMLTg/maxresdefault.jpg)](https://www.youtube.com/watch?v=MrU2jYmMLTg)
+
+> 위 미리보기 이미지를 클릭하면 YouTube 튜토리얼 영상으로 이동합니다.
 
 ## FrisFrame은 무엇을 위한 프로그램인가요?
 
