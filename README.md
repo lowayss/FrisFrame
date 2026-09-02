@@ -63,6 +63,12 @@ MCP로 생성된 결과도 일반 FrisFrame 프로젝트와 일반 키프레임�
 
 ## 다운로드 / 데스크톱 빌드
 
+**일반 사용자는 소스 코드를 직접 실행하기보다 GitHub Releases의 설치 파일을 사용하는 것을 권장합니다.**
+
+- [GitHub Releases에서 FrisFrame 다운로드](https://github.com/lowayss/FrisFrame/releases)
+- macOS Apple Silicon: `.dmg`
+- Windows x64: `.exe`
+
 FrisFrame은 하나의 소스에서 macOS와 Windows 두 플랫폼을 빌드합니다.
 
 | 플랫폼 | 지원 환경 | 설치 파일 |
@@ -239,33 +245,101 @@ FrisFrame에서 MP4는 완성 애니메이션이 아니라 **Seedance에 전달�
 
 ## 로컬에서 실행하기
 
-MP4 인코딩을 포함한 로컬 브라우저 앱으로도 실행할 수 있습니다.
+### 가장 쉬운 방법: 설치 파일 사용
+
+일반 사용자는 위의 **GitHub Releases**에서 운영체제에 맞는 설치 파일을 내려받아 실행하는 것을 권장합니다. 설치본에는 로컬 편집 서버와 FFmpeg가 포함되므로 별도로 Python 명령을 입력할 필요가 없습니다.
+
+### 소스 코드로 실행하기 — 처음 한 번
+
+아래 명령은 **터미널을 처음 연 상태에서 위에서부터 한 줄씩 그대로 실행**하면 됩니다.
 
 ```bash
+git clone https://github.com/lowayss/FrisFrame.git
+cd FrisFrame
 python3 server.py --port 8766
 ```
 
-브라우저에서 다음 주소를 엽니다.
+정상적으로 서버가 실행되면 **그 터미널 창은 닫지 마세요.**
+
+그다음 브라우저 주소창에서 아래 주소를 엽니다.
 
 ```text
 http://127.0.0.1:8766/
 ```
 
-결정적 MCP 서버를 소스에서 직접 실행하려면:
+macOS에서는 새 터미널 탭을 열고 아래 명령으로 브라우저를 바로 열 수도 있습니다.
 
 ```bash
+open http://127.0.0.1:8766/
+```
+
+> `http://127.0.0.1:8766/` 자체를 터미널에 입력하면 `zsh: no such file or directory` 오류가 납니다. 주소는 **브라우저 주소창**에 입력하거나 macOS에서는 앞에 `open`을 붙여 실행하세요.
+
+### 이미 FrisFrame을 다운로드한 경우
+
+먼저 FrisFrame 폴더로 이동한 뒤 서버를 실행합니다.
+
+```bash
+cd ~/FrisFrame
+python3 server.py --port 8766
+```
+
+현재 위치가 맞는지 확인하려면:
+
+```bash
+pwd
+ls server.py
+```
+
+`ls server.py` 결과에 `server.py`가 표시되어야 합니다. `No such file or directory`가 나오면 아직 FrisFrame 폴더 안에 들어가지 않은 것입니다.
+
+### MP4 Export에서 FFmpeg 오류가 나는 경우
+
+소스 코드의 브라우저 서버는 시스템에 설치된 FFmpeg를 사용합니다. 먼저 확인하세요.
+
+```bash
+ffmpeg -version
+```
+
+macOS에서 FFmpeg가 없고 Homebrew를 사용 중이라면:
+
+```bash
+brew install ffmpeg
+```
+
+설치 파일(DMG/EXE)로 실행하는 경우에는 패키지에 FFmpeg가 포함되어 있으므로 이 단계가 필요하지 않습니다.
+
+### Electron 데스크톱 개발 모드
+
+Node.js/npm이 설치되어 있다면:
+
+```bash
+git clone https://github.com/lowayss/FrisFrame.git
+cd FrisFrame
+npm install
+npm run desktop:dev
+```
+
+이미 저장소를 받은 경우에는 `git clone`을 다시 할 필요 없이 FrisFrame 폴더에서 `npm install`부터 실행하면 됩니다.
+
+### MCP 서버를 소스에서 직접 실행
+
+```bash
+cd ~/FrisFrame
 python3 mcp_previs_server.py
 ```
 
-전체 자동 검사는:
+### 전체 자동 검사
 
 ```bash
+cd ~/FrisFrame
 python3 quality_check.py
 ```
 
-데스크톱 패키지를 로컬에서 검증하려면:
+### 데스크톱 패키지 로컬 검증
 
 ```bash
+cd ~/FrisFrame
 npm install
 npm run check
 npm run desktop:build:mac
