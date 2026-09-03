@@ -1,6 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const core = require("../electron/phone-motion-core.js");
+
+const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
 
 test("phone motion yaw crosses 360 without a camera jump", () => {
   assert.equal(core.shortestAngleDelta(358, 2), 4);
@@ -98,4 +102,19 @@ test("RAW stabilizer applies trusted motion without smoothing", () => {
 test("landscape remap uses gamma for pitch so rotating the screen does not swap camera semantics", () => {
   assert.deepEqual(core.remapOrientation({screenAngle:90,orientation:{alpha:30,beta:40,gamma:12}}), {yaw:30,pitch:-12,roll:40,screenAngle:90});
   assert.deepEqual(core.remapOrientation({screenAngle:-90,orientation:{alpha:30,beta:40,gamma:12}}), {yaw:30,pitch:12,roll:-40,screenAngle:-90});
+});
+
+test("desktop physical-camera UX exposes stabilization, confidence hold, recenter and live 3D redraw", () => {
+  assert.match(phoneMotionUx, /STABILIZATION_PRESETS/);
+  assert.match(phoneMotionUx, /raw:\s*\{\s*label:"RAW"/);
+  assert.match(phoneMotionUx, /handheld:\s*\{\s*label:"HANDHELD"/);
+  assert.match(phoneMotionUx, /cinema:\s*\{\s*label:"CINEMA"/);
+  assert.match(phoneMotionUx, /createPoseStabilizer/);
+  assert.match(phoneMotionUx, /virtualTravelScale:1\.75/);
+  assert.doesNotMatch(phoneMotionUx, /visualScaleMeters:1\.75/);
+  assert.match(phoneMotionUx, /heldTranslation/);
+  assert.match(phoneMotionUx, /이동 HOLD/);
+  assert.match(phoneMotionUx, /renderThreeView\(renderState, true\)/);
+  assert.match(phoneMotionUx, /data-phone-motion-recenter/);
+  assert.match(phoneMotionUx, /setStabilization/);
 });
