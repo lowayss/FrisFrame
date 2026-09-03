@@ -6,6 +6,11 @@ on:
     paths:
       - "package.json"
       - "package-lock.json"
+      - "*.py"
+      - "*.js"
+      - "*.html"
+      - "*.css"
+      - "vendor/**"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
       - "tests/desktop-publish-contract.test.cjs"
@@ -21,6 +26,11 @@ on:
     paths:
       - "package.json"
       - "package-lock.json"
+      - "*.py"
+      - "*.js"
+      - "*.html"
+      - "*.css"
+      - "vendor/**"
       - "electron/**"
       - "tests/electron-contract.test.cjs"
       - "tests/desktop-publish-contract.test.cjs"
