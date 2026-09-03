@@ -77,11 +77,42 @@
     }
   }
 
+  function physicalCommandCapture(event) {
+    const detail = event?.detail || {};
+    const physical = detail.motion && typeof detail.motion === "object";
+    if (!physical || inputs()?.mode !== "phone") return;
+    const op = operator();
+    if (!op) return;
+
+    if (detail.command === "toggle-record" && op.mode === "idle") {
+      // Physical Camera uses the first REC press as a non-destructive STBY.
+      // Camera Operator owns the snapshot/undo boundary; motion may now preview
+      // against that snapshot without writing timeline samples until REC starts.
+      event.stopImmediatePropagation();
+      op.arm();
+      if (op.mode === "armed") {
+        resetTrackingAnchor();
+        if (typeof notifyApp === "function") {
+          notifyApp("Physical Camera STBY · 휴대폰으로 구도를 잡고 REC를 한 번 더 누르세요.");
+        }
+      }
+      updateDesktopBadge();
+      return;
+    }
+
+    if (detail.command === "stop" && op.mode === "armed") {
+      event.stopImmediatePropagation();
+      op.cancel?.("Physical Camera STBY를 취소했습니다.");
+      resetTrackingAnchor();
+      updateDesktopBadge();
+    }
+  }
+
   function applyPhysicalMotion(detail) {
     const motion = detail?.motion;
     if (!motion?.enabled || inputs()?.mode !== "phone") return;
     const op = operator();
-    if (!op || op.mode !== "recording" || !core()) return;
+    if (!op || !["armed", "recording"].includes(op.mode) || !core()) return;
     lastMotionAt = Number(detail.receivedAt || Date.now());
     const nextCalibration = Math.max(0, Math.trunc(Number(motion.calibrationId) || 0));
     if (!anchor || nextCalibration !== calibrationId) {
@@ -124,22 +155,27 @@
   function updateDesktopBadge() {
     const badge = document.querySelector("[data-frisframe-phone-motion-badge]");
     if (!badge) return;
+    const opMode = operator()?.mode || "idle";
+    const standby = opMode === "armed";
+    const recording = opMode === "recording";
     const live = Date.now() - lastMotionAt < 900;
     const confidence = diagnostic?.translation?.confidence != null
       ? Math.round(diagnostic.translation.confidence * 100)
       : 0;
     const held = diagnostic?.stabilization?.heldTranslation === true;
     const metric = diagnostic?.translation?.metric === true;
+    const phase = standby ? "STBY · " : (recording ? "REC · " : "");
     badge.textContent = live
       ? (held
-        ? `회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
+        ? `${phase}회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
         : (metric
-          ? `WebXR 6DoF · METRIC · ${STABILIZATION_PRESETS[stabilizationPreset].label}`
-          : `실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`))
-      : "실제 모션 대기";
+          ? `${phase}WebXR 6DoF · METRIC · ${STABILIZATION_PRESETS[stabilizationPreset].label}`
+          : `${phase}실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`))
+      : (standby ? "STBY · 실제 모션 대기" : "실제 모션 대기");
     badge.classList.toggle("is-live", live);
     badge.classList.toggle("is-hold", live && held);
     badge.classList.toggle("is-metric", live && metric);
+    badge.classList.toggle("is-standby", standby);
   }
 
   function updatePresetButtons() {
@@ -182,7 +218,7 @@
       return;
     }
     const qr = motionQr(url);
-    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. Android WebXR 지원 기기는 metric 6DoF를 우선 사용하고, iPhone/미지원 기기는 Visual Flow로 폴백합니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
+    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. Physical Camera REC는 첫 탭이 STBY, 두 번째 탭이 실제 REC입니다. STBY에서 휴대폰으로 3D 구도를 먼저 잡을 수 있습니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
     const urlNode = body.querySelector(".frisframe-phone-url");
     if (urlNode) urlNode.textContent = url;
     body.querySelector("[data-copy-motion-url]")?.addEventListener("click", async () => {
@@ -203,7 +239,7 @@
   style.textContent = `
     [data-frisframe-phone-motion-box]{display:grid;gap:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.07)}
     .frisframe-phone-motion-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:9px;color:#d9e1e8}
-    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}[data-frisframe-phone-motion-badge].is-metric{color:#7ed9ff}
+    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}[data-frisframe-phone-motion-badge].is-metric{color:#7ed9ff}[data-frisframe-phone-motion-badge].is-standby{color:#ffca88}
     .frisframe-phone-motion-layout{display:grid;grid-template-columns:86px minmax(0,1fr);gap:9px;align-items:center}.frisframe-phone-motion-copy{display:grid;gap:5px;min-width:0}
     .frisframe-phone-motion-qr{width:86px;height:86px;padding:4px;background:#fff;border-radius:5px;overflow:hidden}.frisframe-phone-motion-qr svg{width:100%;height:100%;display:block}
     .frisframe-phone-motion-copy small,.frisframe-phone-motion-privacy{font-size:7px;color:#7e8993;overflow-wrap:anywhere;line-height:1.35}
@@ -212,12 +248,16 @@
   document.head.appendChild(style);
 
   stabilizer = createStabilizer();
+  // Capture only Physical Camera commands. The ordinary Phone Remote and
+  // gamepad retain their existing one-press REC behavior in the input module.
+  window.addEventListener("frisframe:phone-remote-input", physicalCommandCapture, true);
   window.addEventListener("frisframe:phone-remote-input", (event) => applyPhysicalMotion(event.detail || {}));
   setInterval(() => { refreshPairingUi(); updateDesktopBadge(); }, 700);
   window.FrisFramePhoneMotionCamera = Object.freeze({
     get connected() { return Date.now() - lastMotionAt < 900; },
     get diagnostic() { return diagnostic ? JSON.parse(JSON.stringify(diagnostic)) : null; },
     get stabilization() { return stabilizationPreset; },
+    get standby() { return operator()?.mode === "armed"; },
     setStabilization: setStabilizationPreset,
     recenter: resetTrackingAnchor,
   });
