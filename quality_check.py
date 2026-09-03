@@ -121,6 +121,7 @@ def main() -> None:
         "tests/camera-operator-inputs-contract.test.cjs",
         "tests/phone-motion-core.test.cjs",
         "tests/phone-motion-server.test.cjs",
+        "tests/physical-camera-take-context.test.cjs",
         "tests/history-safety-contract.test.cjs",
         "tests/scene-cache-ux-contract.test.cjs",
         "tests/dynamic-prop-cache-ux-contract.test.cjs",
