@@ -137,6 +137,8 @@ function main() {
     assert.equal(browser.read_only, true);
     assert.equal(browser.final_prompt_owner, "mcp-client");
     assert.equal(browser.available, false, "기본 패키지 fixture에는 Physical Camera Take가 없어야 합니다.");
+    assert.equal(browser.selected_take_id, null);
+    assert.deepEqual(browser.selection_priority, ["requested-id", "selected-id", "latest-id", "last-take-fallback"]);
     assert.equal(browser.total_count, 0);
     assert.equal(browser.returned_count, 0);
     assert.deepEqual(browser.items, []);
@@ -150,6 +152,7 @@ function main() {
     assert.equal(context.final_prompt_owner, "mcp-client");
     assert.equal(context.available, false, "기본 패키지 fixture에는 Physical Camera Take가 없어야 합니다.");
     assert.equal(context.selection?.strategy, "none");
+    assert.equal(context.selection?.selected_take_id, null);
     assert.equal(Number(context.revision), Number(fixture.revision));
     assert.equal(Number(before.revision), Number(after.revision), "Camera Take 조회가 revision을 변경했습니다.");
     assert.deepEqual(before.document, after.document, "Camera Take 조회가 프로젝트 문서를 변경했습니다.");
