@@ -57,10 +57,64 @@
     };
   }
 
+  function normalizeQuaternion(value = {}) {
+    const x = clamp(value.x, -1, 1);
+    const y = clamp(value.y, -1, 1);
+    const z = clamp(value.z, -1, 1);
+    const w = clamp(value.w, -1, 1);
+    const length = Math.hypot(x, y, z, w);
+    if (length < 0.000001) return { x:0,y:0,z:0,w:1 };
+    return { x:x/length,y:y/length,z:z/length,w:w/length };
+  }
+
+  function normalizeSpatial(spatial = {}) {
+    const metric = spatial?.mode === "webxr" && spatial?.metric === true;
+    if (!metric) {
+      return {
+        mode:"none",
+        metric:false,
+        position:{x:0,y:0,z:0},
+        orientation:{x:0,y:0,z:0,w:1},
+        confidence:0,
+      };
+    }
+    return {
+      mode:"webxr",
+      metric:true,
+      position:{
+        x:clamp(spatial.position?.x, -50, 50),
+        y:clamp(spatial.position?.y, -50, 50),
+        z:clamp(spatial.position?.z, -50, 50),
+      },
+      orientation:normalizeQuaternion(spatial.orientation),
+      confidence:clamp(spatial.confidence, 0, 1),
+    };
+  }
+
+  function quaternionToOrientation(value = {}) {
+    const q = normalizeQuaternion(value);
+    const yaw = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.x * q.x + q.y * q.y),
+    ) * 180 / Math.PI;
+    const pitch = Math.asin(clamp(2 * (q.w * q.x - q.y * q.z), -1, 1)) * 180 / Math.PI;
+    const roll = Math.atan2(
+      2 * (q.w * q.z + q.x * q.y),
+      1 - 2 * (q.x * q.x + q.z * q.z),
+    ) * 180 / Math.PI;
+    return { yaw:wrapDegrees(yaw),pitch:wrapDegrees(pitch),roll:wrapDegrees(roll),screenAngle:0 };
+  }
+
+  function sampleOrientation(phoneSample = {}) {
+    const spatial = normalizeSpatial(phoneSample.spatial);
+    return spatial.metric ? quaternionToOrientation(spatial.orientation) : remapOrientation(phoneSample);
+  }
+
   function createAnchor(phoneSample = {}, camera = {}) {
     return {
-      orientation: remapOrientation(phoneSample),
+      orientation: sampleOrientation(phoneSample),
       visual: normalizeVisual(phoneSample.visual),
+      spatial: normalizeSpatial(phoneSample.spatial),
       camera: {
         x: finite(camera.x),
         y: finite(camera.y),
@@ -75,9 +129,11 @@
 
   function derivePose(anchor, phoneSample = {}, context = {}) {
     if (!anchor) return null;
-    const orientation = remapOrientation(phoneSample);
+    const orientation = sampleOrientation(phoneSample);
     const visual = normalizeVisual(phoneSample.visual);
+    const spatial = normalizeSpatial(phoneSample.spatial);
     const baseVisual = anchor.visual || normalizeVisual();
+    const baseSpatial = anchor.spatial || normalizeSpatial();
     const yawDelta = shortestAngleDelta(anchor.orientation.yaw, orientation.yaw);
     const pitchDelta = wrapDegrees(orientation.pitch - anchor.orientation.pitch);
     const rollDelta = wrapDegrees(orientation.roll - anchor.orientation.roll);
@@ -103,11 +159,32 @@
     let truck = 0;
     let pedestal = 0;
     let dolly = 0;
-    const translationTrusted = visual.confidence >= confidenceThreshold;
-    if (translationTrusted) {
-      truck = (visual.x - finite(baseVisual.x)) * virtualTravelScale;
-      pedestal = (visual.y - finite(baseVisual.y)) * virtualTravelScale;
-      dolly = (visual.z - finite(baseVisual.z)) * virtualTravelScale;
+    let translationTrusted = false;
+    let translationMetric = false;
+    let translationConfidence = visual.confidence;
+    let sourceUnits = "relative-optical-flow";
+    let outputUnits = "virtual-scene-travel";
+
+    if (spatial.metric && baseSpatial.metric) {
+      translationMetric = true;
+      translationConfidence = spatial.confidence;
+      translationTrusted = spatial.confidence >= confidenceThreshold;
+      sourceUnits = "meters";
+      outputUnits = "virtual-scene-meters";
+      if (translationTrusted) {
+        truck = spatial.position.x - baseSpatial.position.x;
+        pedestal = spatial.position.y - baseSpatial.position.y;
+        // WebXR is right-handed and the viewer looks toward -Z. Moving the
+        // physical phone forward therefore makes Z smaller, hence this sign.
+        dolly = baseSpatial.position.z - spatial.position.z;
+      }
+    } else {
+      translationTrusted = visual.confidence >= confidenceThreshold;
+      if (translationTrusted) {
+        truck = (visual.x - finite(baseVisual.x)) * virtualTravelScale;
+        pedestal = (visual.y - finite(baseVisual.y)) * virtualTravelScale;
+        dolly = (visual.z - finite(baseVisual.z)) * virtualTravelScale;
+      }
     }
     const worldX = rightX * truck + forwardX * dolly;
     const worldY = rightY * truck + forwardY * dolly;
@@ -120,6 +197,7 @@
       tiltDeg: finite(anchor.camera.tiltDeg) - pitchDelta * tiltSensitivity,
       focal: finite(anchor.camera.focal, 35),
       diagnostic: {
+        trackingMode: translationMetric ? "webxr" : "visual-flow",
         yawDelta: Number(yawDelta.toFixed(3)),
         pitchDelta: Number(pitchDelta.toFixed(3)),
         rollDelta: Number(rollDelta.toFixed(3)),
@@ -127,10 +205,10 @@
           truck,
           pedestal,
           dolly,
-          confidence: visual.confidence,
-          metric: false,
-          sourceUnits: "relative-optical-flow",
-          outputUnits: "virtual-scene-travel",
+          confidence: translationConfidence,
+          metric: translationMetric,
+          sourceUnits,
+          outputUnits,
         },
         translationTrusted,
       },
@@ -250,6 +328,10 @@
     normalizeScreenAngle,
     remapOrientation,
     normalizeVisual,
+    normalizeQuaternion,
+    normalizeSpatial,
+    quaternionToOrientation,
+    sampleOrientation,
     createAnchor,
     derivePose,
     smoothingAlpha,
