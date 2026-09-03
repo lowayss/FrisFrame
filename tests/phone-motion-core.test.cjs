@@ -51,6 +51,60 @@ test("legacy visualScaleMeters option remains a compatibility alias", () => {
   assert.equal(pose.x, 0.7);
 });
 
+test("WebXR 6DoF maps local-space meter displacement one-to-one into the virtual stage", () => {
+  const baseline = {
+    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+    orientation:{alpha:200,beta:80,gamma:20},
+  };
+  const anchor = core.createAnchor(baseline,{x:0.5,y:0.5,height:1.6,panDeg:30,tiltDeg:5,focal:35});
+  const pose = core.derivePose({ ...anchor },{
+    spatial:{mode:"webxr",metric:true,position:{x:0.5,y:0.2,z:-1},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+    orientation:{alpha:320,beta:-80,gamma:-20},
+  },{stageWidth:10,stageDepth:20,forward:{x:1,z:0},confidenceThreshold:0.2});
+
+  assert.equal(pose.x,0.6);
+  assert.equal(pose.y,0.525);
+  assert.equal(pose.height,1.8);
+  assert.equal(pose.panDeg,30,"identity WebXR orientation should ignore conflicting DeviceOrientation data");
+  assert.equal(pose.tiltDeg,5);
+  assert.equal(pose.diagnostic.trackingMode,"webxr");
+  assert.equal(pose.diagnostic.translation.metric,true);
+  assert.equal(pose.diagnostic.translation.sourceUnits,"meters");
+  assert.equal(pose.diagnostic.translation.outputUnits,"virtual-scene-meters");
+  assert.equal(pose.diagnostic.translation.truck,0.5);
+  assert.equal(pose.diagnostic.translation.pedestal,0.2);
+  assert.equal(pose.diagnostic.translation.dolly,1);
+});
+
+test("WebXR orientation takes precedence over DeviceOrientation and drives relative pan", () => {
+  const half = Math.sin(Math.PI / 8);
+  const scalar = Math.cos(Math.PI / 8);
+  const anchor = core.createAnchor({
+    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+    orientation:{alpha:250,beta:70,gamma:30},
+  },{x:0.5,y:0.5,height:1.6,panDeg:100,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,{
+    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
+    orientation:{alpha:10,beta:-70,gamma:-30},
+  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  assert.ok(Math.abs(core.shortestAngleDelta(145,pose.panDeg)) < 0.001,`unexpected WebXR pan ${pose.panDeg}`);
+  assert.equal(pose.diagnostic.translation.metric,true);
+});
+
+test("low-confidence WebXR translation is marked untrusted and can be held by the stabilizer", () => {
+  const anchor = core.createAnchor({
+    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+  },{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,{
+    spatial:{mode:"webxr",metric:true,position:{x:5,y:5,z:-5},orientation:{x:0,y:0,z:0,w:1},confidence:0.05},
+  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0},confidenceThreshold:0.2});
+  assert.equal(pose.diagnostic.translation.metric,true);
+  assert.equal(pose.diagnostic.translationTrusted,false);
+  assert.equal(pose.x,0.5);
+  assert.equal(pose.y,0.5);
+  assert.equal(pose.height,1.6);
+});
+
 test("low-confidence visual flow is ignored while orientation still drives pan tilt", () => {
   const anchor = core.createAnchor({orientation:{alpha:5,beta:0,gamma:0},visual:{x:0,y:0,z:0,confidence:1}}, {x:0.2,y:0.3,height:1.4,panDeg:30,tiltDeg:2,focal:35});
   const pose = core.derivePose(anchor, {orientation:{alpha:15,beta:5,gamma:0},visual:{x:5,y:5,z:5,confidence:0.05}}, {stageWidth:10,stageDepth:10,forward:{x:1,z:0},confidenceThreshold:0.2});
@@ -104,7 +158,7 @@ test("landscape remap uses gamma for pitch so rotating the screen does not swap 
   assert.deepEqual(core.remapOrientation({screenAngle:-90,orientation:{alpha:30,beta:40,gamma:12}}), {yaw:30,pitch:12,roll:-40,screenAngle:-90});
 });
 
-test("desktop physical-camera UX exposes stabilization, confidence hold, recenter and live 3D redraw", () => {
+test("desktop physical-camera UX exposes stabilization, confidence hold, recenter, metric badge and live 3D redraw", () => {
   assert.match(phoneMotionUx, /STABILIZATION_PRESETS/);
   assert.match(phoneMotionUx, /raw:\s*\{\s*label:"RAW"/);
   assert.match(phoneMotionUx, /handheld:\s*\{\s*label:"HANDHELD"/);
@@ -114,6 +168,8 @@ test("desktop physical-camera UX exposes stabilization, confidence hold, recente
   assert.doesNotMatch(phoneMotionUx, /visualScaleMeters:1\.75/);
   assert.match(phoneMotionUx, /heldTranslation/);
   assert.match(phoneMotionUx, /이동 HOLD/);
+  assert.match(phoneMotionUx, /WebXR 6DoF · METRIC/);
+  assert.match(phoneMotionUx, /translation\?\.metric === true/);
   assert.match(phoneMotionUx, /renderThreeView\(renderState, true\)/);
   assert.match(phoneMotionUx, /data-phone-motion-recenter/);
   assert.match(phoneMotionUx, /setStabilization/);
