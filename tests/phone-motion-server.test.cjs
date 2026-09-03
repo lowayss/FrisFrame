@@ -86,8 +86,9 @@ test("motion page processes camera frames locally and progressively enables WebX
   assert.doesNotMatch(html,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
-test("Physical Camera pairing tells users that phone video stays local while transport sends derived motion only", () => {
-  assert.match(phoneMotionUx,/휴대폰 영상은 폰 안에서만 분석됩니다/);
+test("Physical Camera UX explains metric boundaries and exposes no image serialization path", () => {
+  assert.match(phoneMotionUx,/WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다/);
+  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아니라/);
   assert.doesNotMatch(phoneMotionUx,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
