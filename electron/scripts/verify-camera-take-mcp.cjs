@@ -95,12 +95,13 @@ function main() {
       throw new Error(`Camera Take 패키지 fixture가 올바르지 않습니다: ${JSON.stringify(fixture)}`);
     }
 
-    const listed = runMcpRequest(executable, database, {
+    const listedTools = runMcpRequest(executable, database, {
       jsonrpc: "2.0",
       id: 101,
       method: "tools/list",
     });
-    const toolNames = new Set((listed?.result?.tools || []).map((tool) => tool.name));
+    const toolNames = new Set((listedTools?.result?.tools || []).map((tool) => tool.name));
+    assert.ok(toolNames.has("list_camera_takes"), "패키지 MCP manifest에 list_camera_takes가 없습니다.");
     assert.ok(toolNames.has("get_camera_take_context"), "패키지 MCP manifest에 get_camera_take_context가 없습니다.");
 
     const before = parseToolJson(runMcpRequest(executable, database, {
@@ -110,19 +111,38 @@ function main() {
       params: { name: "get_project", arguments: { project_id: fixture.project_id } },
     }), "Camera Take 읽기 전 프로젝트");
 
-    const context = parseToolJson(runMcpRequest(executable, database, {
+    const browser = parseToolJson(runMcpRequest(executable, database, {
       jsonrpc: "2.0",
       id: 103,
+      method: "tools/call",
+      params: { name: "list_camera_takes", arguments: { project_id: fixture.project_id } },
+    }), "패키지 Camera Take Browser");
+
+    const context = parseToolJson(runMcpRequest(executable, database, {
+      jsonrpc: "2.0",
+      id: 104,
       method: "tools/call",
       params: { name: "get_camera_take_context", arguments: { project_id: fixture.project_id } },
     }), "패키지 Camera Take Context");
 
     const after = parseToolJson(runMcpRequest(executable, database, {
       jsonrpc: "2.0",
-      id: 104,
+      id: 105,
       method: "tools/call",
       params: { name: "get_project", arguments: { project_id: fixture.project_id } },
     }), "Camera Take 읽기 후 프로젝트");
+
+    assert.equal(browser.schema, "frisframe-camera-take-list");
+    assert.equal(browser.version, 1);
+    assert.equal(browser.read_only, true);
+    assert.equal(browser.final_prompt_owner, "mcp-client");
+    assert.equal(browser.available, false, "기본 패키지 fixture에는 Physical Camera Take가 없어야 합니다.");
+    assert.equal(browser.total_count, 0);
+    assert.equal(browser.returned_count, 0);
+    assert.deepEqual(browser.items, []);
+    assert.equal(browser.next_step?.tool, "get_camera_take_context");
+    assert.equal(browser.next_step?.argument, "take_id");
+    assert.equal(Number(browser.revision), Number(fixture.revision));
 
     assert.equal(context.schema, "frisframe-camera-take-context");
     assert.equal(context.version, 1);
@@ -131,10 +151,10 @@ function main() {
     assert.equal(context.available, false, "기본 패키지 fixture에는 Physical Camera Take가 없어야 합니다.");
     assert.equal(context.selection?.strategy, "none");
     assert.equal(Number(context.revision), Number(fixture.revision));
-    assert.equal(Number(before.revision), Number(after.revision), "Camera Take Context 읽기가 revision을 변경했습니다.");
-    assert.deepEqual(before.document, after.document, "Camera Take Context 읽기가 프로젝트 문서를 변경했습니다.");
+    assert.equal(Number(before.revision), Number(after.revision), "Camera Take 조회가 revision을 변경했습니다.");
+    assert.deepEqual(before.document, after.document, "Camera Take 조회가 프로젝트 문서를 변경했습니다.");
 
-    console.log(`Packaged Camera Take Context MCP verified: ${process.platform}`);
+    console.log(`Packaged Camera Take Browser/Context MCP verified: ${process.platform}`);
   } finally {
     fs.rmSync(smokeDir, { recursive: true, force: true });
   }
