@@ -9,6 +9,7 @@ const readline = require("node:readline");
 const { registerClipboardImageHandler } = require("./clipboard.cjs");
 const { registerFileSaveHandler } = require("./file-save.cjs");
 const { createPhoneRemoteBridge } = require("./phone-remote.cjs");
+const { createPhoneMotionBridge } = require("./phone-motion-server.cjs");
 
 app.setName("FrisFrame");
 
@@ -18,6 +19,7 @@ let serverOrigin = "";
 let quitting = false;
 let logFile = "";
 let phoneRemoteBridge = null;
+let phoneMotionBridge = null;
 
 function writeLog(message) {
   const line = `[${new Date().toISOString()}] ${String(message).trim()}\n`;
@@ -318,19 +320,31 @@ function rendererEventAllowed(event) {
   return rendererUrlMatchesOrigin(value, serverOrigin);
 }
 
+function combinedPhoneRemoteConfig() {
+  const remote = phoneRemoteBridge?.getConfig?.() || null;
+  if (!remote) return null;
+  return { ...remote, motion:phoneMotionBridge?.getConfig?.() || null };
+}
+
 ipcMain.handle("phone-remote:start", async (event) => {
   if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
   if (!phoneRemoteBridge) throw new Error("Phone Camera Remote가 준비되지 않았습니다.");
-  return phoneRemoteBridge.start();
+  const remote = await phoneRemoteBridge.start();
+  if (phoneMotionBridge) {
+    try { await phoneMotionBridge.start(); }
+    catch (error) { writeLog(`phone physical camera start failed: ${error.stack || error}`); }
+  }
+  return { ...remote, motion:phoneMotionBridge?.getConfig?.() || null };
 });
 ipcMain.handle("phone-remote:stop", async (event) => {
   if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
   phoneRemoteBridge?.stop?.();
+  phoneMotionBridge?.stop?.();
   return true;
 });
 ipcMain.handle("phone-remote:status", async (event) => {
   if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
-  return phoneRemoteBridge?.getConfig?.() || null;
+  return combinedPhoneRemoteConfig();
 });
 
 function createMainWindow(origin) {
@@ -365,7 +379,7 @@ function createMainWindow(origin) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
   window.webContents.on("did-finish-load", () => {
-    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
+    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "phone-motion-core.js", "phone-motion-camera-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
       const uxPath = path.join(__dirname, filename);
       try {
         const source = fs.readFileSync(uxPath, "utf8");
@@ -415,6 +429,11 @@ else {
     try {
       const origin = await startLocalServer();
       phoneRemoteBridge = createPhoneRemoteBridge({ getWindow: () => mainWindow, writeLog });
+      phoneMotionBridge = createPhoneMotionBridge({
+        getWindow:() => mainWindow,
+        writeLog,
+        tlsDirectory:path.join(app.getPath("userData"), "phone-motion-tls"),
+      });
       createMainWindow(origin);
     } catch (error) {
       await showStartupFailure(error);
@@ -428,6 +447,8 @@ else {
     quitting = true;
     phoneRemoteBridge?.stop?.();
     phoneRemoteBridge = null;
+    phoneMotionBridge?.stop?.();
+    phoneMotionBridge = null;
     killServerProcess();
   });
 }
