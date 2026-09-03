@@ -465,6 +465,7 @@
       window.FrisFrameCameraOperatorInputs = {
         get mode() { return selectedMode; },
         setMode,
+        startRecording: syntheticStart,
         get gamepadConnected() { return Boolean(firstGamepad()); },
         get phoneConnected() { return Date.now() - phoneState.receivedAt < 900; },
         get phoneRemoteOpen() { return Boolean(phoneConfig); },
