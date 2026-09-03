@@ -129,13 +129,17 @@
       ? Math.round(diagnostic.translation.confidence * 100)
       : 0;
     const held = diagnostic?.stabilization?.heldTranslation === true;
+    const metric = diagnostic?.translation?.metric === true;
     badge.textContent = live
       ? (held
-        ? `회전 추적 · 이동 HOLD · ${confidence}% visual`
-        : `실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`)
+        ? `회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
+        : (metric
+          ? `WebXR 6DoF · METRIC · ${STABILIZATION_PRESETS[stabilizationPreset].label}`
+          : `실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`))
       : "실제 모션 대기";
     badge.classList.toggle("is-live", live);
     badge.classList.toggle("is-hold", live && held);
+    badge.classList.toggle("is-metric", live && metric);
   }
 
   function updatePresetButtons() {
@@ -178,7 +182,7 @@
       return;
     }
     const qr = motionQr(url);
-    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. 휴대폰 영상은 폰 안에서만 분석됩니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도입니다. 추적 신뢰도가 낮아지면 위치는 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
+    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. Android WebXR 지원 기기는 metric 6DoF를 우선 사용하고, iPhone/미지원 기기는 Visual Flow로 폴백합니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
     const urlNode = body.querySelector(".frisframe-phone-url");
     if (urlNode) urlNode.textContent = url;
     body.querySelector("[data-copy-motion-url]")?.addEventListener("click", async () => {
@@ -199,7 +203,7 @@
   style.textContent = `
     [data-frisframe-phone-motion-box]{display:grid;gap:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.07)}
     .frisframe-phone-motion-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:9px;color:#d9e1e8}
-    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}
+    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}[data-frisframe-phone-motion-badge].is-metric{color:#7ed9ff}
     .frisframe-phone-motion-layout{display:grid;grid-template-columns:86px minmax(0,1fr);gap:9px;align-items:center}.frisframe-phone-motion-copy{display:grid;gap:5px;min-width:0}
     .frisframe-phone-motion-qr{width:86px;height:86px;padding:4px;background:#fff;border-radius:5px;overflow:hidden}.frisframe-phone-motion-qr svg{width:100%;height:100%;display:block}
     .frisframe-phone-motion-copy small,.frisframe-phone-motion-privacy{font-size:7px;color:#7e8993;overflow-wrap:anywhere;line-height:1.35}
