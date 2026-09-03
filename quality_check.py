@@ -90,6 +90,7 @@ def main() -> None:
         "electron/scripts/smoke-package.cjs",
         "electron/scripts/verify-runtime-source-parity.cjs",
         "electron/scripts/verify-package.cjs",
+        "electron/scripts/verify-camera-take-mcp.cjs",
         "electron/scripts/verify-orientation-revision.cjs",
         "electron/scripts/build-python-runtime.cjs",
     ):
