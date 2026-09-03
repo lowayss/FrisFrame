@@ -14,6 +14,7 @@ const expectedInjection = [
   "camera-operator-inputs-ux.js",
   "phone-motion-core.js",
   "phone-motion-camera-ux.js",
+  "camera-take-browser-ux.js",
   "selection-ux.js",
   "alignment-ux.js",
   "history-safety-ux.js",

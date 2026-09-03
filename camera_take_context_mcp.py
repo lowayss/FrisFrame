@@ -20,8 +20,8 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
         "name": "list_camera_takes",
         "description": (
             "선택한 컷의 Physical Camera Take 목록을 읽기 전용으로 반환합니다. "
-            "최근 Take부터 추적 방식·metric 여부·안정화·신뢰도·promptSeed를 간단히 비교한 뒤 "
-            "items[].id를 get_camera_take_context의 take_id로 넘겨 상세 컨텍스트를 읽을 수 있습니다."
+            "최근 Take부터 추적 방식·metric 여부·안정화·신뢰도·promptSeed를 간단히 비교하고 "
+            "FrisFrame UI에서 명시적으로 선택한 AI Take도 표시합니다."
         ),
         "inputSchema": {
             "type": "object",
@@ -44,8 +44,8 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
         "name": "get_camera_take_context",
         "description": (
             "선택한 컷의 Physical Camera Take를 읽기 전용으로 요약합니다. "
-            "저장된 promptSeed/promptPolicy와 WebXR·Visual Flow metric 의미를 그대로 반환하며 "
-            "FrisFrame 자체는 최종 생성 프롬프트를 만들거나 프로젝트를 수정하지 않습니다."
+            "명시적 take_id가 없으면 FrisFrame에서 AI 사용으로 선택한 Take, 그 다음 최신 Take를 사용합니다. "
+            "저장된 promptSeed/promptPolicy와 WebXR·Visual Flow metric 의미를 그대로 반환합니다."
         ),
         "inputSchema": {
             "type": "object",
@@ -55,7 +55,7 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
                 "cut_index": {"type": "integer", "minimum": 0, "default": 0},
                 "take_id": {
                     "type": "string",
-                    "description": "특정 Camera Operator Take ID. 생략하면 latestCameraOperatorTakeId, 없으면 마지막 Take를 사용합니다.",
+                    "description": "특정 Camera Operator Take ID. 생략하면 UI selected Take → latest Take → 마지막 Take 순서로 사용합니다.",
                 },
             },
             "required": ["project_id"],
@@ -101,22 +101,28 @@ def _valid_takes(motion):
 def _select_take(motion, requested_take_id=None):
     takes = _valid_takes(motion)
     requested = str(requested_take_id or "").strip()
+    selected_id = str(motion.get("selectedCameraOperatorTakeId") or "").strip() if isinstance(motion, dict) else ""
     latest_id = str(motion.get("latestCameraOperatorTakeId") or "").strip() if isinstance(motion, dict) else ""
 
     if requested:
         selected = next((entry for entry in takes if str(entry.get("id")) == requested), None)
         if not selected:
             raise ValueError(f"Camera Operator Take를 찾을 수 없습니다: {requested}")
-        return selected, "requested-id", latest_id, takes
+        return selected, "requested-id", selected_id, latest_id, takes
+
+    if selected_id:
+        selected = next((entry for entry in takes if str(entry.get("id")) == selected_id), None)
+        if selected:
+            return selected, "selected-id", selected_id, latest_id, takes
 
     if latest_id:
         selected = next((entry for entry in takes if str(entry.get("id")) == latest_id), None)
         if selected:
-            return selected, "latest-id", latest_id, takes
+            return selected, "latest-id", selected_id, latest_id, takes
 
     if takes:
-        return takes[-1], "last-take-fallback", latest_id, takes
-    return None, "none", latest_id, takes
+        return takes[-1], "last-take-fallback", selected_id, latest_id, takes
+    return None, "none", selected_id, latest_id, takes
 
 
 def _camera_timeline(blocking):
@@ -146,17 +152,19 @@ def _camera_timeline(blocking):
     }
 
 
-def _take_summary(take, record_index, latest_id):
+def _take_summary(take, record_index, selected_id, latest_id):
     tracking = take.get("tracking") if isinstance(take.get("tracking"), dict) else {}
     confidence = tracking.get("confidence") if isinstance(tracking.get("confidence"), dict) else {}
     translation = tracking.get("translation") if isinstance(tracking.get("translation"), dict) else {}
     prompt_policy = take.get("promptPolicy") if isinstance(take.get("promptPolicy"), dict) else {}
     samples = int(tracking.get("samples") or 0)
     held = int(tracking.get("heldTranslationSamples") or 0)
+    take_id = str(take.get("id"))
     return {
-        "id": str(take.get("id")),
+        "id": take_id,
         "record_index": int(record_index),
-        "is_latest": str(take.get("id")) == latest_id,
+        "is_latest": take_id == latest_id,
+        "is_selected": take_id == selected_id,
         "source": take.get("source"),
         "created_at": take.get("createdAt"),
         "start_time": take.get("startTime"),
@@ -188,10 +196,11 @@ def list_camera_takes(args):
     blocking = _blocking_from_project(project, scene_index, cut_index)
     motion = blocking.get("motion") if isinstance(blocking.get("motion"), dict) else {}
     takes = _valid_takes(motion)
+    selected_id = str(motion.get("selectedCameraOperatorTakeId") or "").strip()
     latest_id = str(motion.get("latestCameraOperatorTakeId") or "").strip()
     indexed = list(enumerate(takes))
-    selected = list(reversed(indexed[-limit:]))
-    items = [_take_summary(take, index, latest_id) for index, take in selected]
+    visible = list(reversed(indexed[-limit:]))
+    items = [_take_summary(take, index, selected_id, latest_id) for index, take in visible]
 
     return {
         "schema": "frisframe-camera-take-list",
@@ -201,6 +210,7 @@ def list_camera_takes(args):
         "scene_index": scene_index,
         "cut_index": cut_index,
         "available": bool(takes),
+        "selected_take_id": selected_id or None,
         "latest_take_id": latest_id or None,
         "total_count": len(takes),
         "returned_count": len(items),
@@ -208,10 +218,11 @@ def list_camera_takes(args):
         "camera_timeline": _camera_timeline(blocking),
         "read_only": True,
         "final_prompt_owner": "mcp-client",
+        "selection_priority": ["requested-id", "selected-id", "latest-id", "last-take-fallback"],
         "next_step": {
             "tool": "get_camera_take_context",
             "argument": "take_id",
-            "instruction": "선택한 items[].id를 take_id로 전달해 상세 Take 컨텍스트와 promptPolicy를 읽습니다.",
+            "instruction": "특정 Take를 강제로 사용할 때 items[].id를 take_id로 전달합니다. 생략하면 UI AI 선택 Take가 우선됩니다.",
         },
     }
 
@@ -225,7 +236,7 @@ def get_camera_take_context(args):
     payload, project = _project_payload(project_id)
     blocking = _blocking_from_project(project, scene_index, cut_index)
     motion = blocking.get("motion") if isinstance(blocking.get("motion"), dict) else {}
-    selected, selection, latest_id, takes = _select_take(motion, args.get("take_id"))
+    selected, selection, selected_id, latest_id, takes = _select_take(motion, args.get("take_id"))
     selected_copy = _clone(selected) if selected else None
 
     return {
@@ -239,6 +250,7 @@ def get_camera_take_context(args):
         "selection": {
             "strategy": selection,
             "requested_take_id": str(args.get("take_id") or "").strip() or None,
+            "selected_take_id": selected_id or None,
             "latest_take_id": latest_id or None,
             "resolved_take_id": selected_copy.get("id") if selected_copy else None,
             "take_count": len(takes),

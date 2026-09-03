@@ -57,6 +57,7 @@
       "electron/phone-motion-server.cjs",
       "electron/phone-motion-core.js",
       "electron/phone-motion-camera-ux.js",
+      "electron/camera-take-browser-ux.js",
       "electron/selection-ux.js",
       "electron/alignment-ux.js",
       "electron/history-safety-ux.js",
