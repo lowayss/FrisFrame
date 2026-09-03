@@ -12,6 +12,8 @@ const expected = [
   "interaction-ux.js",
   "camera-operator-live-ux.js",
   "camera-operator-inputs-ux.js",
+  "phone-motion-core.js",
+  "phone-motion-camera-ux.js",
   "selection-ux.js",
   "alignment-ux.js",
   "history-safety-ux.js",
