@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { sanitizeMotionInput, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
 const { extensionConfig } = require("../electron/phone-remote-tls.cjs");
+
+const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
 
 test("motion transport clamps hostile sensor input and never marks visual flow metric", () => {
   const value = sanitizeMotionInput({
@@ -78,9 +82,13 @@ test("motion page processes camera frames locally and progressively enables WebX
   assert.match(html,/XRWebGLLayer/);
   assert.match(html,/mode:"webxr",metric:true/);
   assert.match(html,/6DoF WebXR 시작/);
-  assert.match(html,/Visual Flow/);
+  assert.match(html,/후면 카메라 Visual Flow/);
   assert.doesNotMatch(html,/toDataURL|base64|image\/jpeg|image\/png/);
-  assert.match(html,/카메라 영상은 이 휴대폰 안에서만|영상은 폰 안에서만/);
+});
+
+test("Physical Camera pairing tells users that phone video stays local while transport sends derived motion only", () => {
+  assert.match(phoneMotionUx,/휴대폰 영상은 폰 안에서만 분석됩니다/);
+  assert.doesNotMatch(phoneMotionUx,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
 test("TLS SAN configuration includes localhost and LAN IPs", () => {
