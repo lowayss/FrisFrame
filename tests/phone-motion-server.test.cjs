@@ -20,6 +20,38 @@ test("motion transport clamps hostile sensor input and never marks visual flow m
   assert.deepEqual(value.motion.orientation,{alpha:360,beta:-180,gamma:90,absolute:true});
   assert.deepEqual(value.motion.acceleration,{x:100,y:-100,z:0});
   assert.deepEqual(value.motion.visual,{x:8,y:-8,z:8,confidence:1,metric:false});
+  assert.deepEqual(value.motion.spatial,{
+    mode:"none",metric:false,
+    position:{x:0,y:0,z:0},
+    orientation:{x:0,y:0,z:0,w:1},
+    confidence:0,
+  });
+});
+
+test("WebXR spatial input is the only transport path allowed to claim metric 6DoF", () => {
+  const value = sanitizeMotionInput({
+    motion:{
+      enabled:true,
+      spatial:{
+        mode:"webxr",metric:true,
+        position:{x:120,y:-120,z:2.25},
+        orientation:{x:0,y:2,z:0,w:2},
+        confidence:3,
+      },
+    },
+  });
+  assert.equal(value.motion.spatial.mode,"webxr");
+  assert.equal(value.motion.spatial.metric,true);
+  assert.deepEqual(value.motion.spatial.position,{x:50,y:-50,z:2.25});
+  assert.equal(value.motion.spatial.confidence,1);
+  assert.ok(Math.abs(value.motion.spatial.orientation.y - Math.SQRT1_2) < 1e-9);
+  assert.ok(Math.abs(value.motion.spatial.orientation.w - Math.SQRT1_2) < 1e-9);
+
+  const spoofed = sanitizeMotionInput({
+    motion:{spatial:{mode:"visual-flow",metric:true,position:{x:1,y:2,z:3},confidence:1}},
+  });
+  assert.equal(spoofed.motion.spatial.mode,"none");
+  assert.equal(spoofed.motion.spatial.metric,false);
 });
 
 test("bootstrap keeps CA onboarding separate from the HTTPS motion controller", () => {
@@ -27,17 +59,28 @@ test("bootstrap keeps CA onboarding separate from the HTTPS motion controller", 
   assert.match(html,/FrisFrame 로컬 CA 설치/);
   assert.match(html,/HTTPS 모션 카메라 열기/);
   assert.match(html,/AA:BB/);
+  assert.match(html,/WebXR/);
+  assert.match(html,/Visual Flow/);
 });
 
-test("motion page processes camera frames locally and sends only derived motion fields", () => {
+test("motion page processes camera frames locally and progressively enables WebXR 6DoF", () => {
   const html = motionHtml("token");
   assert.match(html,/getUserMedia/);
   assert.match(html,/deviceorientation/);
   assert.match(html,/devicemotion/);
   assert.match(html,/calibrationId/);
   assert.match(html,/visual:\{/);
+  assert.match(html,/spatial:\{/);
+  assert.match(html,/navigator\.xr\.isSessionSupported\("immersive-ar"\)/);
+  assert.match(html,/navigator\.xr\.requestSession\("immersive-ar"/);
+  assert.match(html,/requestReferenceSpace\("local"\)/);
+  assert.match(html,/getViewerPose\(xrSpace\)/);
+  assert.match(html,/XRWebGLLayer/);
+  assert.match(html,/mode:"webxr",metric:true/);
+  assert.match(html,/6DoF WebXR 시작/);
+  assert.match(html,/Visual Flow/);
   assert.doesNotMatch(html,/toDataURL|base64|image\/jpeg|image\/png/);
-  assert.match(html,/카메라 영상은 이 휴대폰 안에서만/);
+  assert.match(html,/카메라 영상은 이 휴대폰 안에서만|영상은 폰 안에서만/);
 });
 
 test("TLS SAN configuration includes localhost and LAN IPs", () => {
