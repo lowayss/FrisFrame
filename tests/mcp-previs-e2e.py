@@ -136,6 +136,22 @@ def main():
                 manual_document["project"]["title"] = "UI에서 수정한 제목"
                 manual_blocking = manual_document["project"]["scenes"][0]["cuts"][0]["blocking"]
                 manual_blocking["camera"]["focal"] = 50
+                physical_take = {
+                    "schemaVersion": 1,
+                    "id": "physical-e2e-take",
+                    "source": "physical-camera",
+                    "startTime": 0.5,
+                    "endTime": 2.5,
+                    "tracking": {
+                        "mode": "webxr",
+                        "metric": True,
+                        "translation": {"truck": 0.1, "pedestal": 0.0, "dolly": 0.8, "units": "meters-local-space"},
+                    },
+                    "promptSeed": "Physical Camera Take: preserve me across MCP edits.",
+                    "promptPolicy": {"finalPromptOwner": "mcp-client", "metricDistanceAllowed": True},
+                }
+                manual_blocking["motion"]["cameraOperatorTakes"] = [physical_take]
+                manual_blocking["motion"]["latestCameraOperatorTakeId"] = physical_take["id"]
                 stale_key_id = next(
                     key["id"] for key in manual_blocking["motion"]["keyframes"]
                     if key["source"] == "e2e-actor"
@@ -166,6 +182,8 @@ def main():
                 fresh_blocking = fresh["document"]["project"]["scenes"][0]["cuts"][0]["blocking"]
                 assert fresh_blocking["camera"]["focal"] == 50
                 assert all(key["id"] != stale_key_id for key in fresh_blocking["motion"]["keyframes"])
+                assert fresh_blocking["motion"]["latestCameraOperatorTakeId"] == physical_take["id"]
+                assert fresh_blocking["motion"]["cameraOperatorTakes"] == [physical_take]
 
                 # Re-read the revision, then continue authoring through MCP.
                 final_result, final_text = call_tool("apply_previs_plan", {
@@ -187,6 +205,8 @@ def main():
                 camera_keys = [key for key in final_blocking["motion"]["keyframes"] if key["source"] == "camera"]
                 assert [key["time"] for key in camera_keys] == [0.0, 4.0]
                 assert camera_keys[-1]["pose"]["focal"] == 85
+                assert final_blocking["motion"]["latestCameraOperatorTakeId"] == physical_take["id"]
+                assert final_blocking["motion"]["cameraOperatorTakes"] == [physical_take]
 
                 conn = sqlite3.connect(db_path)
                 try:
@@ -199,7 +219,7 @@ def main():
                     conn.close()
                 assert revision == 4
                 assert versions == [1, 2, 3], versions
-                print("MCP E2E: atomic plan, rollback, UI save, revision conflict, and resumed authoring passed")
+                print("MCP E2E: atomic plan, rollback, UI save, Physical Camera take preservation, revision conflict, and resumed authoring passed")
             finally:
                 if process.stdin is not None:
                     try:

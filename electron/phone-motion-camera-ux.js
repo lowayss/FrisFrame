@@ -22,6 +22,8 @@
     : "handheld";
   let stabilizer = null;
   let activeTake = null;
+  let pendingStart = null;
+  let pendingFinish = false;
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, Number(value) || 0));
   const core = () => window.FrisFramePhoneMotionCore;
@@ -46,6 +48,25 @@
     };
   }
 
+  function snapshotTakeStart() {
+    return {
+      startedAt:new Date().toISOString(),
+      startTime:Number(state.motion?.playhead || 0),
+      startPose:currentCamera(),
+    };
+  }
+
+  function markTakeStart() {
+    if (inputs()?.mode !== "phone") return;
+    pendingFinish = false;
+    pendingStart = snapshotTakeStart();
+  }
+
+  function markTakeFinish() {
+    if (inputs()?.mode !== "phone" || operator()?.mode !== "recording") return;
+    pendingFinish = true;
+  }
+
   function movementPhrase(value, positive, negative, metric) {
     const amount = Math.abs(Number(value || 0));
     const epsilon = metric ? 0.015 : 0.04;
@@ -62,14 +83,15 @@
 
   function beginTakeTelemetry() {
     if (activeTake || operator()?.mode !== "recording") return activeTake;
-    const pose = currentCamera();
+    const start = pendingStart || snapshotTakeStart();
+    pendingStart = null;
     activeTake = {
       schemaVersion:1,
       id:`physical_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
       source:"physical-camera",
-      startedAt:new Date().toISOString(),
-      startTime:Number(state.motion?.playhead || 0),
-      startPose:pose,
+      startedAt:start.startedAt,
+      startTime:Number(start.startTime),
+      startPose:cloneValue(start.startPose),
       stabilization:stabilizationPreset,
       samples:0,
       metricSamples:0,
@@ -183,18 +205,58 @@
     state.motion.cameraOperatorTakes = [...previous, take].slice(-TAKE_HISTORY_LIMIT);
     state.motion.latestCameraOperatorTakeId = take.id;
     activeTake = null;
+    pendingStart = null;
     return take;
+  }
+
+  function isFinalOperatorCommit(args) {
+    const options = args?.[0];
+    const preservesCamera = Array.isArray(options?.preserveSourceIds) && options.preserveSourceIds.includes("camera");
+    const maximum = Number.isFinite(Number(globalThis.MAX_TIMELINE_DURATION)) ? Number(globalThis.MAX_TIMELINE_DURATION) : 60;
+    const timelineEnded = Number(state.motion?.playhead || 0) >= maximum - 0.001;
+    return preservesCamera && (pendingFinish || timelineEnded);
   }
 
   function installCommitHook() {
     if (typeof commit !== "function" || commit.__frisframePhysicalTakeHook === true) return;
     const originalCommit = commit;
     const wrappedCommit = function (...args) {
-      finalizeTakeContextBeforeCommit();
-      return originalCommit.apply(this, args);
+      if (isFinalOperatorCommit(args)) finalizeTakeContextBeforeCommit();
+      const result = originalCommit.apply(this, args);
+      if (isFinalOperatorCommit(args)) pendingFinish = false;
+      return result;
     };
     wrappedCommit.__frisframePhysicalTakeHook = true;
     commit = wrappedCommit;
+  }
+
+  function installOperatorFinishHook() {
+    const op = operator();
+    if (!op || typeof op.finish !== "function" || op.finish.__frisframePhysicalTakeHook === true) return;
+    const originalFinish = op.finish;
+    const wrappedFinish = function (...args) {
+      markTakeFinish();
+      return originalFinish.apply(this, args);
+    };
+    wrappedFinish.__frisframePhysicalTakeHook = true;
+    op.finish = wrappedFinish;
+  }
+
+  function installDesktopLifecycleCapture() {
+    document.getElementById("cameraOperatorBtn")?.addEventListener("click", () => {
+      if (operator()?.mode === "recording") markTakeFinish();
+    }, true);
+    const captureStart = () => {
+      const op = operator();
+      if (inputs()?.mode !== "phone" || !op) return;
+      if (op.mode === "armed") markTakeStart();
+      else if (op.mode === "idle") {
+        requestAnimationFrame(() => {
+          if (operator()?.mode === "recording" && !activeTake && !pendingStart) markTakeStart();
+        });
+      }
+    };
+    document.getElementById("cameraFrame")?.addEventListener("pointerdown", captureStart, true);
   }
 
   function createStabilizer() {
@@ -247,6 +309,8 @@
     if (detail.command === "toggle-record" && op.mode === "idle") {
       event.stopImmediatePropagation();
       activeTake = null;
+      pendingStart = null;
+      pendingFinish = false;
       op.arm();
       if (op.mode === "armed") {
         resetTrackingAnchor();
@@ -258,9 +322,21 @@
       return;
     }
 
+    if (detail.command === "toggle-record" && op.mode === "armed") {
+      markTakeStart();
+      return;
+    }
+
+    if ((detail.command === "toggle-record" || detail.command === "stop") && op.mode === "recording") {
+      markTakeFinish();
+      return;
+    }
+
     if (detail.command === "stop" && op.mode === "armed") {
       event.stopImmediatePropagation();
       activeTake = null;
+      pendingStart = null;
+      pendingFinish = false;
       op.cancel?.("Physical Camera STBY를 취소했습니다.");
       resetTrackingAnchor();
       updateDesktopBadge();
@@ -410,10 +486,16 @@
 
   stabilizer = createStabilizer();
   installCommitHook();
+  installOperatorFinishHook();
+  installDesktopLifecycleCapture();
   window.addEventListener("frisframe:phone-remote-input", physicalCommandCapture, true);
   window.addEventListener("frisframe:phone-remote-input", (event) => applyPhysicalMotion(event.detail || {}));
   setInterval(() => {
-    if (activeTake && operator()?.mode === "idle") activeTake = null;
+    if (operator()?.mode === "idle") {
+      activeTake = null;
+      pendingStart = null;
+      pendingFinish = false;
+    }
     refreshPairingUi();
     updateDesktopBadge();
   }, 700);

@@ -9,20 +9,10 @@ const ux = fs.readFileSync(path.join(root, "electron", "phone-motion-camera-ux.j
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const mcp = fs.readFileSync(path.join(root, "mcp_previs_server.py"), "utf8");
 
-test("Physical Camera persists successful take context in the same Camera Operator commit", () => {
-  assert.match(ux, /function finalizeTakeContextBeforeCommit\(\)/);
-  assert.match(ux, /cameraOperatorTakes/);
-  assert.match(ux, /latestCameraOperatorTakeId/);
-  assert.match(ux, /TAKE_HISTORY_LIMIT = 20/);
-  assert.match(ux, /finalizeTakeContextBeforeCommit\(\);\s*\n\s*return originalCommit/);
-  assert.match(ux, /commit = wrappedCommit/);
-  assert.match(ux, /if \(activeTake && operator\(\)\?\.mode === "idle"\) activeTake = null/);
-});
-
-test("runtime commit contains metric Physical Camera context before the original commit executes", () => {
+function makeRuntime(initialMode = "recording") {
   const listeners = [];
   const committed = [];
-  const operator = { mode:"recording", maintainTracking(){} };
+  const operator = { mode:initialMode, maintainTracking(){}, finish(){} };
   const context = {
     console,
     Math,
@@ -34,11 +24,13 @@ test("runtime commit contains metric Physical Camera context before the original
     Array,
     setInterval() { return 1; },
     clearInterval() {},
+    requestAnimationFrame(callback) { callback?.(); return 1; },
     localStorage: { getItem() { return "handheld"; }, setItem() {} },
     document: {
       documentElement: { dataset:{} },
       head: { appendChild() {} },
       createElement() { return { textContent:"" }; },
+      getElementById() { return null; },
       querySelector() { return null; },
       querySelectorAll() { return []; },
     },
@@ -72,14 +64,43 @@ test("runtime commit contains metric Physical Camera context before the original
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(ux, context, { filename:"phone-motion-camera-ux.js" });
+  return { context, operator, listeners, committed };
+}
 
-  const event = { detail:{ receivedAt:1000, motion:{ enabled:true,calibrationId:1 } }, stopImmediatePropagation(){} };
-  listeners.forEach((listener) => listener(event));
-  context.state.motion.playhead = 3.25;
-  context.commit({ preserveSourceIds:["camera"] });
+function dispatchMotion(runtime, detail = {}) {
+  const event = {
+    detail:{ receivedAt:1000, motion:{ enabled:true,calibrationId:1 }, ...detail },
+    stopImmediatePropagation(){},
+  };
+  runtime.listeners.forEach((listener) => listener(event));
+}
 
-  assert.equal(committed.length, 1);
-  const motion = committed[0].motion;
+test("Physical Camera metadata is gated to an actual Camera Operator finish commit", () => {
+  assert.match(ux, /function isFinalOperatorCommit\(args\)/);
+  assert.match(ux, /preservesCamera && \(pendingFinish \|\| timelineEnded\)/);
+  assert.match(ux, /if \(isFinalOperatorCommit\(args\)\) finalizeTakeContextBeforeCommit\(\)/);
+  assert.match(ux, /function installOperatorFinishHook\(\)/);
+  assert.match(ux, /markTakeFinish\(\);\s*\n\s*return originalFinish/);
+  assert.match(ux, /TAKE_HISTORY_LIMIT = 20/);
+  assert.match(ux, /cameraOperatorTakes/);
+  assert.match(ux, /latestCameraOperatorTakeId/);
+});
+
+test("unrelated camera commit during REC cannot finalize Physical Camera metadata", () => {
+  const runtime = makeRuntime("recording");
+  dispatchMotion(runtime);
+  runtime.context.state.motion.playhead = 2.5;
+  runtime.context.commit({ preserveSourceIds:["camera"] });
+
+  assert.equal(runtime.committed.length, 1);
+  assert.equal(runtime.committed[0].motion.cameraOperatorTakes, undefined);
+
+  runtime.operator.finish();
+  runtime.context.state.motion.playhead = 3.25;
+  runtime.context.commit({ preserveSourceIds:["camera"] });
+
+  assert.equal(runtime.committed.length, 2);
+  const motion = runtime.committed[1].motion;
   assert.equal(motion.cameraOperatorTakes.length, 1);
   assert.equal(motion.latestCameraOperatorTakeId, motion.cameraOperatorTakes[0].id);
   const take = motion.cameraOperatorTakes[0];
@@ -91,6 +112,26 @@ test("runtime commit contains metric Physical Camera context before the original
   assert.equal(take.promptPolicy.metricDistanceAllowed, true);
   assert.match(take.promptSeed, /dolly in 0\.80 m/);
   assert.match(take.promptSeed, /Average tracking confidence 92%/);
+});
+
+test("phone REC transition preserves the real REC start time instead of first sensor packet time", () => {
+  const runtime = makeRuntime("armed");
+  runtime.context.state.motion.playhead = 1.5;
+  dispatchMotion(runtime, { command:"toggle-record" });
+
+  runtime.operator.mode = "recording";
+  runtime.context.state.motion.playhead = 2.0;
+  dispatchMotion(runtime);
+  runtime.context.state.motion.playhead = 2.75;
+  runtime.operator.finish();
+  runtime.context.commit({ preserveSourceIds:["camera"] });
+
+  const take = runtime.committed[0].motion.cameraOperatorTakes[0];
+  assert.equal(take.startTime, 1.5);
+  assert.equal(take.endTime, 2.75);
+  assert.equal(take.duration, 1.25);
+  assert.equal(take.camera.start.x, 0.5);
+  assert.equal(take.camera.start.panDeg, 20);
 });
 
 test("take context records tracking semantics needed by downstream generation", () => {
@@ -113,7 +154,7 @@ test("non-metric and mixed tracking cannot claim exact travel distance", () => {
   assert.match(ux, /WebXR values are measured local-space displacement relative to the recentered take origin/);
 });
 
-test("project normalization does not retire the new take-context fields", () => {
+test("project normalization does not retire the take-context fields", () => {
   assert.doesNotMatch(app, /delete state\.motion\.cameraOperatorTakes/);
   assert.doesNotMatch(app, /delete state\.motion\.latestCameraOperatorTakeId/);
   assert.match(app, /state\.motion = state\.motion \|\| \{\}/);
