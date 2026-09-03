@@ -122,6 +122,6 @@ test("project normalization does not retire the new take-context fields", () => 
 test("existing MCP get_project remains the deterministic handoff for final prompt composition", () => {
   assert.match(mcp, /"name": "get_project"/);
   assert.match(mcp, /프로젝트 전체 상태와 revision을 읽습니다/);
-  assert.match(mcp, /final Seedance prompt composition remain outside the app in the MCP conversation/);
+  assert.match(mcp, /FrisFrame itself never calls\s*\n?an AI API/);
   assert.match(mcp, /if name == "get_project":\s*\n\s*return core\.handle_get_project/);
 });
