@@ -70,6 +70,7 @@ def main() -> None:
     import reference_space_consistency_mcp  # noqa: F401 - installs multi-anchor consistency tool
     import reference_space_plan_mcp  # noqa: F401 - installs atomic full-reference plan tool
     import reference_space_orientation_mcp  # noqa: F401 - installs explicit screen-orientation tools
+    import camera_take_context_mcp  # noqa: F401 - installs read-only Physical Camera take context tool
     from mcp_previs_server import main as run_mcp
     run_mcp()
 
