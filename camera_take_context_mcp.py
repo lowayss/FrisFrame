@@ -2,8 +2,9 @@
 """Read-only Physical Camera take context for FrisFrame's previs MCP server.
 
 This extension intentionally does not compose a creative video prompt. It exposes
-persisted Camera Operator take intent and prompt guardrails in a compact payload
-so the MCP client can reuse them without scanning the entire project document.
+persisted Camera Operator take intent and prompt guardrails in compact payloads
+so the MCP client can browse takes and reuse one without scanning the entire
+project document.
 """
 
 from __future__ import annotations
@@ -15,6 +16,30 @@ import mcp_server as core
 
 
 CAMERA_TAKE_CONTEXT_TOOLS = [
+    {
+        "name": "list_camera_takes",
+        "description": (
+            "선택한 컷의 Physical Camera Take 목록을 읽기 전용으로 반환합니다. "
+            "최근 Take부터 추적 방식·metric 여부·안정화·신뢰도·promptSeed를 간단히 비교한 뒤 "
+            "items[].id를 get_camera_take_context의 take_id로 넘겨 상세 컨텍스트를 읽을 수 있습니다."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "scene_index": {"type": "integer", "minimum": 0, "default": 0},
+                "cut_index": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "default": 20,
+                    "description": "최근 Take부터 반환할 최대 개수.",
+                },
+            },
+            "required": ["project_id"],
+        },
+    },
     {
         "name": "get_camera_take_context",
         "description": (
@@ -121,6 +146,76 @@ def _camera_timeline(blocking):
     }
 
 
+def _take_summary(take, record_index, latest_id):
+    tracking = take.get("tracking") if isinstance(take.get("tracking"), dict) else {}
+    confidence = tracking.get("confidence") if isinstance(tracking.get("confidence"), dict) else {}
+    translation = tracking.get("translation") if isinstance(tracking.get("translation"), dict) else {}
+    prompt_policy = take.get("promptPolicy") if isinstance(take.get("promptPolicy"), dict) else {}
+    samples = int(tracking.get("samples") or 0)
+    held = int(tracking.get("heldTranslationSamples") or 0)
+    return {
+        "id": str(take.get("id")),
+        "record_index": int(record_index),
+        "is_latest": str(take.get("id")) == latest_id,
+        "source": take.get("source"),
+        "created_at": take.get("createdAt"),
+        "start_time": take.get("startTime"),
+        "end_time": take.get("endTime"),
+        "duration": take.get("duration"),
+        "stabilization": take.get("stabilization"),
+        "tracking": {
+            "mode": tracking.get("mode"),
+            "metric": tracking.get("metric") is True,
+            "samples": samples,
+            "confidence_average": confidence.get("average"),
+            "held_translation_samples": held,
+            "held_translation_ratio": (held / samples) if samples > 0 else 0,
+            "translation_units": translation.get("units"),
+        },
+        "prompt_seed": take.get("promptSeed"),
+        "metric_distance_allowed": prompt_policy.get("metricDistanceAllowed") is True,
+    }
+
+
+def list_camera_takes(args):
+    project_id = str(args.get("project_id") or "").strip()
+    if not project_id:
+        raise ValueError("project_id가 필요합니다.")
+    scene_index = int(args.get("scene_index", 0))
+    cut_index = int(args.get("cut_index", 0))
+    limit = max(1, min(20, int(args.get("limit", 20))))
+    payload, project = _project_payload(project_id)
+    blocking = _blocking_from_project(project, scene_index, cut_index)
+    motion = blocking.get("motion") if isinstance(blocking.get("motion"), dict) else {}
+    takes = _valid_takes(motion)
+    latest_id = str(motion.get("latestCameraOperatorTakeId") or "").strip()
+    indexed = list(enumerate(takes))
+    selected = list(reversed(indexed[-limit:]))
+    items = [_take_summary(take, index, latest_id) for index, take in selected]
+
+    return {
+        "schema": "frisframe-camera-take-list",
+        "version": 1,
+        "project_id": project_id,
+        "revision": payload.get("revision"),
+        "scene_index": scene_index,
+        "cut_index": cut_index,
+        "available": bool(takes),
+        "latest_take_id": latest_id or None,
+        "total_count": len(takes),
+        "returned_count": len(items),
+        "items": items,
+        "camera_timeline": _camera_timeline(blocking),
+        "read_only": True,
+        "final_prompt_owner": "mcp-client",
+        "next_step": {
+            "tool": "get_camera_take_context",
+            "argument": "take_id",
+            "instruction": "선택한 items[].id를 take_id로 전달해 상세 Take 컨텍스트와 promptPolicy를 읽습니다.",
+        },
+    }
+
+
 def get_camera_take_context(args):
     project_id = str(args.get("project_id") or "").strip()
     if not project_id:
@@ -158,6 +253,8 @@ def get_camera_take_context(args):
 
 
 def call_tool(name, args):
+    if name == "list_camera_takes":
+        return json.dumps(list_camera_takes(args), ensure_ascii=False)
     if name == "get_camera_take_context":
         return json.dumps(get_camera_take_context(args), ensure_ascii=False)
     return _ORIGINAL_CALL_TOOL(name, args)
