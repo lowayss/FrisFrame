@@ -25,6 +25,7 @@ def main() -> None:
             import camera_take_context_mcp as extension
 
             tool_names = {tool.get("name") for tool in base.TOOLS}
+            assert "list_camera_takes" in tool_names
             assert "get_camera_take_context" in tool_names
 
             created = json.loads(core.handle_create_project("Camera Context", "read-only MCP contract"))
@@ -56,11 +57,17 @@ def main() -> None:
                 "schemaVersion": 1,
                 "id": "physical-metric",
                 "source": "physical-camera",
+                "createdAt": "2026-09-03T10:00:00Z",
                 "startTime": 0.5,
                 "endTime": 2.5,
+                "duration": 2.0,
+                "stabilization": "cinema",
                 "tracking": {
                     "mode": "webxr",
                     "metric": True,
+                    "samples": 100,
+                    "heldTranslationSamples": 5,
+                    "confidence": {"average": 0.93},
                     "translation": {"dolly": 0.8, "truck": 0.1, "pedestal": 0, "units": "meters-local-space"},
                 },
                 "promptSeed": "metric seed",
@@ -74,11 +81,17 @@ def main() -> None:
                 "schemaVersion": 1,
                 "id": "physical-visual",
                 "source": "physical-camera",
+                "createdAt": "2026-09-03T10:01:00Z",
                 "startTime": 2.5,
                 "endTime": 4.5,
+                "duration": 2.0,
+                "stabilization": "handheld",
                 "tracking": {
                     "mode": "visual-flow",
                     "metric": False,
+                    "samples": 80,
+                    "heldTranslationSamples": 20,
+                    "confidence": {"average": 0.71},
                     "translation": {"dolly": 0.55, "truck": -0.2, "pedestal": 0, "units": "relative-virtual-travel"},
                 },
                 "promptSeed": "visual direction seed",
@@ -92,6 +105,53 @@ def main() -> None:
             motion["latestCameraOperatorTakeId"] = visual_take["id"]
             saved = json.loads(core.handle_save_project(project_id, document, 1))
             assert saved["revision"] == 2
+
+            before_list = json.loads(core.handle_get_project(project_id))
+            listed = json.loads(base.call_tool("list_camera_takes", {
+                "project_id": project_id,
+                "scene_index": 0,
+                "cut_index": 0,
+            }))
+            after_list = json.loads(core.handle_get_project(project_id))
+
+            assert before_list["revision"] == after_list["revision"] == listed["revision"] == 2
+            assert before_list["document"] == after_list["document"], "take browser must not mutate project state"
+            assert listed["schema"] == "frisframe-camera-take-list"
+            assert listed["version"] == 1
+            assert listed["available"] is True
+            assert listed["read_only"] is True
+            assert listed["final_prompt_owner"] == "mcp-client"
+            assert listed["latest_take_id"] == "physical-visual"
+            assert listed["total_count"] == 2
+            assert listed["returned_count"] == 2
+            assert [item["id"] for item in listed["items"]] == ["physical-visual", "physical-metric"]
+            assert listed["items"][0]["record_index"] == 1
+            assert listed["items"][0]["is_latest"] is True
+            assert listed["items"][0]["tracking"] == {
+                "mode": "visual-flow",
+                "metric": False,
+                "samples": 80,
+                "confidence_average": 0.71,
+                "held_translation_samples": 20,
+                "held_translation_ratio": 0.25,
+                "translation_units": "relative-virtual-travel",
+            }
+            assert listed["items"][0]["prompt_seed"] == "visual direction seed"
+            assert listed["items"][0]["metric_distance_allowed"] is False
+            assert listed["items"][1]["tracking"]["metric"] is True
+            assert listed["items"][1]["tracking"]["held_translation_ratio"] == 0.05
+            assert listed["items"][1]["metric_distance_allowed"] is True
+            assert listed["camera_timeline"]["keyframe_count"] == 2
+            assert listed["next_step"]["tool"] == "get_camera_take_context"
+            assert listed["next_step"]["argument"] == "take_id"
+
+            limited = json.loads(base.call_tool("list_camera_takes", {
+                "project_id": project_id,
+                "limit": 1,
+            }))
+            assert limited["total_count"] == 2
+            assert limited["returned_count"] == 1
+            assert [item["id"] for item in limited["items"]] == ["physical-visual"]
 
             before = json.loads(core.handle_get_project(project_id))
             latest = json.loads(base.call_tool("get_camera_take_context", {
@@ -149,6 +209,12 @@ def main() -> None:
                 raise AssertionError("explicit missing take_id must fail instead of silently selecting another take")
 
             empty_created = json.loads(core.handle_create_project("No Take", "empty camera take context"))
+            empty_list = json.loads(base.call_tool("list_camera_takes", {"project_id": empty_created["project_id"]}))
+            assert empty_list["available"] is False
+            assert empty_list["items"] == []
+            assert empty_list["total_count"] == 0
+            assert empty_list["returned_count"] == 0
+
             empty = json.loads(base.call_tool("get_camera_take_context", {"project_id": empty_created["project_id"]}))
             assert empty["available"] is False
             assert empty["take"] is None
@@ -157,8 +223,9 @@ def main() -> None:
 
             # Keep the imported module referenced so static tooling does not mistake
             # the extension import for an unused setup side effect.
+            assert extension.list_camera_takes
             assert extension.get_camera_take_context
-            print("Camera Take Context MCP: latest/requested/fallback selection, policy fidelity, and read-only DB contract passed")
+            print("Camera Take MCP: browser/latest/requested/fallback selection, policy fidelity, and read-only DB contract passed")
         finally:
             if old_db is None:
                 os.environ.pop("PREVIS_DB_PATH", None)
