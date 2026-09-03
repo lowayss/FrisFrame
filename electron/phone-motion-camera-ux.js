@@ -10,6 +10,7 @@
     handheld: { label:"HANDHELD", positionHalfLifeMs:55, angleHalfLifeMs:32, focalHalfLifeMs:75 },
     cinema: { label:"CINEMA", positionHalfLifeMs:115, angleHalfLifeMs:82, focalHalfLifeMs:120 },
   });
+  const TAKE_HISTORY_LIMIT = 20;
 
   let anchor = null;
   let calibrationId = -1;
@@ -20,11 +21,19 @@
     ? localStorage.getItem(STABILIZATION_KEY)
     : "handheld";
   let stabilizer = null;
+  let activeTake = null;
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, Number(value) || 0));
   const core = () => window.FrisFramePhoneMotionCore;
   const inputs = () => window.FrisFrameCameraOperatorInputs;
   const operator = () => window.FrisFrameCameraOperator;
+  const cloneValue = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
+  const round = (value, digits = 3) => Number(Number(value || 0).toFixed(digits));
+  const angleDelta = (from, to) => {
+    let delta = ((Number(to || 0) - Number(from || 0)) % 360 + 360) % 360;
+    if (delta > 180) delta -= 360;
+    return delta;
+  };
 
   function currentCamera() {
     return {
@@ -35,6 +44,157 @@
       tiltDeg:Number(state.camera.tiltDeg || 0),
       focal:Number(state.camera.focal || 35),
     };
+  }
+
+  function movementPhrase(value, positive, negative, metric) {
+    const amount = Math.abs(Number(value || 0));
+    const epsilon = metric ? 0.015 : 0.04;
+    if (amount < epsilon) return "";
+    const direction = Number(value) >= 0 ? positive : negative;
+    return metric ? `${direction} ${amount.toFixed(2)} m` : direction;
+  }
+
+  function rotationPhrase(value, positive, negative) {
+    const amount = Math.abs(Number(value || 0));
+    if (amount < 0.5) return "";
+    return `${Number(value) >= 0 ? positive : negative} ${amount.toFixed(1)}°`;
+  }
+
+  function beginTakeTelemetry() {
+    if (activeTake || operator()?.mode !== "recording") return activeTake;
+    const pose = currentCamera();
+    activeTake = {
+      schemaVersion:1,
+      id:`physical_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+      source:"physical-camera",
+      startedAt:new Date().toISOString(),
+      startTime:Number(state.motion?.playhead || 0),
+      startPose:pose,
+      stabilization:stabilizationPreset,
+      samples:0,
+      metricSamples:0,
+      visualSamples:0,
+      heldTranslationSamples:0,
+      confidenceSum:0,
+      confidenceMin:1,
+      confidenceMax:0,
+      confidenceLast:0,
+      lastDiagnostic:null,
+    };
+    return activeTake;
+  }
+
+  function recordTakeDiagnostic(value) {
+    if (!activeTake || !value?.translation) return;
+    const confidence = clamp(value.translation.confidence, 0, 1);
+    activeTake.samples += 1;
+    if (value.translation.metric === true && value.trackingMode === "webxr") activeTake.metricSamples += 1;
+    else activeTake.visualSamples += 1;
+    if (value.stabilization?.heldTranslation === true) activeTake.heldTranslationSamples += 1;
+    activeTake.confidenceSum += confidence;
+    activeTake.confidenceMin = Math.min(activeTake.confidenceMin, confidence);
+    activeTake.confidenceMax = Math.max(activeTake.confidenceMax, confidence);
+    activeTake.confidenceLast = confidence;
+    activeTake.lastDiagnostic = cloneValue(value);
+  }
+
+  function buildTakeContext() {
+    if (!activeTake || activeTake.samples < 1) return null;
+    const endPose = currentCamera();
+    const endTime = Number(state.motion?.playhead || activeTake.startTime);
+    const allMetric = activeTake.metricSamples === activeTake.samples && activeTake.visualSamples === 0;
+    const mixed = activeTake.metricSamples > 0 && activeTake.visualSamples > 0;
+    const trackingMode = mixed ? "mixed" : (allMetric ? "webxr" : "visual-flow");
+    const translation = activeTake.lastDiagnostic?.translation || {};
+    const confidenceAverage = activeTake.samples ? activeTake.confidenceSum / activeTake.samples : 0;
+    const moves = [
+      movementPhrase(translation.dolly, "dolly in", "dolly out", allMetric),
+      movementPhrase(translation.truck, "truck right", "truck left", allMetric),
+      movementPhrase(translation.pedestal, "pedestal up", "pedestal down", allMetric),
+    ].filter(Boolean);
+    const rotations = [
+      rotationPhrase(angleDelta(activeTake.startPose.panDeg, endPose.panDeg), "pan right", "pan left"),
+      rotationPhrase(Number(endPose.tiltDeg) - Number(activeTake.startPose.tiltDeg), "tilt up", "tilt down"),
+    ].filter(Boolean);
+    const modeCopy = allMetric ? "WebXR 6DoF metric tracking" : (mixed ? "mixed WebXR / Visual Flow non-metric tracking" : "Visual Flow non-metric tracking");
+    const movementCopy = moves.length
+      ? (allMetric ? `Measured local-space camera movement: ${moves.join(", ")}.` : `Relative camera movement intent: ${moves.join(", ")}.`)
+      : "Camera translation remained nearly locked.";
+    const rotationCopy = rotations.length ? ` Camera rotation: ${rotations.join(", ")}.` : "";
+    const guard = allMetric
+      ? " Preserve this measured relative camera trajectory; distances are local-space displacement from the recentered take origin, not absolute world coordinates."
+      : " Use movement direction, rhythm, and framing intent only; do not infer or state an exact physical travel distance.";
+    const promptSeed = `Physical Camera Take: ${modeCopy}, ${STABILIZATION_PRESETS[activeTake.stabilization]?.label || activeTake.stabilization} stabilization. ${movementCopy}${rotationCopy} Average tracking confidence ${Math.round(confidenceAverage * 100)}%.${guard}`;
+
+    return {
+      schemaVersion:1,
+      id:activeTake.id,
+      source:"physical-camera",
+      createdAt:new Date().toISOString(),
+      startTime:round(activeTake.startTime),
+      endTime:round(endTime),
+      duration:round(Math.max(0, endTime - activeTake.startTime)),
+      stabilization:activeTake.stabilization,
+      tracking:{
+        mode:trackingMode,
+        metric:allMetric,
+        samples:activeTake.samples,
+        metricSamples:activeTake.metricSamples,
+        visualSamples:activeTake.visualSamples,
+        heldTranslationSamples:activeTake.heldTranslationSamples,
+        confidence:{
+          average:round(confidenceAverage),
+          minimum:round(activeTake.confidenceMin),
+          maximum:round(activeTake.confidenceMax),
+          last:round(activeTake.confidenceLast),
+        },
+        translation:{
+          truck:round(translation.truck),
+          pedestal:round(translation.pedestal),
+          dolly:round(translation.dolly),
+          units:allMetric ? "meters-local-space" : "relative-virtual-travel",
+        },
+      },
+      camera:{
+        start:cloneValue(activeTake.startPose),
+        end:cloneValue(endPose),
+        panDelta:round(angleDelta(activeTake.startPose.panDeg, endPose.panDeg)),
+        tiltDelta:round(Number(endPose.tiltDeg) - Number(activeTake.startPose.tiltDeg)),
+      },
+      promptSeed,
+      promptPolicy:{
+        finalPromptOwner:"mcp-client",
+        metricDistanceAllowed:allMetric,
+        distanceGuard:allMetric
+          ? "WebXR values are measured local-space displacement relative to the recentered take origin."
+          : "Use direction and relative movement intent only; do not infer or state an exact physical travel distance.",
+      },
+    };
+  }
+
+  function finalizeTakeContextBeforeCommit() {
+    if (!activeTake || operator()?.mode !== "recording") return null;
+    const take = buildTakeContext();
+    if (!take) return null;
+    state.motion = state.motion || {};
+    const previous = Array.isArray(state.motion.cameraOperatorTakes)
+      ? state.motion.cameraOperatorTakes.filter((entry) => entry && typeof entry === "object")
+      : [];
+    state.motion.cameraOperatorTakes = [...previous, take].slice(-TAKE_HISTORY_LIMIT);
+    state.motion.latestCameraOperatorTakeId = take.id;
+    activeTake = null;
+    return take;
+  }
+
+  function installCommitHook() {
+    if (typeof commit !== "function" || commit.__frisframePhysicalTakeHook === true) return;
+    const originalCommit = commit;
+    const wrappedCommit = function (...args) {
+      finalizeTakeContextBeforeCommit();
+      return originalCommit.apply(this, args);
+    };
+    wrappedCommit.__frisframePhysicalTakeHook = true;
+    commit = wrappedCommit;
   }
 
   function createStabilizer() {
@@ -85,10 +245,8 @@
     if (!op) return;
 
     if (detail.command === "toggle-record" && op.mode === "idle") {
-      // Physical Camera uses the first REC press as a non-destructive STBY.
-      // Camera Operator owns the snapshot/undo boundary; motion may now preview
-      // against that snapshot without writing timeline samples until REC starts.
       event.stopImmediatePropagation();
+      activeTake = null;
       op.arm();
       if (op.mode === "armed") {
         resetTrackingAnchor();
@@ -102,6 +260,7 @@
 
     if (detail.command === "stop" && op.mode === "armed") {
       event.stopImmediatePropagation();
+      activeTake = null;
       op.cancel?.("Physical Camera STBY를 취소했습니다.");
       resetTrackingAnchor();
       updateDesktopBadge();
@@ -114,6 +273,7 @@
     const op = operator();
     if (!op || !["armed", "recording"].includes(op.mode) || !core()) return;
     lastMotionAt = Number(detail.receivedAt || Date.now());
+    if (op.mode === "recording") beginTakeTelemetry();
     const nextCalibration = Math.max(0, Math.trunc(Number(motion.calibrationId) || 0));
     if (!anchor || nextCalibration !== calibrationId) {
       calibrationId = nextCalibration;
@@ -148,6 +308,7 @@
       if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
     }
     diagnostic = pose.diagnostic;
+    if (op.mode === "recording") recordTakeDiagnostic(diagnostic);
     renderExternalFrame();
     updateDesktopBadge();
   }
@@ -248,16 +409,26 @@
   document.head.appendChild(style);
 
   stabilizer = createStabilizer();
-  // Capture only Physical Camera commands. The ordinary Phone Remote and
-  // gamepad retain their existing one-press REC behavior in the input module.
+  installCommitHook();
   window.addEventListener("frisframe:phone-remote-input", physicalCommandCapture, true);
   window.addEventListener("frisframe:phone-remote-input", (event) => applyPhysicalMotion(event.detail || {}));
-  setInterval(() => { refreshPairingUi(); updateDesktopBadge(); }, 700);
+  setInterval(() => {
+    if (activeTake && operator()?.mode === "idle") activeTake = null;
+    refreshPairingUi();
+    updateDesktopBadge();
+  }, 700);
   window.FrisFramePhoneMotionCamera = Object.freeze({
     get connected() { return Date.now() - lastMotionAt < 900; },
-    get diagnostic() { return diagnostic ? JSON.parse(JSON.stringify(diagnostic)) : null; },
+    get diagnostic() { return diagnostic ? cloneValue(diagnostic) : null; },
     get stabilization() { return stabilizationPreset; },
     get standby() { return operator()?.mode === "armed"; },
+    get recordingTake() { return activeTake ? cloneValue(activeTake) : null; },
+    get latestTakeContext() {
+      const takes = Array.isArray(state?.motion?.cameraOperatorTakes) ? state.motion.cameraOperatorTakes : [];
+      const id = state?.motion?.latestCameraOperatorTakeId;
+      const take = takes.find((entry) => entry?.id === id) || takes.at(-1) || null;
+      return take ? cloneValue(take) : null;
+    },
     setStabilization: setStabilizationPreset,
     recenter: resetTrackingAnchor,
   });
