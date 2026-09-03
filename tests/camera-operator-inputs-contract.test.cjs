@@ -42,6 +42,7 @@ assert.match(inputs, /if \(selectedMode === "phone"\) startPhoneBridge\(\)/, "se
 assert.match(inputs, /else if \(previousMode === "phone" \|\| phoneConfig \|\| phoneStartPromise\) stopPhoneBridge\(\)/,
   "leaving Phone mode must close the LAN bridge");
 assert.match(inputs, /window\.FrisFrameCameraOperatorInputs/, "multi-input runtime must expose a smoke-testable marker");
+assert.match(inputs, /startRecording:\s*syntheticStart/, "Physical Camera must reuse the existing Camera Operator start path instead of duplicating recording startup");
 assert.match(inputs, /multiInput:\s*true/, "multi-input runtime marker must identify the new controller");
 
 assert.match(phoneRemote, /crypto\.randomBytes\(24\)/, "phone pairing must use a high-entropy random token");

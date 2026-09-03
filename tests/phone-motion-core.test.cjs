@@ -175,16 +175,20 @@ test("desktop physical-camera UX exposes stabilization, confidence hold, recente
   assert.match(phoneMotionUx, /setStabilization/);
 });
 
-test("Physical Camera uses a non-destructive STBY pass before REC and previews while armed", () => {
+test("Physical Camera provides non-destructive idle LIVE preview and one-tap phone REC", () => {
   assert.match(phoneMotionUx, /function physicalCommandCapture\(event\)/);
   assert.match(phoneMotionUx, /detail\.command === "toggle-record" && op\.mode === "idle"/);
   assert.match(phoneMotionUx, /event\.stopImmediatePropagation\(\)/);
   assert.match(phoneMotionUx, /op\.arm\(\)/);
-  assert.match(phoneMotionUx, /\["armed", "recording"\]\.includes\(op\.mode\)/);
-  assert.match(phoneMotionUx, /Physical Camera STBY/);
-  assert.match(phoneMotionUx, /첫 탭이 STBY, 두 번째 탭이 실제 REC/);
+  assert.match(phoneMotionUx, /\["idle", "armed", "recording"\]\.includes\(op\.mode\)/);
+  assert.match(phoneMotionUx, /livePreviewPose = cloneValue\(pose\)/);
+  assert.match(phoneMotionUx, /renderExternalFrame\(livePreviewPose\)/);
+  assert.match(phoneMotionUx, /function adoptLivePreviewIntoOperator\(\)/);
+  assert.match(phoneMotionUx, /const starter = inputs\(\)\?\.startRecording/);
+  assert.match(phoneMotionUx, /LIVE 프리뷰 구도에서 바로 촬영을 시작합니다/);
   assert.match(phoneMotionUx, /detail\.command === "stop" && op\.mode === "armed"/);
   assert.match(phoneMotionUx, /op\.cancel\?\./);
   assert.match(phoneMotionUx, /window\.addEventListener\("frisframe:phone-remote-input", physicalCommandCapture, true\)/);
+  assert.match(phoneMotionUx, /get livePreview\(\)/);
   assert.match(phoneMotionUx, /get standby\(\)/);
 });

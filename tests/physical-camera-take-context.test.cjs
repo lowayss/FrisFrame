@@ -12,7 +12,22 @@ const mcp = fs.readFileSync(path.join(root, "mcp_previs_server.py"), "utf8");
 function makeRuntime(initialMode = "recording") {
   const listeners = [];
   const committed = [];
-  const operator = { mode:initialMode, maintainTracking(){}, finish(){} };
+  const draws = [];
+  const starts = [];
+  const operator = {
+    mode:initialMode,
+    maintainTracking(){},
+    finish(){},
+    arm(){ if (this.mode === "idle") this.mode = "armed"; },
+    cancel(){ this.mode = "idle"; },
+  };
+  const inputRuntime = {
+    mode:"phone",
+    startRecording() {
+      starts.push(JSON.parse(JSON.stringify(context.state.camera)));
+      if (operator.mode === "armed") operator.mode = "recording";
+    },
+  };
   const context = {
     console,
     Math,
@@ -27,9 +42,9 @@ function makeRuntime(initialMode = "recording") {
     requestAnimationFrame(callback) { callback?.(); return 1; },
     localStorage: { getItem() { return "handheld"; }, setItem() {} },
     document: {
-      documentElement: { dataset:{} },
+      documentElement: { dataset:{}, classList:{ add(){}, remove(){} } },
       head: { appendChild() {} },
-      createElement() { return { textContent:"" }; },
+      createElement() { return { textContent:"", dataset:{}, classList:{ toggle(){} } }; },
       getElementById() { return null; },
       querySelector() { return null; },
       querySelectorAll() { return []; },
@@ -39,11 +54,12 @@ function makeRuntime(initialMode = "recording") {
       motion: { playhead:2,keyframes:[] },
     },
     evaluatedViewState: null,
+    draw(renderState) { draws.push(JSON.parse(JSON.stringify(renderState))); },
     commit() { committed.push(JSON.parse(JSON.stringify(context.state))); },
   };
   context.window = {
     FrisFrameCameraOperator: operator,
-    FrisFrameCameraOperatorInputs: { mode:"phone" },
+    FrisFrameCameraOperatorInputs: inputRuntime,
     FrisFramePhoneMotionCore: {
       createAnchor() { return {}; },
       createPoseStabilizer() { return { update(value) { return value; } }; },
@@ -64,7 +80,7 @@ function makeRuntime(initialMode = "recording") {
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(ux, context, { filename:"phone-motion-camera-ux.js" });
-  return { context, operator, listeners, committed };
+  return { context, operator, inputRuntime, listeners, committed, draws, starts };
 }
 
 function dispatchMotion(runtime, detail = {}) {
@@ -132,6 +148,59 @@ test("phone REC transition preserves the real REC start time instead of first se
   assert.equal(take.duration, 1.25);
   assert.equal(take.camera.start.x, 0.5);
   assert.equal(take.camera.start.panDeg, 20);
+});
+
+test("idle Physical Camera motion renders a non-destructive LIVE preview", () => {
+  const runtime = makeRuntime("idle");
+  const authoredCamera = JSON.parse(JSON.stringify(runtime.context.state.camera));
+
+  dispatchMotion(runtime);
+
+  assert.deepEqual(runtime.context.state.camera, authoredCamera, "LIVE preview must not mutate authored camera state");
+  assert.equal(runtime.committed.length, 0, "LIVE preview must not create history or a project commit");
+  assert.ok(runtime.draws.length >= 1, "LIVE preview must render a frame");
+  const renderedCamera = runtime.draws.at(-1).camera;
+  assert.equal(renderedCamera.x, 0.54);
+  assert.equal(renderedCamera.y, 0.49);
+  assert.equal(renderedCamera.height, 1.72);
+  assert.equal(renderedCamera.panDeg, 31);
+  assert.equal(renderedCamera.tiltDeg, 3);
+  assert.equal(runtime.context.window.FrisFramePhoneMotionCamera.livePreview.x, 0.54);
+});
+
+test("phone REC adopts LIVE preview as the take start and starts in one tap", () => {
+  const runtime = makeRuntime("idle");
+  runtime.context.state.motion.playhead = 1.5;
+  dispatchMotion(runtime);
+  assert.equal(runtime.context.state.camera.x, 0.5, "idle preview stays render-only before REC");
+
+  dispatchMotion(runtime, { command:"toggle-record" });
+
+  assert.equal(runtime.operator.mode, "recording");
+  assert.equal(runtime.starts.length, 1, "one phone REC command must enter the existing Camera Operator record path");
+  assert.equal(runtime.starts[0].x, 0.54);
+  assert.equal(runtime.starts[0].panDeg, 31);
+  assert.equal(runtime.context.state.camera.x, 0.54);
+  assert.equal(runtime.context.state.camera.panDeg, 31);
+  assert.equal(runtime.context.window.FrisFramePhoneMotionCamera.livePreview, null);
+
+  runtime.context.state.motion.playhead = 2.75;
+  runtime.operator.finish();
+  runtime.context.commit({ preserveSourceIds:["camera"] });
+  const take = runtime.committed[0].motion.cameraOperatorTakes[0];
+  assert.equal(take.startTime, 1.5);
+  assert.equal(take.camera.start.x, 0.54);
+  assert.equal(take.camera.start.panDeg, 31);
+});
+
+test("LIVE preview contract is render-only until recording adopts it", () => {
+  assert.match(ux, /\["idle", "armed", "recording"\]\.includes\(op\.mode\)/);
+  assert.match(ux, /livePreviewPose = cloneValue\(pose\)/);
+  assert.match(ux, /renderExternalFrame\(livePreviewPose\)/);
+  assert.match(ux, /function adoptLivePreviewIntoOperator\(\)/);
+  assert.match(ux, /const starter = inputs\(\)\?\.startRecording/);
+  assert.match(ux, /LIVE 프리뷰 구도에서 바로 촬영을 시작합니다/);
+  assert.match(ux, /get livePreview\(\)/);
 });
 
 test("take context records tracking semantics needed by downstream generation", () => {

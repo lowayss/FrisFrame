@@ -24,6 +24,8 @@
   let activeTake = null;
   let pendingStart = null;
   let pendingFinish = false;
+  let livePreviewPose = null;
+  let lastOperatorMode = "idle";
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, Number(value) || 0));
   const core = () => window.FrisFramePhoneMotionCore;
@@ -45,6 +47,20 @@
       panDeg:Number(state.camera.panDeg || 0),
       tiltDeg:Number(state.camera.tiltDeg || 0),
       focal:Number(state.camera.focal || 35),
+    };
+  }
+
+  function effectiveCamera() {
+    const base = currentCamera();
+    if (operator()?.mode !== "idle" || !livePreviewPose) return base;
+    return {
+      ...base,
+      x:Number(livePreviewPose.x),
+      y:Number(livePreviewPose.y),
+      height:Number(livePreviewPose.height),
+      panDeg:Number(livePreviewPose.panDeg),
+      tiltDeg:Number(livePreviewPose.tiltDeg),
+      focal:Number(livePreviewPose.focal || base.focal),
     };
   }
 
@@ -286,17 +302,58 @@
     }
   }
 
-  function renderExternalFrame() {
+  function applyPoseToState(pose, targetState = state) {
+    if (!pose || !targetState?.camera) return;
+    const op = operator();
+    const minimum = Number.isFinite(Number(globalThis.STAGE_COORD_MIN)) ? Number(globalThis.STAGE_COORD_MIN) : -0.25;
+    const maximum = Number.isFinite(Number(globalThis.STAGE_COORD_MAX)) ? Number(globalThis.STAGE_COORD_MAX) : 1.25;
+    targetState.camera.x = clamp(pose.x, minimum, maximum);
+    targetState.camera.y = clamp(pose.y, minimum, maximum);
+    targetState.camera.height = clamp(pose.height, 0.4, 35);
+    targetState.camera.focal = Number(pose.focal || targetState.camera.focal || 35);
+    if (targetState.camera.trackingTargetId) {
+      if (typeof op?.maintainTracking === "function") op.maintainTracking(targetState, targetState.motion?.playhead);
+      else if (typeof applyCameraTracking === "function") applyCameraTracking(targetState);
+    } else {
+      targetState.camera.panDeg = ((Number(pose.panDeg) % 360) + 360) % 360;
+      targetState.camera.tiltDeg = clamp(pose.tiltDeg, -89, 89);
+      if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(targetState.camera, targetState);
+    }
+  }
+
+  function renderExternalFrame(previewPose = null) {
     let renderState = state;
     if (typeof interpolateStateAtTime === "function") {
       try { renderState = interpolateStateAtTime(state.motion.playhead); } catch { renderState = state; }
     }
-    if (renderState !== state) renderState.camera = { ...renderState.camera, ...state.camera };
+    const previewing = Boolean(previewPose) && operator()?.mode === "idle";
+    if (renderState === state && previewing) {
+      renderState = { ...state, camera:{ ...state.camera } };
+    } else if (renderState !== state) {
+      renderState.camera = { ...renderState.camera, ...state.camera };
+    }
+    if (previewing) applyPoseToState(previewPose, renderState);
     evaluatedViewState = renderState;
     if (typeof draw === "function") draw(renderState);
     if (typeof viewMode !== "undefined" && viewMode === "3d" && typeof renderThreeView === "function") {
       renderThreeView(renderState, true);
     }
+  }
+
+  function clearLivePreview({ render = true, resetAnchor = true } = {}) {
+    const hadPreview = Boolean(livePreviewPose);
+    livePreviewPose = null;
+    if (resetAnchor) resetTrackingAnchor();
+    if (render && hadPreview) renderExternalFrame();
+  }
+
+  function adoptLivePreviewIntoOperator() {
+    if (!livePreviewPose || operator()?.mode !== "armed") return false;
+    const pose = cloneValue(livePreviewPose);
+    livePreviewPose = null;
+    applyPoseToState(pose, state);
+    renderExternalFrame();
+    return true;
   }
 
   function physicalCommandCapture(event) {
@@ -313,9 +370,14 @@
       pendingFinish = false;
       op.arm();
       if (op.mode === "armed") {
-        resetTrackingAnchor();
+        const adoptedPreview = adoptLivePreviewIntoOperator();
+        markTakeStart();
+        const starter = inputs()?.startRecording;
+        if (typeof starter === "function") starter();
         if (typeof notifyApp === "function") {
-          notifyApp("Physical Camera STBY · 휴대폰으로 구도를 잡고 REC를 한 번 더 누르세요.");
+          notifyApp(adoptedPreview
+            ? "Physical Camera REC · LIVE 프리뷰 구도에서 바로 촬영을 시작합니다."
+            : "Physical Camera REC · 현재 카메라 구도에서 촬영을 시작합니다.");
         }
       }
       updateDesktopBadge();
@@ -347,18 +409,21 @@
     const motion = detail?.motion;
     if (!motion?.enabled || inputs()?.mode !== "phone") return;
     const op = operator();
-    if (!op || !["armed", "recording"].includes(op.mode) || !core()) return;
+    if (!op || !["idle", "armed", "recording"].includes(op.mode) || !core()) return;
     lastMotionAt = Number(detail.receivedAt || Date.now());
     if (op.mode === "recording") beginTakeTelemetry();
     const nextCalibration = Math.max(0, Math.trunc(Number(motion.calibrationId) || 0));
     if (!anchor || nextCalibration !== calibrationId) {
       calibrationId = nextCalibration;
-      anchor = core().createAnchor(motion, currentCamera());
+      anchor = core().createAnchor(motion, effectiveCamera());
       stabilizer = createStabilizer();
     }
 
     const size = typeof stageWorldSize === "function" ? stageWorldSize(state) : { width:10,depth:10 };
-    const direction = typeof cameraDirection === "function" ? cameraDirection(state.camera) : { x:1,z:0 };
+    const directionCamera = op.mode === "idle" && livePreviewPose
+      ? { ...state.camera, ...livePreviewPose }
+      : state.camera;
+    const direction = typeof cameraDirection === "function" ? cameraDirection(directionCamera) : { x:1,z:0 };
     const rawPose = core().derivePose(anchor, motion, {
       stageWidth:Number(size.width || 10),
       stageDepth:Number(size.depth || 10),
@@ -368,22 +433,17 @@
     });
     if (!rawPose) return;
     const pose = stabilizer?.update(rawPose, lastMotionAt) || rawPose;
-    const minimum = Number.isFinite(Number(globalThis.STAGE_COORD_MIN)) ? Number(globalThis.STAGE_COORD_MIN) : -0.25;
-    const maximum = Number.isFinite(Number(globalThis.STAGE_COORD_MAX)) ? Number(globalThis.STAGE_COORD_MAX) : 1.25;
-    state.camera.x = clamp(pose.x, minimum, maximum);
-    state.camera.y = clamp(pose.y, minimum, maximum);
-    state.camera.height = clamp(pose.height, 0.4, 35);
-    state.camera.focal = Number(pose.focal || state.camera.focal || 35);
-    if (state.camera.trackingTargetId) {
-      if (typeof op.maintainTracking === "function") op.maintainTracking(state, state.motion?.playhead);
-      else if (typeof applyCameraTracking === "function") applyCameraTracking(state);
-    } else {
-      const normalizedPan = ((Number(pose.panDeg) % 360) + 360) % 360;
-      state.camera.panDeg = normalizedPan;
-      state.camera.tiltDeg = clamp(pose.tiltDeg, -89, 89);
-      if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
-    }
     diagnostic = pose.diagnostic;
+
+    if (op.mode === "idle") {
+      livePreviewPose = cloneValue(pose);
+      renderExternalFrame(livePreviewPose);
+      updateDesktopBadge();
+      return;
+    }
+
+    livePreviewPose = null;
+    applyPoseToState(pose, state);
     if (op.mode === "recording") recordTakeDiagnostic(diagnostic);
     renderExternalFrame();
     updateDesktopBadge();
@@ -401,7 +461,8 @@
       : 0;
     const held = diagnostic?.stabilization?.heldTranslation === true;
     const metric = diagnostic?.translation?.metric === true;
-    const phase = standby ? "STBY · " : (recording ? "REC · " : "");
+    const previewing = opMode === "idle" && Boolean(livePreviewPose) && live;
+    const phase = previewing ? "LIVE · " : (standby ? "STBY · " : (recording ? "REC · " : ""));
     badge.textContent = live
       ? (held
         ? `${phase}회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
@@ -413,6 +474,7 @@
     badge.classList.toggle("is-hold", live && held);
     badge.classList.toggle("is-metric", live && metric);
     badge.classList.toggle("is-standby", standby);
+    badge.classList.toggle("is-preview", previewing);
   }
 
   function updatePresetButtons() {
@@ -455,7 +517,7 @@
       return;
     }
     const qr = motionQr(url);
-    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. Physical Camera REC는 첫 탭이 STBY, 두 번째 탭이 실제 REC입니다. STBY에서 휴대폰으로 3D 구도를 먼저 잡을 수 있습니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
+    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. 연결되면 REC 전에도 LIVE 3D 프리뷰가 움직입니다. 휴대폰 REC를 누르면 현재 LIVE 구도를 Take 시작점으로 채택해 바로 촬영합니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
     const urlNode = body.querySelector(".frisframe-phone-url");
     if (urlNode) urlNode.textContent = url;
     body.querySelector("[data-copy-motion-url]")?.addEventListener("click", async () => {
@@ -476,7 +538,7 @@
   style.textContent = `
     [data-frisframe-phone-motion-box]{display:grid;gap:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.07)}
     .frisframe-phone-motion-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:9px;color:#d9e1e8}
-    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}[data-frisframe-phone-motion-badge].is-metric{color:#7ed9ff}[data-frisframe-phone-motion-badge].is-standby{color:#ffca88}
+    [data-frisframe-phone-motion-badge]{font-size:8px;color:#7f8a94}[data-frisframe-phone-motion-badge].is-live{color:#9ce3af}[data-frisframe-phone-motion-badge].is-hold{color:#ffd18a}[data-frisframe-phone-motion-badge].is-metric{color:#7ed9ff}[data-frisframe-phone-motion-badge].is-standby{color:#ffca88}[data-frisframe-phone-motion-badge].is-preview{color:#a8e8ff}
     .frisframe-phone-motion-layout{display:grid;grid-template-columns:86px minmax(0,1fr);gap:9px;align-items:center}.frisframe-phone-motion-copy{display:grid;gap:5px;min-width:0}
     .frisframe-phone-motion-qr{width:86px;height:86px;padding:4px;background:#fff;border-radius:5px;overflow:hidden}.frisframe-phone-motion-qr svg{width:100%;height:100%;display:block}
     .frisframe-phone-motion-copy small,.frisframe-phone-motion-privacy{font-size:7px;color:#7e8993;overflow-wrap:anywhere;line-height:1.35}
@@ -491,11 +553,20 @@
   window.addEventListener("frisframe:phone-remote-input", physicalCommandCapture, true);
   window.addEventListener("frisframe:phone-remote-input", (event) => applyPhysicalMotion(event.detail || {}));
   setInterval(() => {
-    if (operator()?.mode === "idle") {
+    const opMode = operator()?.mode || "idle";
+    if (opMode === "idle") {
       activeTake = null;
       pendingStart = null;
       pendingFinish = false;
     }
+    if (lastOperatorMode !== "idle" && opMode === "idle") {
+      livePreviewPose = null;
+      resetTrackingAnchor();
+    }
+    lastOperatorMode = opMode;
+    const previewStale = livePreviewPose && Date.now() - lastMotionAt >= 1200;
+    const wrongInput = livePreviewPose && inputs()?.mode !== "phone";
+    if (opMode === "idle" && (previewStale || wrongInput)) clearLivePreview();
     refreshPairingUi();
     updateDesktopBadge();
   }, 700);
@@ -503,6 +574,7 @@
     get connected() { return Date.now() - lastMotionAt < 900; },
     get diagnostic() { return diagnostic ? cloneValue(diagnostic) : null; },
     get stabilization() { return stabilizationPreset; },
+    get livePreview() { return livePreviewPose ? cloneValue(livePreviewPose) : null; },
     get standby() { return operator()?.mode === "armed"; },
     get recordingTake() { return activeTake ? cloneValue(activeTake) : null; },
     get latestTakeContext() {
