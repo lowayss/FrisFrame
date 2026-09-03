@@ -29,14 +29,22 @@ test("orientation is absolute from the recenter anchor instead of accumulating e
   assert.deepEqual(second, first);
 });
 
-test("visual translation maps truck and dolly from the camera anchor and stays non-metric", () => {
+test("visual translation maps relative flow into virtual scene travel without claiming physical meters", () => {
   const anchor = core.createAnchor({orientation:{alpha:0,beta:0,gamma:0},visual:{x:0,y:0,z:0,confidence:1}}, {x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
-  const pose = core.derivePose(anchor, {orientation:{alpha:0,beta:0,gamma:0},visual:{x:1,y:0.5,z:1,confidence:0.8}}, {stageWidth:10,stageDepth:20,forward:{x:1,z:0},visualScaleMeters:2});
+  const pose = core.derivePose(anchor, {orientation:{alpha:0,beta:0,gamma:0},visual:{x:1,y:0.5,z:1,confidence:0.8}}, {stageWidth:10,stageDepth:20,forward:{x:1,z:0},virtualTravelScale:2});
   assert.equal(pose.x, 0.7);
   assert.equal(pose.y, 0.6);
   assert.equal(pose.height, 2.6);
   assert.equal(pose.diagnostic.translation.metric, false);
+  assert.equal(pose.diagnostic.translation.sourceUnits, "relative-optical-flow");
+  assert.equal(pose.diagnostic.translation.outputUnits, "virtual-scene-travel");
   assert.equal(pose.diagnostic.translationTrusted, true);
+});
+
+test("legacy visualScaleMeters option remains a compatibility alias", () => {
+  const anchor = core.createAnchor({orientation:{alpha:0,beta:0,gamma:0},visual:{x:0,y:0,z:0,confidence:1}}, {x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor, {orientation:{alpha:0,beta:0,gamma:0},visual:{x:0,y:0,z:1,confidence:1}}, {stageWidth:10,stageDepth:10,forward:{x:1,z:0},visualScaleMeters:2});
+  assert.equal(pose.x, 0.7);
 });
 
 test("low-confidence visual flow is ignored while orientation still drives pan tilt", () => {
@@ -48,6 +56,43 @@ test("low-confidence visual flow is ignored while orientation still drives pan t
   assert.equal(pose.panDeg, 40);
   assert.equal(pose.tiltDeg, -3);
   assert.equal(pose.diagnostic.translationTrusted, false);
+});
+
+test("pose stabilizer holds the last translation when visual confidence drops instead of snapping to anchor", () => {
+  const stabilizer = core.createPoseStabilizer({positionHalfLifeMs:0,angleHalfLifeMs:0});
+  const trusted = stabilizer.update({
+    x:0.75,y:0.62,height:2.1,panDeg:40,tiltDeg:2,focal:35,
+    diagnostic:{translationTrusted:true,translation:{confidence:0.8}},
+  }, 1000);
+  assert.equal(trusted.x, 0.75);
+  const lost = stabilizer.update({
+    x:0.5,y:0.5,height:1.6,panDeg:58,tiltDeg:-6,focal:35,
+    diagnostic:{translationTrusted:false,translation:{confidence:0.05}},
+  }, 1033);
+  assert.equal(lost.x, 0.75);
+  assert.equal(lost.y, 0.62);
+  assert.equal(lost.height, 2.1);
+  assert.equal(lost.panDeg, 58);
+  assert.equal(lost.tiltDeg, -6);
+  assert.equal(lost.diagnostic.stabilization.heldTranslation, true);
+});
+
+test("pose stabilizer follows the shortest pan route across 360 degrees", () => {
+  const stabilizer = core.createPoseStabilizer({positionHalfLifeMs:0,angleHalfLifeMs:100});
+  stabilizer.update({x:0,y:0,height:1.6,panDeg:358,tiltDeg:0,focal:35,diagnostic:{translationTrusted:true}}, 1000);
+  const next = stabilizer.update({x:0,y:0,height:1.6,panDeg:2,tiltDeg:0,focal:35,diagnostic:{translationTrusted:true}}, 1100);
+  assert.ok(next.panDeg > 358 || next.panDeg < 2.1, `unexpected wrapped pan ${next.panDeg}`);
+  assert.ok(Math.abs(core.shortestAngleDelta(358, next.panDeg)) < 4.01);
+});
+
+test("RAW stabilizer applies trusted motion without smoothing", () => {
+  const stabilizer = core.createPoseStabilizer({positionHalfLifeMs:0,angleHalfLifeMs:0,focalHalfLifeMs:0});
+  stabilizer.update({x:0,y:0,height:1.6,panDeg:10,tiltDeg:0,focal:35,diagnostic:{translationTrusted:true}}, 1000);
+  const next = stabilizer.update({x:0.8,y:0.6,height:2.2,panDeg:90,tiltDeg:12,focal:50,diagnostic:{translationTrusted:true}}, 1033);
+  assert.deepEqual(
+    {x:next.x,y:next.y,height:next.height,panDeg:next.panDeg,tiltDeg:next.tiltDeg,focal:next.focal},
+    {x:0.8,y:0.6,height:2.2,panDeg:90,tiltDeg:12,focal:50},
+  );
 });
 
 test("landscape remap uses gamma for pitch so rotating the screen does not swap camera semantics", () => {
