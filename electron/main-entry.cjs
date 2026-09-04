@@ -16,9 +16,10 @@ function readPreludeSources() {
   }));
 }
 
-function installTakePrelude(window) {
-  const webContents = window?.webContents;
+function installTakePrelude(webContents) {
   if (!webContents || webContents.isDestroyed?.()) return;
+  if (webContents.__frisframeTakePreludeInstalled === true) return;
+  webContents.__frisframeTakePreludeInstalled = true;
   const originalOn = webContents.on.bind(webContents);
   const sources = readPreludeSources();
   let loadGeneration = 0;
@@ -55,6 +56,6 @@ function installTakePrelude(window) {
   };
 }
 
-app.on("browser-window-created", (_event, window) => installTakePrelude(window));
+app.on("web-contents-created", (_event, webContents) => installTakePrelude(webContents));
 
 require("./main.cjs");
