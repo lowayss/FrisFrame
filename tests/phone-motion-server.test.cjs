@@ -105,8 +105,10 @@ test("precision motion page uses single-flight 60Hz-class transport and anchors 
   assert.match(html,/if\(xrNeedsRecenter\)\{recenter\(\);xrNeedsRecenter=false\}/);
   assert.match(html,/addEventListener\?\.\("reset"/);
   assert.match(html,/state\.spatial=\{\.\.\.state\.spatial,confidence:0\}/);
-  assert.match(html,/command="toggle-record";send\(\)/);
-  assert.match(html,/command="stop";send\(\)/);
+  assert.match(html,/function sendUrgent\(outgoingCommand=""\)/);
+  assert.match(html,/sendUrgent\("toggle-record"\)/);
+  assert.match(html,/sendUrgent\("stop"\)/);
+  assert.match(html,/recenter\(\);sendUrgent\(\)/);
 });
 
 test("precision sanitizer carries a bounded session id and phone-observed RTT", () => {
@@ -188,7 +190,7 @@ test("TLS SAN configuration includes localhost and LAN IPs", () => {
   const config = extensionConfig(["192.168.0.21","10.0.0.8"]);
   assert.match(config,/DNS\.1=localhost/);
   assert.match(config,/IP\.1=127\.0\.0\.1/);
-  assert.match(config,/192\.168\.0\.21/);
+  assert.match(config,/192\.168\.0.21/);
   assert.match(config,/10\.0\.0\.8/);
 });
 
