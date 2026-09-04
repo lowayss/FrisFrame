@@ -86,6 +86,77 @@ def main() -> None:
             assert action_types == ["pan", "tilt", "lens", "dolly", "truck", "pedestal"]
             assert next(action for action in summary["actions"] if action["type"] == "dolly")["metric"] is True
 
+            phases = summary["motion_phases"]
+            assert phases["phase_count"] == 2
+            assert phases["raw_phase_count"] == 2
+            assert phases["compacted"] is False
+            assert phases["max_phases"] == 12
+            first_phase_types = [cue["type"] for cue in phases["phases"][0]["cues"]]
+            second_phase_types = [cue["type"] for cue in phases["phases"][1]["cues"]]
+            assert first_phase_types == ["pan", "tilt", "lens", "stage-translate"]
+            assert second_phase_types == ["pan", "tilt", "stage-translate"]
+            assert phases["phases"][0]["cues"][0]["direction"] == "positive"
+            first_stage = next(cue for cue in phases["phases"][0]["cues"] if cue["type"] == "stage-translate")
+            assert first_stage["units"] == "frisframe-stage-units"
+            assert first_stage["physical_meters"] is False, "cameraPath phases must never relabel stage coordinates as meters"
+
+            ordered_take = {
+                "id": "ordered-path",
+                "cameraPath": {
+                    "schemaVersion": 1,
+                    "fingerprint": "ordered-test",
+                    "keyframes": [
+                        {"time": 0.0, "pose": {"x": 0.0, "y": 0.0, "height": 1.6, "panDeg": 0, "tiltDeg": 0, "focal": 35}},
+                        {"time": 1.0, "pose": {"x": 0.2, "y": 0.0, "height": 1.6, "panDeg": 20, "tiltDeg": 0, "focal": 35}},
+                        {"time": 2.0, "pose": {"x": 0.2, "y": 0.0, "height": 1.6, "panDeg": 20, "tiltDeg": 0, "focal": 50}},
+                        {"time": 3.0, "pose": {"x": 0.4, "y": 0.0, "height": 1.6, "panDeg": 5, "tiltDeg": 0, "focal": 50}},
+                        {"time": 4.0, "pose": {"x": 0.4, "y": 0.0, "height": 1.6, "panDeg": 5, "tiltDeg": 0, "focal": 50}},
+                    ],
+                },
+            }
+            ordered = extension._camera_path_summary(ordered_take)["motion_phases"]
+            assert ordered["phase_count"] == 4
+            assert [phase["start_time"] for phase in ordered["phases"]] == [0.0, 1.0, 2.0, 3.0]
+            assert [phase["end_time"] for phase in ordered["phases"]] == [1.0, 2.0, 3.0, 4.0]
+            assert ordered["phases"][0]["cues"][0] == {
+                "type": "pan",
+                "direction": "positive",
+                "net_deg": 20.0,
+                "travel_deg": 20.0,
+            }
+            assert ordered["phases"][1]["cues"][0]["type"] == "lens"
+            assert ordered["phases"][1]["cues"][0]["fov_change"] == "narrower"
+            assert ordered["phases"][2]["cues"][0] == {
+                "type": "pan",
+                "direction": "negative",
+                "net_deg": -15.0,
+                "travel_deg": 15.0,
+            }
+            assert ordered["phases"][3]["cues"] == [{"type": "hold"}]
+
+            noisy_keys = []
+            for index in range(30):
+                noisy_keys.append({
+                    "time": float(index),
+                    "pose": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "height": 1.6,
+                        "panDeg": 10 if index % 2 else 0,
+                        "tiltDeg": 0,
+                        "focal": 35,
+                    },
+                })
+            compacted = extension._camera_path_summary({
+                "id": "compacted-path",
+                "cameraPath": {"schemaVersion": 1, "fingerprint": "compacted-test", "keyframes": noisy_keys},
+            })["motion_phases"]
+            assert compacted["raw_phase_count"] == 29
+            assert compacted["phase_count"] == 12
+            assert compacted["compacted"] is True
+            assert compacted["phases"][0]["start_time"] == 0.0
+            assert compacted["phases"][-1]["end_time"] == 29.0
+
             visual_take = {
                 "id": "visual-path",
                 "tracking": {
@@ -113,6 +184,13 @@ def main() -> None:
             dolly = next(action for action in visual_summary["actions"] if action["type"] == "dolly")
             assert dolly["units"] == "relative-virtual-travel"
             assert dolly["metric"] is False
+            visual_stage = next(
+                cue
+                for phase in visual_summary["motion_phases"]["phases"]
+                for cue in phase["cues"]
+                if cue["type"] == "stage-translate"
+            )
+            assert visual_stage["physical_meters"] is False
 
             legacy = extension._camera_path_summary({"id": "legacy"})
             assert legacy == {"available": False, "reason": "legacy-take-without-camera-path"}
@@ -125,7 +203,7 @@ def main() -> None:
                 "reason": None,
             }
 
-            print("Camera Take Path Summary MCP: path motion, angle unwrap, metric guardrails, and legacy compatibility passed")
+            print("Camera Take Path Summary MCP: ordered motion phases, compaction, metric guardrails, angle unwrap, and legacy compatibility passed")
         finally:
             if old_db is None:
                 os.environ.pop("PREVIS_DB_PATH", None)
