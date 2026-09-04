@@ -8,6 +8,7 @@ on:
       - .github/workflows/refine-physical-motion-fidelity.yml
       - tools/refine_physical_motion_fidelity.py
       - tools/refine_physical_motion_fidelity_testfix.py
+      - tools/refine_physical_motion_fidelity_policyfix.py
 
 permissions:
   contents: write
@@ -33,6 +34,7 @@ jobs:
         run: |
           python3 tools/refine_physical_motion_fidelity.py
           python3 tools/refine_physical_motion_fidelity_testfix.py
+          python3 tools/refine_physical_motion_fidelity_policyfix.py
 
       - name: Run project quality checks
         run: python3 quality_check.py
@@ -42,7 +44,7 @@ jobs:
         run: |
           git config user.name "FrisFrame CI"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/refine-physical-motion-fidelity.yml tools/refine_physical_motion_fidelity.py tools/refine_physical_motion_fidelity_testfix.py
+          git rm .github/workflows/refine-physical-motion-fidelity.yml tools/refine_physical_motion_fidelity.py tools/refine_physical_motion_fidelity_testfix.py tools/refine_physical_motion_fidelity_policyfix.py
           git add electron/interaction-ux.js electron/camera-operator-live-ux.js electron/phone-motion-camera-ux.js tests/camera-operator-core.test.cjs tests/camera-operator-live-contract.test.cjs tests/physical-camera-take-context.test.cjs
           git commit -m "refine physical camera motion fidelity"
           git push origin HEAD:refine/physical-camera-precision
