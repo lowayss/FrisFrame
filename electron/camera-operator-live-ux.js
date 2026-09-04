@@ -321,10 +321,22 @@
     startTime + Math.max(0, performance.now() - recordStartedAt) / 1000,
   );
 
-  const sampleCurrentPose = (time) => {
-    samples.push({ time: Number(time), ...currentCameraPose() });
-    lastSampleTime = Number(time);
+  const samplePose = (time, pose = currentCameraPose()) => {
+    const numericTime = Number(time);
+    const fallback = currentCameraPose();
+    samples.push({
+      time: numericTime,
+      x: Number.isFinite(Number(pose?.x)) ? Number(pose.x) : fallback.x,
+      y: Number.isFinite(Number(pose?.y)) ? Number(pose.y) : fallback.y,
+      height: Number.isFinite(Number(pose?.height)) ? Number(pose.height) : fallback.height,
+      panDeg: normalizeAngle(Number.isFinite(Number(pose?.panDeg)) ? Number(pose.panDeg) : fallback.panDeg),
+      tiltDeg: Number.isFinite(Number(pose?.tiltDeg)) ? Number(pose.tiltDeg) : fallback.tiltDeg,
+      focal: Number.isFinite(Number(pose?.focal)) ? Number(pose.focal) : fallback.focal,
+    });
+    lastSampleTime = numericTime;
   };
+
+  const sampleCurrentPose = (time) => samplePose(time, currentCameraPose());
 
   const updateUi = () => {
     button.classList.toggle("is-armed", mode === "armed");
@@ -530,14 +542,32 @@
     return true;
   };
 
+  const recordPhysicalPose = (pose) => {
+    if (mode !== "recording" || recordInput !== "phone" || !pose) return false;
+    const time = operatorTime();
+    if (typeof ensureDurationCovers === "function") ensureDurationCovers(time);
+    state.motion.playhead = time;
+    applyCameraPose(pose, state);
+    // Phone packets already arrive on a latest-only transport. Capture their actual
+    // arrival timing (up to ~60 Hz) instead of quantizing every move to RAF timing.
+    if (time - lastSampleTime >= 1 / 90) samplePose(time, currentCameraPose());
+    dirty = true;
+    return true;
+  };
+
   const tickRecording = () => {
     if (mode !== "recording") return;
     const time = operatorTime();
     if (typeof ensureDurationCovers === "function") ensureDurationCovers(time);
     state.motion.playhead = time;
     if (state.camera.trackingTargetId) maintainCameraTracking(state, time);
-    const sampleInterval = recordInput === "phone" ? 1 / 60 : 1 / 30;
-    if (time - lastSampleTime >= sampleInterval || time >= maxTimelineTime()) sampleCurrentPose(time);
+    if (recordInput === "phone") {
+      // If transport pauses briefly, keep a hold sample so the reconstructed path
+      // does not drift through a genuine stationary beat.
+      if (time - lastSampleTime >= 0.10 || time >= maxTimelineTime()) sampleCurrentPose(time);
+    } else if (time - lastSampleTime >= 1 / 30 || time >= maxTimelineTime()) {
+      sampleCurrentPose(time);
+    }
     if (dirty) {
       dirty = false;
       renderLiveFrame(time);
@@ -768,6 +798,7 @@
           angleTolerance: 0.07 + cleanupStrength * 0.12,
           focalTolerance: 0.18,
           maxGap: 0.22 + cleanupStrength * 0.10,
+          preserveNaturalMotion: true,
         }
       : {
           positionTolerance: 0.00135 + cleanupStrength * 0.0025,
@@ -855,6 +886,7 @@
   window.FrisFrameCameraOperator = {
     arm: armOperator,
     startPhysical: startPhysicalRecording,
+    recordPhysicalPose,
     adoptStartPose,
     cancel: cancelOperator,
     finish: finishOperatorTake,

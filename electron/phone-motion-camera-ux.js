@@ -452,7 +452,10 @@
 
     livePreviewPose = null;
     applyPoseToState(pose, state);
-    if (op.mode === "recording") recordTakeDiagnostic(diagnostic);
+    if (op.mode === "recording") {
+      op.recordPhysicalPose?.(pose);
+      recordTakeDiagnostic(diagnostic);
+    }
     renderExternalFrame();
     updateDesktopBadge();
   }

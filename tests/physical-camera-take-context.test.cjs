@@ -106,12 +106,18 @@ test("Physical Camera metadata is gated to an actual Camera Operator finish comm
 test("Physical Camera REC is persisted through the Camera Operator camera-keyframe path", () => {
   assert.match(ux, /const starter = inputs\(\)\?\.startRecording/,
     "phone REC must enter the existing Camera Operator recording path");
-  assert.match(cameraOperatorUx, /sampleInterval = recordInput === "phone" \? 1 \/ 60 : 1 \/ 30/,
-    "Physical Camera must sample the live phone pose at display-class cadence");
+  assert.match(cameraOperatorUx, /const recordPhysicalPose = \(pose\) =>/,
+    "Physical Camera must capture stabilized phone poses on packet arrival");
+  assert.match(cameraOperatorUx, /time - lastSampleTime >= 1 \/ 90/,
+    "Physical Camera packet capture must retain display-class motion without duplicate bursts");
   assert.match(cameraOperatorUx, /resampleStep = phoneTake \? 1 \/ 30 : 1 \/ 15/,
     "Physical Camera samples must become a dense but editable 30 Hz timeline path");
   assert.match(cameraOperatorUx, /captureSourceKeyframe\("camera", sample\.time, undefined, "straight"\)/,
     "the finished Physical Camera take must materialize as camera keyframes");
+  assert.match(cameraOperatorUx, /recordPhysicalPose/,
+    "Camera Operator must expose packet-timed Physical Camera capture");
+  assert.match(ux, /op\.recordPhysicalPose\?\.\(pose\)/,
+    "stabilized Physical Camera packets must feed the packet-timed recorder");
   assert.match(cameraOperatorUx, /state\.motion\.keyframes\.push\(keyframe\)/,
     "materialized camera keys must be stored in the project timeline");
   assert.match(cameraOperatorUx, /commit\(\{ preserveSourceIds: \["camera"\] \}\)/,

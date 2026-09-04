@@ -99,4 +99,50 @@ function sample(time, overrides = {}) {
   assert.equal(output.at(-1).time, 1.2);
 }
 
+// Physical Camera reduction must preserve both edges of a real hold so playback
+// can settle, stay still, and then leave the hold without spline drift.
+{
+  const input = [
+    sample(0.0, { x: 0.20 }),
+    sample(0.1, { x: 0.20 }),
+    sample(0.2, { x: 0.20 }),
+    sample(0.3, { x: 0.23 }),
+    sample(0.4, { x: 0.26 }),
+    sample(0.5, { x: 0.26 }),
+    sample(0.6, { x: 0.26 }),
+  ];
+  const output = core.simplifySamples(input, {
+    positionTolerance: 0.001,
+    heightTolerance: 0.01,
+    angleTolerance: 0.1,
+    focalTolerance: 0.2,
+    maxGap: 99,
+    preserveNaturalMotion: true,
+  });
+  const times = output.map((entry) => Number(entry.time.toFixed(1)));
+  assert.ok(times.includes(0.2), "the release edge of an opening hold must survive");
+  assert.ok(times.includes(0.4), "the first settled sample of a closing hold must survive");
+}
+
+// A deliberate handheld reversal is an authored beat, not jitter.
+{
+  const input = [
+    sample(0.0, { x: 0.20 }),
+    sample(0.1, { x: 0.23 }),
+    sample(0.2, { x: 0.26 }),
+    sample(0.3, { x: 0.23 }),
+    sample(0.4, { x: 0.20 }),
+  ];
+  const output = core.simplifySamples(input, {
+    positionTolerance: 0.001,
+    heightTolerance: 0.01,
+    angleTolerance: 0.1,
+    focalTolerance: 0.2,
+    maxGap: 99,
+    preserveNaturalMotion: true,
+  });
+  assert.ok(output.some((entry) => Math.abs(entry.time - 0.2) < 0.000001),
+    "the direction-change apex must survive Physical Camera key reduction");
+}
+
 console.log("camera-operator-core: jitter cleanup, angle wrap, and time-aware key reduction passed");

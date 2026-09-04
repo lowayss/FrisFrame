@@ -31,10 +31,14 @@ assert.match(controller, /threeCanvas\?\.addEventListener\("pointerdown", beginW
 assert.match(controller, /recordInput !== "preview"/, "world camera recording must not reinterpret 3D rig movement as pan/tilt preview drag");
 assert.match(controller, /: Math\.max\(cleanupStrength, 0\.16\)/, "mouse-driven takes must retain a baseline stabilization pass");
 assert.match(controller, /resampleStep = phoneTake \? 1 \/ 30 : 1 \/ 15/, "physical takes must preserve a denser editable sample clock than mouse takes");
-assert.match(controller, /sampleInterval = recordInput === "phone" \? 1 \/ 60 : 1 \/ 30/, "Physical Camera must sample live motion at display-class cadence before reduction");
+assert.match(controller, /const recordPhysicalPose = \(pose\) =>/, "Physical Camera must record stabilized packets on their real arrival timing");
+assert.match(controller, /time - lastSampleTime >= 1 \/ 90/, "Physical Camera packet capture must retain display-class motion without duplicate bursts");
+assert.match(controller, /time - lastSampleTime >= 0\.10/, "Physical Camera must write hold samples when packet flow briefly pauses");
 assert.match(controller, /positionTolerance: 0\.00055/, "Physical Camera key reduction must retain small intentional position moves");
 assert.match(controller, /angleTolerance: 0\.07/, "Physical Camera key reduction must retain fine pan and tilt changes");
 assert.match(controller, /maxGap: 0\.22 \+ cleanupStrength \* 0\.10/, "Physical Camera must not leave long gaps between editable keys");
+assert.match(controller, /preserveNaturalMotion: true/, "Physical Camera must preserve human timing anchors while reducing keys");
+assert.match(controller, /recordPhysicalPose,/, "Physical Camera runtime must expose its packet-timed recorder");
 assert.match(controller, /startPhysical: startPhysicalRecording/, "Physical Camera must enter a dedicated recording path instead of masquerading as mouse input");
 assert.match(controller, /adoptStartPose/, "Physical Camera must rewrite the take start key to the adopted LIVE phone pose");
 assert.match(controller, /exactKey \|\| \(ensureStartKey \? null : \[\.\.\.cameraKeys\]/, "Physical Camera must start at the current playhead instead of jumping to an older camera key");
