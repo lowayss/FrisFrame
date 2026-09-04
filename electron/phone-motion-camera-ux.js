@@ -7,6 +7,7 @@
   const STABILIZATION_KEY = "frisframe.phoneMotion.stabilization";
   const STABILIZATION_PRESETS = Object.freeze({
     raw: { label:"RAW", positionHalfLifeMs:0, angleHalfLifeMs:0, focalHalfLifeMs:0 },
+    direct: { label:"DIRECT", positionHalfLifeMs:12, angleHalfLifeMs:8, focalHalfLifeMs:24 },
     handheld: { label:"HANDHELD", positionHalfLifeMs:55, angleHalfLifeMs:32, focalHalfLifeMs:75 },
     cinema: { label:"CINEMA", positionHalfLifeMs:115, angleHalfLifeMs:82, focalHalfLifeMs:120 },
   });
@@ -19,7 +20,7 @@
   let pairingRefresh = 0;
   let stabilizationPreset = Object.prototype.hasOwnProperty.call(STABILIZATION_PRESETS, localStorage.getItem(STABILIZATION_KEY))
     ? localStorage.getItem(STABILIZATION_KEY)
-    : "handheld";
+    : "direct";
   let stabilizer = null;
   let activeTake = null;
   let pendingStart = null;
@@ -462,13 +463,16 @@
     const held = diagnostic?.stabilization?.heldTranslation === true;
     const metric = diagnostic?.translation?.metric === true;
     const previewing = opMode === "idle" && Boolean(livePreviewPose) && live;
+    const targetLocked = Boolean(state?.camera?.trackingTargetId);
     const phase = previewing ? "LIVE · " : (standby ? "STBY · " : (recording ? "REC · " : ""));
     badge.textContent = live
-      ? (held
-        ? `${phase}회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
-        : (metric
-          ? `${phase}WebXR 6DoF · METRIC · ${STABILIZATION_PRESETS[stabilizationPreset].label}`
-          : `${phase}실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`))
+      ? (targetLocked
+        ? `${phase}TRACK TARGET · Pan/Tilt 타깃 고정`
+        : (held
+          ? `${phase}회전 추적 · 이동 HOLD · ${confidence}% ${metric ? "XR" : "visual"}`
+          : (metric
+            ? `${phase}WebXR 6DoF · METRIC · ${STABILIZATION_PRESETS[stabilizationPreset].label}`
+            : `${phase}실제 모션 연결 · ${confidence}% visual · ${STABILIZATION_PRESETS[stabilizationPreset].label}`)))
       : (standby ? "STBY · 실제 모션 대기" : "실제 모션 대기");
     badge.classList.toggle("is-live", live);
     badge.classList.toggle("is-hold", live && held);
@@ -517,7 +521,7 @@
       return;
     }
     const qr = motionQr(url);
-    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. 연결되면 REC 전에도 LIVE 3D 프리뷰가 움직입니다. 휴대폰 REC를 누르면 현재 LIVE 구도를 Take 시작점으로 채택해 바로 촬영합니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. Visual Flow는 실제 이동거리 측정값이 아니라 가상 씬 이동 감도이며, 신뢰도가 낮아지면 위치를 유지하고 Pan/Tilt만 계속 추적합니다.</small>`;
+    body.innerHTML = `<div class="frisframe-phone-motion-layout">${qr ? `<div class="frisframe-phone-motion-qr">${qr}</div>` : ""}<div class="frisframe-phone-motion-copy"><div class="frisframe-phone-url"></div><div class="frisframe-phone-control-note">QR → 로컬 CA 설치 → HTTPS 모션 카메라. 연결되면 REC 전에도 LIVE 3D 프리뷰가 움직입니다. 휴대폰 REC를 누르면 현재 LIVE 구도를 Take 시작점으로 채택해 바로 촬영합니다.</div><button type="button" class="text-btn" data-copy-motion-url>설정 주소 복사</button>${motion?.tls?.available ? `<small>HTTPS 준비됨</small>` : `<small>HTTPS 불가 · ${String(motion?.tls?.error || "OpenSSL unavailable")}</small>`}</div></div><div class="frisframe-phone-motion-stabilization"><span>STABILIZATION</span>${Object.entries(STABILIZATION_PRESETS).map(([key,preset]) => `<button type="button" data-phone-motion-stabilization="${key}" class="${key === stabilizationPreset ? "is-active" : ""}">${preset.label}</button>`).join("")}<button type="button" data-phone-motion-recenter>RECENTER</button></div><small class="frisframe-phone-motion-privacy">WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다. DIRECT는 짧은 안정화만 적용해 조작 지연을 최소화하고, RAW는 필터 없이 센서값을 따릅니다. Visual Flow는 실제 이동거리 측정값이 아닙니다. Tracking Target이 활성화된 카메라는 Pan/Tilt가 타깃 추적으로 고정됩니다.</small>`;
     const urlNode = body.querySelector(".frisframe-phone-url");
     if (urlNode) urlNode.textContent = url;
     body.querySelector("[data-copy-motion-url]")?.addEventListener("click", async () => {
@@ -542,7 +546,7 @@
     .frisframe-phone-motion-layout{display:grid;grid-template-columns:86px minmax(0,1fr);gap:9px;align-items:center}.frisframe-phone-motion-copy{display:grid;gap:5px;min-width:0}
     .frisframe-phone-motion-qr{width:86px;height:86px;padding:4px;background:#fff;border-radius:5px;overflow:hidden}.frisframe-phone-motion-qr svg{width:100%;height:100%;display:block}
     .frisframe-phone-motion-copy small,.frisframe-phone-motion-privacy{font-size:7px;color:#7e8993;overflow-wrap:anywhere;line-height:1.35}
-    .frisframe-phone-motion-stabilization{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));gap:4px;align-items:center}.frisframe-phone-motion-stabilization span{font-size:7px;color:#77828c}.frisframe-phone-motion-stabilization button{min-height:23px;padding:0 4px;border:1px solid rgba(255,255,255,.1);border-radius:5px;background:rgba(255,255,255,.025);color:#8f9aa4;font-size:7px;font-weight:850}.frisframe-phone-motion-stabilization button.is-active{color:#eef4f7;border-color:rgba(255,107,85,.55);background:rgba(255,107,85,.12)}
+    .frisframe-phone-motion-stabilization{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:4px;align-items:center}.frisframe-phone-motion-stabilization span{font-size:7px;color:#77828c}.frisframe-phone-motion-stabilization button{min-height:23px;padding:0 4px;border:1px solid rgba(255,255,255,.1);border-radius:5px;background:rgba(255,255,255,.025);color:#8f9aa4;font-size:7px;font-weight:850}.frisframe-phone-motion-stabilization button.is-active{color:#eef4f7;border-color:rgba(255,107,85,.55);background:rgba(255,107,85,.12)}
   `;
   document.head.appendChild(style);
 
