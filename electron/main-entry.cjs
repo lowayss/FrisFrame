@@ -4,14 +4,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { app } = require("electron");
 
-const TAKE_PRELUDE_FILES = Object.freeze([
+const MOTION_PRELUDE_FILES = Object.freeze([
   "phone-motion-ipc-ux.js",
+]);
+
+const TAKE_PRELUDE_FILES = Object.freeze([
   "camera-take-path-core.js",
   "camera-take-replay-ux.js",
 ]);
 
 function readPreludeSources() {
-  return TAKE_PRELUDE_FILES.map((filename) => ({
+  return [...MOTION_PRELUDE_FILES, ...TAKE_PRELUDE_FILES].map((filename) => ({
     filename,
     source:fs.readFileSync(path.join(__dirname, filename), "utf8"),
   }));
