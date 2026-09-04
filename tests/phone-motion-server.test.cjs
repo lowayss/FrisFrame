@@ -2,8 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const tls = require("node:tls");
 const { sanitizeMotionInput, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
-const { extensionConfig } = require("../electron/phone-remote-tls.cjs");
+const { extensionConfig, localCaConfig, pemCertificateToDer, isCertificateAuthority } = require("../electron/phone-remote-tls.cjs");
 
 const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
 
@@ -98,4 +99,22 @@ test("TLS SAN configuration includes localhost and LAN IPs", () => {
   assert.match(config,/IP\.1=127\.0\.0\.1/);
   assert.match(config,/192\.168\.0\.21/);
   assert.match(config,/10\.0\.0\.8/);
+});
+
+test("local CA configuration explicitly marks the certificate as a signing CA", () => {
+  const config = localCaConfig();
+  assert.match(config,/basicConstraints=critical,CA:TRUE/);
+  assert.match(config,/keyUsage=critical,keyCertSign,cRLSign/);
+});
+
+test("downloadable local CA is DER X.509 data without PEM or private-key material", () => {
+  const pem = tls.rootCertificates[0];
+  assert.equal(isCertificateAuthority(pem),true);
+  const der = pemCertificateToDer(pem);
+  assert.ok(Buffer.isBuffer(der));
+  assert.equal(der[0],0x30);
+  assert.ok(der.length > 256);
+  const text = der.toString("latin1");
+  assert.doesNotMatch(text,/BEGIN CERTIFICATE/);
+  assert.doesNotMatch(text,/PRIVATE KEY/);
 });
