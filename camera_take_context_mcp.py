@@ -2,14 +2,15 @@
 """Read-only Physical Camera take context for FrisFrame's previs MCP server.
 
 This extension intentionally does not compose a creative video prompt. It exposes
-persisted Camera Operator take intent and prompt guardrails in compact payloads
-so the MCP client can browse takes and reuse one without scanning the entire
-project document.
+persisted Camera Operator take intent, archived camera-path motion and prompt
+guardrails in compact payloads so the MCP client can browse and reuse a take
+without scanning the entire project document.
 """
 
 from __future__ import annotations
 
 import json
+import math
 
 import mcp_previs_server as base
 import mcp_server as core
@@ -20,7 +21,7 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
         "name": "list_camera_takes",
         "description": (
             "선택한 컷의 Physical Camera Take 목록을 읽기 전용으로 반환합니다. "
-            "최근 Take부터 추적 방식·metric 여부·안정화·신뢰도·promptSeed를 간단히 비교하고 "
+            "최근 Take부터 추적 방식·metric 여부·안정화·신뢰도·promptSeed와 cameraPath 보유 여부를 간단히 비교하고 "
             "FrisFrame UI에서 명시적으로 선택한 AI Take도 표시합니다."
         ),
         "inputSchema": {
@@ -45,7 +46,7 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
         "description": (
             "선택한 컷의 Physical Camera Take를 읽기 전용으로 요약합니다. "
             "명시적 take_id가 없으면 FrisFrame에서 AI 사용으로 선택한 Take, 그 다음 최신 Take를 사용합니다. "
-            "저장된 promptSeed/promptPolicy와 WebXR·Visual Flow metric 의미를 그대로 반환합니다."
+            "저장된 promptSeed/promptPolicy, WebXR·Visual Flow metric 의미와 archived cameraPath 동작 요약을 그대로 반환합니다."
         ),
         "inputSchema": {
             "type": "object",
@@ -68,6 +69,32 @@ _ORIGINAL_CALL_TOOL = base.call_tool
 
 def _clone(value):
     return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _finite(value, fallback=0.0):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+    return number if math.isfinite(number) else float(fallback)
+
+
+def _rounded(value, digits=4):
+    return round(_finite(value), digits)
+
+
+def _normalize_angle(value):
+    normalized = _finite(value) % 360.0
+    return normalized + 360.0 if normalized < 0 else normalized
+
+
+def _shortest_angle_delta(left, right):
+    delta = _normalize_angle(right) - _normalize_angle(left)
+    if delta > 180.0:
+        delta -= 360.0
+    if delta < -180.0:
+        delta += 360.0
+    return delta
 
 
 def _project_payload(project_id):
@@ -152,6 +179,157 @@ def _camera_timeline(blocking):
     }
 
 
+def _pose_summary(pose):
+    pose = pose if isinstance(pose, dict) else {}
+    return {
+        "x": _rounded(pose.get("x")),
+        "y": _rounded(pose.get("y")),
+        "height": _rounded(pose.get("height"), 3),
+        "pan_deg": _rounded(_normalize_angle(pose.get("panDeg")), 3),
+        "tilt_deg": _rounded(pose.get("tiltDeg"), 3),
+        "focal_mm": _rounded(pose.get("focal", 35), 3),
+    }
+
+
+def _camera_path_summary(take):
+    if not isinstance(take, dict):
+        return {"available": False, "reason": "no-take"}
+    path = take.get("cameraPath")
+    if not isinstance(path, dict) or not isinstance(path.get("keyframes"), list):
+        return {"available": False, "reason": "legacy-take-without-camera-path"}
+
+    frames = []
+    for raw in path.get("keyframes") or []:
+        if not isinstance(raw, dict) or not isinstance(raw.get("pose"), dict):
+            continue
+        try:
+            time_value = float(raw.get("time", 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(time_value):
+            continue
+        frames.append({"time": time_value, "pose": raw["pose"]})
+    frames.sort(key=lambda item: item["time"])
+    if not frames:
+        return {"available": False, "reason": "camera-path-has-no-valid-keyframes"}
+
+    start = frames[0]
+    end = frames[-1]
+    start_pose = _pose_summary(start["pose"])
+    end_pose = _pose_summary(end["pose"])
+
+    pan_steps = [
+        _shortest_angle_delta(frames[index - 1]["pose"].get("panDeg"), frames[index]["pose"].get("panDeg"))
+        for index in range(1, len(frames))
+    ]
+    tilt_steps = [
+        _finite(frames[index]["pose"].get("tiltDeg")) - _finite(frames[index - 1]["pose"].get("tiltDeg"))
+        for index in range(1, len(frames))
+    ]
+    focal_steps = [
+        _finite(frames[index]["pose"].get("focal", 35)) - _finite(frames[index - 1]["pose"].get("focal", 35))
+        for index in range(1, len(frames))
+    ]
+
+    dx = end_pose["x"] - start_pose["x"]
+    dy = end_pose["y"] - start_pose["y"]
+    dh = end_pose["height"] - start_pose["height"]
+    stage_distance = math.sqrt(dx * dx + dy * dy + dh * dh)
+    pan_net = sum(pan_steps)
+    tilt_net = end_pose["tilt_deg"] - start_pose["tilt_deg"]
+    focal_net = end_pose["focal_mm"] - start_pose["focal_mm"]
+
+    tracking = take.get("tracking") if isinstance(take.get("tracking"), dict) else {}
+    translation = tracking.get("translation") if isinstance(tracking.get("translation"), dict) else {}
+    policy = take.get("promptPolicy") if isinstance(take.get("promptPolicy"), dict) else {}
+    translation_units = translation.get("units")
+    metric_translation = (
+        tracking.get("metric") is True
+        and policy.get("metricDistanceAllowed") is True
+        and translation_units == "meters-local-space"
+    )
+
+    actions = []
+    if abs(pan_net) >= 0.05 or sum(abs(value) for value in pan_steps) >= 0.05:
+        actions.append({
+            "type": "pan",
+            "net_deg": _rounded(pan_net, 3),
+            "travel_deg": _rounded(sum(abs(value) for value in pan_steps), 3),
+        })
+    if abs(tilt_net) >= 0.05 or sum(abs(value) for value in tilt_steps) >= 0.05:
+        actions.append({
+            "type": "tilt",
+            "net_deg": _rounded(tilt_net, 3),
+            "travel_deg": _rounded(sum(abs(value) for value in tilt_steps), 3),
+        })
+    if abs(focal_net) >= 0.05 or sum(abs(value) for value in focal_steps) >= 0.05:
+        actions.append({
+            "type": "lens",
+            "start_focal_mm": start_pose["focal_mm"],
+            "end_focal_mm": end_pose["focal_mm"],
+            "change_mm": _rounded(focal_net, 3),
+            "fov_change": "narrower" if focal_net > 0 else "wider" if focal_net < 0 else "mixed",
+        })
+    for movement in ("dolly", "truck", "pedestal"):
+        raw_value = translation.get(movement)
+        if raw_value is None or abs(_finite(raw_value)) < 0.0001:
+            continue
+        actions.append({
+            "type": movement,
+            "value": _rounded(raw_value, 4),
+            "units": translation_units,
+            "metric": metric_translation,
+        })
+
+    return {
+        "available": True,
+        "source": "archived-camera-path",
+        "fingerprint": path.get("fingerprint"),
+        "keyframe_count": len(frames),
+        "start_time": _rounded(start["time"], 6),
+        "end_time": _rounded(end["time"], 6),
+        "duration": _rounded(max(0.0, end["time"] - start["time"]), 6),
+        "start_pose": start_pose,
+        "end_pose": end_pose,
+        "orientation": {
+            "pan_net_deg": _rounded(pan_net, 3),
+            "pan_travel_deg": _rounded(sum(abs(value) for value in pan_steps), 3),
+            "tilt_net_deg": _rounded(tilt_net, 3),
+            "tilt_travel_deg": _rounded(sum(abs(value) for value in tilt_steps), 3),
+        },
+        "lens": {
+            "start_focal_mm": start_pose["focal_mm"],
+            "end_focal_mm": end_pose["focal_mm"],
+            "change_mm": _rounded(focal_net, 3),
+            "travel_mm": _rounded(sum(abs(value) for value in focal_steps), 3),
+        },
+        "stage_displacement": {
+            "x": _rounded(dx, 4),
+            "y": _rounded(dy, 4),
+            "height": _rounded(dh, 4),
+            "distance": _rounded(stage_distance, 4),
+            "units": "frisframe-stage-units",
+            "physical_meters": False,
+        },
+        "tracked_translation": {
+            "dolly": translation.get("dolly"),
+            "truck": translation.get("truck"),
+            "pedestal": translation.get("pedestal"),
+            "units": translation_units,
+            "metric": tracking.get("metric") is True,
+            "exact_distance_allowed": metric_translation,
+        },
+        "metric_policy": {
+            "camera_path_position_units": "frisframe-stage-units",
+            "camera_path_position_is_physical_meters": False,
+            "tracking_metric": tracking.get("metric") is True,
+            "metric_distance_allowed": metric_translation,
+            "distance_guard": policy.get("distanceGuard"),
+        },
+        "actions": actions,
+    }
+
+
 def _take_summary(take, record_index, selected_id, latest_id):
     tracking = take.get("tracking") if isinstance(take.get("tracking"), dict) else {}
     confidence = tracking.get("confidence") if isinstance(tracking.get("confidence"), dict) else {}
@@ -160,6 +338,7 @@ def _take_summary(take, record_index, selected_id, latest_id):
     samples = int(tracking.get("samples") or 0)
     held = int(tracking.get("heldTranslationSamples") or 0)
     take_id = str(take.get("id"))
+    path_summary = _camera_path_summary(take)
     return {
         "id": take_id,
         "record_index": int(record_index),
@@ -179,6 +358,12 @@ def _take_summary(take, record_index, selected_id, latest_id):
             "held_translation_samples": held,
             "held_translation_ratio": (held / samples) if samples > 0 else 0,
             "translation_units": translation.get("units"),
+        },
+        "camera_path": {
+            "available": path_summary.get("available") is True,
+            "fingerprint": path_summary.get("fingerprint"),
+            "keyframe_count": path_summary.get("keyframe_count", 0),
+            "reason": path_summary.get("reason"),
         },
         "prompt_seed": take.get("promptSeed"),
         "metric_distance_allowed": prompt_policy.get("metricDistanceAllowed") is True,
@@ -258,6 +443,7 @@ def get_camera_take_context(args):
         "take": selected_copy,
         "prompt_seed": selected_copy.get("promptSeed") if selected_copy else None,
         "prompt_policy": _clone(selected_copy.get("promptPolicy")) if selected_copy and isinstance(selected_copy.get("promptPolicy"), dict) else None,
+        "camera_path_summary": _camera_path_summary(selected_copy),
         "camera_timeline": _camera_timeline(blocking),
         "read_only": True,
         "final_prompt_owner": "mcp-client",
