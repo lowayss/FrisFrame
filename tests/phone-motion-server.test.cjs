@@ -159,13 +159,16 @@ test("latest-only dispatcher rejects reordered packets, coalesces motion and dis
   assert.equal(reloaded.accepted,true,"a reloaded phone page gets a fresh sequence namespace");
 });
 
-test("renderer IPC bridge drops stale work, coalesces rendering and forces a fresh anchor on tracking-mode transitions", () => {
+test("renderer IPC bridge drops stale work, coalesces rendering and forces fresh anchors after mode or session changes", () => {
   assert.match(phoneRemotePreload,/ipcRenderer\.on\("phone-motion:input"/);
   assert.match(phoneRemotePreload,/onMotionInput/);
   assert.match(phoneMotionIpcUx,/MAX_RENDER_AGE_MS = 100/);
   assert.match(phoneMotionIpcUx,/droppedStaleSequence/);
   assert.match(phoneMotionIpcUx,/droppedRendererAge/);
   assert.match(phoneMotionIpcUx,/requestAnimationFrame\(flush\)/);
+  assert.match(phoneMotionIpcUx,/const ageNow = Math\.max/);
+  assert.match(phoneMotionIpcUx,/if \(!detail\.command && ageNow > MAX_RENDER_AGE_MS\)/);
+  assert.match(phoneMotionIpcUx,/lastMetric = null/);
   assert.match(phoneMotionIpcUx,/modeEpoch \+= 1/);
   assert.match(phoneMotionIpcUx,/calibrationId:calibrationId \* 1024 \+ modeEpoch/);
   assert.match(phoneMotionIpcUx,/frisframe:phone-remote-input/);
