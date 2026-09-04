@@ -33,13 +33,14 @@ const expectedMainInjection = [
 ];
 const expectedInjection = [...expectedPrelude, ...expectedMainInjection];
 const expectedUx = expectedInjection.filter((filename) => /-ux\.js$/.test(filename));
+const quotedManifest = (source) => [...source.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 
 const prelude = mainEntry.match(/TAKE_PRELUDE_FILES = Object\.freeze\(\[(.*?)\]\)/s);
 assert.ok(prelude, "electron/main-entry.cjs must keep one explicit Take prelude manifest");
-const preInjected = JSON.parse(`[${prelude[1]}]`);
+const preInjected = quotedManifest(prelude[1]);
 const injection = main.match(/for \(const filename of \[(.*?)\]\) \{/s);
 assert.ok(injection, "electron/main.cjs must keep one explicit renderer injection manifest");
-const mainInjected = JSON.parse(`[${injection[1]}]`);
+const mainInjected = quotedManifest(injection[1]);
 const injected = [...preInjected, ...mainInjected];
 const packaged = packageJson.build.files
   .filter((filename) => /^electron\/.*-ux\.js$/.test(filename))
