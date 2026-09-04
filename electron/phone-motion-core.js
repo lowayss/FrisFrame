@@ -67,6 +67,24 @@
     return { x:x/length,y:y/length,z:z/length,w:w/length };
   }
 
+  function inverseQuaternion(value = {}) {
+    const q = normalizeQuaternion(value);
+    return { x:-q.x, y:-q.y, z:-q.z, w:q.w };
+  }
+
+  function rotateVectorByQuaternion(vector = {}, value = {}) {
+    const q = normalizeQuaternion(value);
+    const vx = finite(vector.x), vy = finite(vector.y), vz = finite(vector.z);
+    const tx = 2 * (q.y * vz - q.z * vy);
+    const ty = 2 * (q.z * vx - q.x * vz);
+    const tz = 2 * (q.x * vy - q.y * vx);
+    return {
+      x: vx + q.w * tx + (q.y * tz - q.z * ty),
+      y: vy + q.w * ty + (q.z * tx - q.x * tz),
+      z: vz + q.w * tz + (q.x * ty - q.y * tx),
+    };
+  }
+
   function normalizeSpatial(spatial = {}) {
     const metric = spatial?.mode === "webxr" && spatial?.metric === true;
     if (!metric) {
@@ -139,9 +157,6 @@
     const rollDelta = wrapDegrees(orientation.roll - anchor.orientation.roll);
     const panSensitivity = clamp(finite(context.panSensitivity, 1), 0.1, 3);
     const tiltSensitivity = clamp(finite(context.tiltSensitivity, 1), 0.1, 3);
-    // Optical flow has no physical scale. This number deliberately maps relative
-    // phone motion into virtual scene travel; it is not a measurement of how far
-    // the real phone moved. Keep the old option as a compatibility alias only.
     const virtualTravelScale = clamp(finite(
       context.virtualTravelScale,
       finite(context.visualScaleMeters, 1.75),
@@ -149,12 +164,7 @@
     const confidenceThreshold = clamp(finite(context.confidenceThreshold, 0.2), 0, 1);
     const stageWidth = Math.max(0.01, finite(context.stageWidth, 10));
     const stageDepth = Math.max(0.01, finite(context.stageDepth, 10));
-    const forward = context.forward || { x: 1, z: 0 };
-    const length = Math.max(0.0001, Math.hypot(finite(forward.x), finite(forward.z)));
-    const forwardX = finite(forward.x) / length;
-    const forwardY = finite(forward.z) / length;
-    const rightX = -forwardY;
-    const rightY = forwardX;
+    const fallbackForward = context.forward || { x: 1, z: 0 };
 
     let truck = 0;
     let pedestal = 0;
@@ -164,6 +174,7 @@
     let translationConfidence = visual.confidence;
     let sourceUnits = "relative-optical-flow";
     let outputUnits = "virtual-scene-travel";
+    let forward = fallbackForward;
 
     if (spatial.metric && baseSpatial.metric) {
       translationMetric = true;
@@ -171,12 +182,18 @@
       translationTrusted = spatial.confidence >= confidenceThreshold;
       sourceUnits = "meters";
       outputUnits = "virtual-scene-meters";
+      const panRad = finite(anchor.camera.panDeg) * Math.PI / 180;
+      forward = { x:Math.cos(panRad), z:Math.sin(panRad) };
       if (translationTrusted) {
-        truck = spatial.position.x - baseSpatial.position.x;
-        pedestal = spatial.position.y - baseSpatial.position.y;
-        // WebXR is right-handed and the viewer looks toward -Z. Moving the
-        // physical phone forward therefore makes Z smaller, hence this sign.
-        dolly = baseSpatial.position.z - spatial.position.z;
+        const worldDelta = {
+          x:spatial.position.x - baseSpatial.position.x,
+          y:spatial.position.y - baseSpatial.position.y,
+          z:spatial.position.z - baseSpatial.position.z,
+        };
+        const phoneLocal = rotateVectorByQuaternion(worldDelta, inverseQuaternion(baseSpatial.orientation));
+        truck = phoneLocal.x;
+        pedestal = phoneLocal.y;
+        dolly = -phoneLocal.z;
       }
     } else {
       translationTrusted = visual.confidence >= confidenceThreshold;
@@ -186,6 +203,12 @@
         dolly = (visual.z - finite(baseVisual.z)) * virtualTravelScale;
       }
     }
+
+    const length = Math.max(0.0001, Math.hypot(finite(forward.x), finite(forward.z)));
+    const forwardX = finite(forward.x) / length;
+    const forwardY = finite(forward.z) / length;
+    const rightX = -forwardY;
+    const rightY = forwardX;
     const worldX = rightX * truck + forwardX * dolly;
     const worldY = rightY * truck + forwardY * dolly;
 
@@ -209,6 +232,7 @@
           metric: translationMetric,
           sourceUnits,
           outputUnits,
+          referenceFrame: translationMetric ? "recentered-phone-local" : "screen-relative-flow",
         },
         translationTrusted,
       },
@@ -329,6 +353,8 @@
     remapOrientation,
     normalizeVisual,
     normalizeQuaternion,
+    inverseQuaternion,
+    rotateVectorByQuaternion,
     normalizeSpatial,
     quaternionToOrientation,
     sampleOrientation,
