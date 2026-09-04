@@ -265,7 +265,9 @@ test("Physical Camera provides non-destructive idle LIVE preview and one-tap pho
   assert.match(phoneMotionUx, /function physicalCommandCapture\(event\)/);
   assert.match(phoneMotionUx, /detail\.command === "toggle-record" && op\.mode === "idle"/);
   assert.match(phoneMotionUx, /event\.stopImmediatePropagation\(\)/);
-  assert.match(phoneMotionUx, /op\.arm\(\)/);
+  assert.match(phoneMotionUx, /op\.arm\(\{ ensureStartKey:true \}\)/);
+  assert.match(phoneMotionUx, /op\?\.startPhysical/);
+  assert.match(phoneMotionUx, /op\.adoptStartPose\(pose, "phone"\)/);
   assert.match(phoneMotionUx, /\["idle", "armed", "recording"\]\.includes\(op\.mode\)/);
   assert.match(phoneMotionUx, /livePreviewPose = cloneValue\(pose\)/);
   assert.match(phoneMotionUx, /renderExternalFrame\(livePreviewPose\)/);

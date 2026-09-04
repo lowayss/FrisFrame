@@ -349,11 +349,15 @@
   }
 
   function adoptLivePreviewIntoOperator() {
-    if (!livePreviewPose || operator()?.mode !== "armed") return false;
+    const op = operator();
+    if (!livePreviewPose || op?.mode !== "armed") return false;
     const pose = cloneValue(livePreviewPose);
     livePreviewPose = null;
-    applyPoseToState(pose, state);
-    renderExternalFrame();
+    if (typeof op.adoptStartPose === "function") op.adoptStartPose(pose, "phone");
+    else {
+      applyPoseToState(pose, state);
+      renderExternalFrame();
+    }
     return true;
   }
 
@@ -369,12 +373,15 @@
       activeTake = null;
       pendingStart = null;
       pendingFinish = false;
-      op.arm();
+      op.arm({ ensureStartKey:true });
       if (op.mode === "armed") {
         const adoptedPreview = adoptLivePreviewIntoOperator();
         markTakeStart();
-        const starter = inputs()?.startRecording;
-        if (typeof starter === "function") starter();
+        if (typeof op?.startPhysical === "function") op.startPhysical();
+        else {
+          const starter = inputs()?.startRecording;
+          if (typeof starter === "function") starter();
+        }
         if (typeof notifyApp === "function") {
           notifyApp(adoptedPreview
             ? "Physical Camera REC · LIVE 프리뷰 구도에서 바로 촬영을 시작합니다."

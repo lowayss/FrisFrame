@@ -29,8 +29,14 @@ assert.match(controller, /window\.addEventListener\("mousemove", applyMouseFallb
 assert.match(controller, /const beginWorldCameraRecording = \(event\) => \{[\s\S]*pickThreeEditor\(event\)[\s\S]*beginRecording\(event, "world"\)/, "STBY camera-rig drag must enter the live recording state");
 assert.match(controller, /threeCanvas\?\.addEventListener\("pointerdown", beginWorldCameraRecording, true\)/, "3D camera rig pointerdown must be captured before normal stage editing");
 assert.match(controller, /recordInput !== "preview"/, "world camera recording must not reinterpret 3D rig movement as pan/tilt preview drag");
-assert.match(controller, /const stabilizationStrength = Math\.max\(cleanupStrength, 0\.16\)/, "mouse-driven takes must have a baseline stabilization pass");
-assert.match(controller, /core\.resampleSamples\(smoothed, 1 \/ 15\)/, "mouse-driven takes must use a stable sample clock before key reduction");
+assert.match(controller, /: Math\.max\(cleanupStrength, 0\.16\)/, "mouse-driven takes must retain a baseline stabilization pass");
+assert.match(controller, /resampleStep = phoneTake \? 1 \/ 30 : 1 \/ 15/, "physical takes must preserve a denser editable sample clock than mouse takes");
+assert.match(controller, /sampleInterval = recordInput === "phone" \? 1 \/ 60 : 1 \/ 30/, "Physical Camera must sample live motion at display-class cadence before reduction");
+assert.match(controller, /positionTolerance: 0\.00055/, "Physical Camera key reduction must retain small intentional position moves");
+assert.match(controller, /angleTolerance: 0\.07/, "Physical Camera key reduction must retain fine pan and tilt changes");
+assert.match(controller, /maxGap: 0\.22 \+ cleanupStrength \* 0\.10/, "Physical Camera must not leave long gaps between editable keys");
+assert.match(controller, /startPhysical: startPhysicalRecording/, "Physical Camera must enter a dedicated recording path instead of masquerading as mouse input");
+assert.match(controller, /adoptStartPose/, "Physical Camera must rewrite the take start key to the adopted LIVE phone pose");
 assert.match(controller, /maxGap: 0\.42 \+ cleanupStrength \* 0\.18/, "camera take key reduction must leave enough time between operator spline keys");
 assert.match(controller, /keyframe\.operatorContinuity = true;/, "recorded camera keys must opt into continuous pose interpolation");
 assert.match(controller, /interpolateCameraOperatorPose = interpolateOperatorVectorPose;/, "Camera Operator must replace scalar PCHIP playback with its vector spline policy");

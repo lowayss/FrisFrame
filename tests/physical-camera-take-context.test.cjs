@@ -106,10 +106,10 @@ test("Physical Camera metadata is gated to an actual Camera Operator finish comm
 test("Physical Camera REC is persisted through the Camera Operator camera-keyframe path", () => {
   assert.match(ux, /const starter = inputs\(\)\?\.startRecording/,
     "phone REC must enter the existing Camera Operator recording path");
-  assert.match(cameraOperatorUx, /if \(time - lastSampleTime >= 1 \/ 30 \|\| time >= maxTimelineTime\(\)\) sampleCurrentPose\(time\)/,
-    "Camera Operator must continuously sample the live Physical Camera pose");
-  assert.match(cameraOperatorUx, /core\.resampleSamples\(smoothed, 1 \/ 15\)/,
-    "recorded pose samples must be converted into an editable timeline path");
+  assert.match(cameraOperatorUx, /sampleInterval = recordInput === "phone" \? 1 \/ 60 : 1 \/ 30/,
+    "Physical Camera must sample the live phone pose at display-class cadence");
+  assert.match(cameraOperatorUx, /resampleStep = phoneTake \? 1 \/ 30 : 1 \/ 15/,
+    "Physical Camera samples must become a dense but editable 30 Hz timeline path");
   assert.match(cameraOperatorUx, /captureSourceKeyframe\("camera", sample\.time, undefined, "straight"\)/,
     "the finished Physical Camera take must materialize as camera keyframes");
   assert.match(cameraOperatorUx, /state\.motion\.keyframes\.push\(keyframe\)/,
@@ -217,6 +217,9 @@ test("LIVE preview contract is render-only until recording adopts it", () => {
   assert.match(ux, /const starter = inputs\(\)\?\.startRecording/);
   assert.match(ux, /LIVE 프리뷰 구도에서 바로 촬영을 시작합니다/);
   assert.match(ux, /get livePreview\(\)/);
+  assert.match(ux, /op\.arm\(\{ ensureStartKey:true \}\)/, "phone REC must auto-create a start camera key when the timeline has none");
+  assert.match(ux, /op\.adoptStartPose\(pose, "phone"\)/, "the LIVE phone pose must become the actual first recorded camera key");
+  assert.match(ux, /op\?\.startPhysical/, "physical motion must use the dedicated high-fidelity recording path");
 });
 
 test("take context records tracking semantics needed by downstream generation", () => {

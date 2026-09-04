@@ -438,7 +438,8 @@
     if (typeof notifyApp === "function") notifyApp(message);
   };
 
-  const armOperator = () => {
+  const armOperator = (options = {}) => {
+    const ensureStartKey = options?.ensureStartKey === true;
     if (mode !== "idle" || typeof state === "undefined" || !state?.camera || !state?.motion) return;
     if (["position", "orientation", "height"].some((field) => typeof cameraFieldLocked === "function" && cameraFieldLocked(field))) {
       notifyApp("Camera Operator를 쓰려면 카메라 위치·방향·높이 잠금을 해제하세요.");
@@ -448,6 +449,8 @@
     const requestedTime = typeof readTimelineTimeInput === "function"
       ? readTimelineTimeInput(state.motion.playhead)
       : Number(state.motion.playhead || 0);
+    const originalCamera = clone(state.camera);
+    const originalKeyframes = clone(state.motion.keyframes);
     const cameraKeys = typeof keysForSource === "function" ? keysForSource("camera") : [];
     const canStartAtRequestedTime = requestedTime < maxTimelineTime() - 0.0005;
     const exactKey = canStartAtRequestedTime && cameraKeys.find((keyframe) => (
@@ -455,15 +458,26 @@
         ? timelineTimesMatch(keyframe.time, requestedTime)
         : Math.abs(Number(keyframe.time) - Number(requestedTime)) < 0.0005
     ));
-    const firstKey = exactKey || [...cameraKeys].sort((left, right) => Number(left.time) - Number(right.time))[0];
+    let firstKey = exactKey || [...cameraKeys].sort((left, right) => Number(left.time) - Number(right.time))[0];
+    if (!firstKey && ensureStartKey && canStartAtRequestedTime && typeof captureSourceKeyframe === "function") {
+      const createdStartKey = captureSourceKeyframe("camera", requestedTime, undefined, "straight");
+      if (createdStartKey) {
+        createdStartKey.transition = "linear";
+        createdStartKey.operatorContinuity = true;
+        createdStartKey.operatorInput = "phone";
+        state.motion.keyframes.push(createdStartKey);
+        state.motion.keyframes = typeof sortKeyframes === "function" ? sortKeyframes(state.motion.keyframes) : state.motion.keyframes;
+        firstKey = createdStartKey;
+      }
+    }
     if (!firstKey) {
       notifyApp("먼저 카메라 키프레임을 하나 찍어주세요.");
       return;
     }
 
     startSnapshot = {
-      camera: clone(state.camera),
-      keyframes: clone(state.motion.keyframes),
+      camera: originalCamera,
+      keyframes: originalKeyframes,
       duration: Number(state.motion.duration),
       playhead: Number(state.motion.playhead),
       activeSource: state.motion.activeSource,
@@ -494,13 +508,36 @@
       : `Camera Operator STBY · ${startTime.toFixed(2)}초에서 ${trackingMessage}`);
   };
 
+  const adoptStartPose = (pose, input = "phone") => {
+    if (mode !== "armed" || !pose || !state?.camera) return false;
+    applyCameraPose(pose, state);
+    const startKey = state.motion.keyframes.find((keyframe) => (
+      keyframe.source === "camera" && (
+        typeof timelineTimesMatch === "function"
+          ? timelineTimesMatch(keyframe.time, startTime)
+          : Math.abs(Number(keyframe.time) - Number(startTime)) < 0.0005
+      )
+    ));
+    if (startKey) {
+      startKey.pose = { ...startKey.pose, ...currentCameraPose() };
+      if (state.camera.trackingTargetId) startKey.pose.trackingTargetId = state.camera.trackingTargetId;
+      startKey.transition = "linear";
+      startKey.operatorContinuity = true;
+      startKey.operatorInput = input;
+    }
+    dirty = true;
+    renderLiveFrame(startTime);
+    return true;
+  };
+
   const tickRecording = () => {
     if (mode !== "recording") return;
     const time = operatorTime();
     if (typeof ensureDurationCovers === "function") ensureDurationCovers(time);
     state.motion.playhead = time;
     if (state.camera.trackingTargetId) maintainCameraTracking(state, time);
-    if (time - lastSampleTime >= 1 / 30 || time >= maxTimelineTime()) sampleCurrentPose(time);
+    const sampleInterval = recordInput === "phone" ? 1 / 60 : 1 / 30;
+    if (time - lastSampleTime >= sampleInterval || time >= maxTimelineTime()) sampleCurrentPose(time);
     if (dirty) {
       dirty = false;
       renderLiveFrame(time);
@@ -533,9 +570,17 @@
       pointerId = pointerToken(event);
       lastClientX = event.clientX;
       lastClientY = event.clientY;
-    } else {
+    } else if (input === "preview") {
       beginPointerControl(event);
     }
+  };
+
+  const startPhysicalRecording = () => {
+    if (mode === "idle") armOperator({ ensureStartKey:true });
+    if (mode !== "armed") return false;
+    const event = { button:0, preventDefault(){}, stopPropagation(){} };
+    beginRecording(event, "phone");
+    return mode === "recording";
   };
 
   const beginPointerControl = (event) => {
@@ -700,24 +745,41 @@
     }
 
     const cleanupStrength = clamp(Number(cleanup.value) / 100, 0, 0.4);
-    // Mouse-driven takes need a small amount of stabilization even when the
-    // visible jitter control is left at zero. Without this baseline, the first
-    // and last sparse pointer samples can create a velocity pop between keys.
-    const stabilizationStrength = Math.max(cleanupStrength, 0.16);
-    const smoothed = core.smoothSamples(samples, stabilizationStrength);
+    const phoneTake = recordInput === "phone";
+    // Physical Camera already applies sensor-side stabilization. Avoid a second
+    // heavy smoothing pass that would erase intentional handheld acceleration,
+    // while retaining the original mouse/gamepad baseline stabilization.
+    const stabilizationStrength = phoneTake
+      ? Math.min(cleanupStrength, 0.08)
+      : Math.max(cleanupStrength, 0.16);
+    const smoothed = stabilizationStrength > 0
+      ? core.smoothSamples(samples, stabilizationStrength)
+      : samples.map((sample) => ({ ...sample }));
+    // Capture Physical Camera densely, then write an editable 30 Hz source path.
+    // Other operator inputs keep the existing 15 Hz editing cadence.
+    const resampleStep = phoneTake ? 1 / 30 : 1 / 15;
     const resampled = typeof core.resampleSamples === "function"
-      ? core.resampleSamples(smoothed, 1 / 15)
+      ? core.resampleSamples(smoothed, resampleStep)
       : smoothed;
-    const reduced = core.simplifySamples(resampled, {
-      positionTolerance: 0.00135 + cleanupStrength * 0.0025,
-      heightTolerance: 0.014 + cleanupStrength * 0.026,
-      angleTolerance: 0.13 + cleanupStrength * 0.24,
-      focalTolerance: 0.25,
-      // Continuous vector tangents carry the curve between keys, so forcing a
-      // key every ~0.28s only creates extra micro slowdowns. Keep enough keys to
-      // preserve operator timing while allowing each spline segment to breathe.
-      maxGap: 0.42 + cleanupStrength * 0.18,
-    });
+    const reductionOptions = phoneTake
+      ? {
+          positionTolerance: 0.00055 + cleanupStrength * 0.0012,
+          heightTolerance: 0.006 + cleanupStrength * 0.012,
+          angleTolerance: 0.07 + cleanupStrength * 0.12,
+          focalTolerance: 0.18,
+          maxGap: 0.22 + cleanupStrength * 0.10,
+        }
+      : {
+          positionTolerance: 0.00135 + cleanupStrength * 0.0025,
+          heightTolerance: 0.014 + cleanupStrength * 0.026,
+          angleTolerance: 0.13 + cleanupStrength * 0.24,
+          focalTolerance: 0.25,
+          // Continuous vector tangents carry the curve between keys, so forcing a
+          // key every ~0.28s only creates extra micro slowdowns. Keep enough keys to
+          // preserve operator timing while allowing each spline segment to breathe.
+          maxGap: 0.42 + cleanupStrength * 0.18,
+        };
+    const reduced = core.simplifySamples(resampled, reductionOptions);
     const rawCount = samples.length;
     const previousCameraKeyCount = state.motion.keyframes.filter((keyframe) => (
       keyframe.source === "camera" && Number(keyframe.time) > startTime + 0.0005 && Number(keyframe.time) <= endTime + 0.0005
@@ -735,6 +797,7 @@
       if (!keyframe) continue;
       keyframe.transition = "linear";
       keyframe.operatorContinuity = true;
+      keyframe.operatorInput = recordInput;
       state.motion.keyframes.push(keyframe);
       addedKeys.push(keyframe);
     }
@@ -791,6 +854,8 @@
 
   window.FrisFrameCameraOperator = {
     arm: armOperator,
+    startPhysical: startPhysicalRecording,
+    adoptStartPose,
     cancel: cancelOperator,
     finish: finishOperatorTake,
     liveTimeline: true,
