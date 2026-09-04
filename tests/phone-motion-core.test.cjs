@@ -6,6 +6,10 @@ const core = require("../electron/phone-motion-core.js");
 
 const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
 
+const near = (actual, expected, epsilon = 1e-6) => {
+  assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, got ${actual}`);
+};
+
 test("phone motion yaw crosses 360 without a camera jump", () => {
   assert.equal(core.shortestAngleDelta(358, 2), 4);
   assert.equal(core.shortestAngleDelta(2, 358), -4);
@@ -42,6 +46,7 @@ test("visual translation maps relative flow into virtual scene travel without cl
   assert.equal(pose.diagnostic.translation.metric, false);
   assert.equal(pose.diagnostic.translation.sourceUnits, "relative-optical-flow");
   assert.equal(pose.diagnostic.translation.outputUnits, "virtual-scene-travel");
+  assert.equal(pose.diagnostic.translation.referenceFrame, "screen-relative-flow");
   assert.equal(pose.diagnostic.translationTrusted, true);
 });
 
@@ -51,19 +56,23 @@ test("legacy visualScaleMeters option remains a compatibility alias", () => {
   assert.equal(pose.x, 0.7);
 });
 
-test("WebXR 6DoF maps local-space meter displacement one-to-one into the virtual stage", () => {
+test("WebXR 6DoF maps recentered phone-local movement one-to-one into the virtual camera frame", () => {
   const baseline = {
     spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
     orientation:{alpha:200,beta:80,gamma:20},
   };
   const anchor = core.createAnchor(baseline,{x:0.5,y:0.5,height:1.6,panDeg:30,tiltDeg:5,focal:35});
-  const pose = core.derivePose({ ...anchor },{
+  const pose = core.derivePose(anchor,{
     spatial:{mode:"webxr",metric:true,position:{x:0.5,y:0.2,z:-1},orientation:{x:0,y:0,z:0,w:1},confidence:1},
     orientation:{alpha:320,beta:-80,gamma:-20},
   },{stageWidth:10,stageDepth:20,forward:{x:1,z:0},confidenceThreshold:0.2});
 
-  assert.equal(pose.x,0.6);
-  assert.equal(pose.y,0.525);
+  const forwardX = Math.cos(Math.PI / 6);
+  const forwardY = Math.sin(Math.PI / 6);
+  const rightX = -forwardY;
+  const rightY = forwardX;
+  near(pose.x,0.5 + (rightX * 0.5 + forwardX * 1) / 10);
+  near(pose.y,0.5 + (rightY * 0.5 + forwardY * 1) / 20);
   assert.equal(pose.height,1.8);
   assert.equal(pose.panDeg,30,"identity WebXR orientation should ignore conflicting DeviceOrientation data");
   assert.equal(pose.tiltDeg,5);
@@ -71,9 +80,37 @@ test("WebXR 6DoF maps local-space meter displacement one-to-one into the virtual
   assert.equal(pose.diagnostic.translation.metric,true);
   assert.equal(pose.diagnostic.translation.sourceUnits,"meters");
   assert.equal(pose.diagnostic.translation.outputUnits,"virtual-scene-meters");
+  assert.equal(pose.diagnostic.translation.referenceFrame,"recentered-phone-local");
   assert.equal(pose.diagnostic.translation.truck,0.5);
   assert.equal(pose.diagnostic.translation.pedestal,0.2);
   assert.equal(pose.diagnostic.translation.dolly,1);
+});
+
+test("WebXR forward movement follows the direction the phone faced at recenter", () => {
+  const half = Math.sin(Math.PI / 4);
+  const scalar = Math.cos(Math.PI / 4);
+  const anchor = core.createAnchor({
+    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
+  },{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,{
+    spatial:{mode:"webxr",metric:true,position:{x:-1,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
+  },{stageWidth:10,stageDepth:10,forward:{x:0,z:1}});
+  near(pose.diagnostic.translation.truck,0);
+  near(pose.diagnostic.translation.dolly,1);
+  near(pose.x,0.6);
+  near(pose.y,0.5);
+});
+
+test("WebXR lifting the phone raises the virtual camera by the same meter displacement", () => {
+  const anchor = core.createAnchor({
+    spatial:{mode:"webxr",metric:true,position:{x:2,y:1,z:-3},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+  },{x:0.4,y:0.6,height:1.5,panDeg:90,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,{
+    spatial:{mode:"webxr",metric:true,position:{x:2,y:1.75,z:-3},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  assert.equal(pose.height,2.25);
+  near(pose.x,0.4);
+  near(pose.y,0.6);
 });
 
 test("WebXR orientation takes precedence over DeviceOrientation and drives relative pan", () => {
