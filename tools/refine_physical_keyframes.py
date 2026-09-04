@@ -12,7 +12,6 @@ def replace(path, old, new, count=1):
 live = "electron/camera-operator-live-ux.js"
 phone = "electron/phone-motion-camera-ux.js"
 live_test = "tests/camera-operator-live-contract.test.cjs"
-server_test = "tests/phone-motion-server.test.cjs"
 take_test = "tests/physical-camera-take-context.test.cjs"
 
 replace(
@@ -280,12 +279,6 @@ replace(
     live_test,
     'assert.match(controller, /const stabilizationStrength = Math\\.max\\(cleanupStrength, 0\\.16\\)/, "mouse-driven takes must have a baseline stabilization pass");\nassert.match(controller, /core\\.resampleSamples\\(smoothed, 1 \\/ 15\\)/, "mouse-driven takes must use a stable sample clock before key reduction");\n',
     'assert.match(controller, /: Math\\.max\\(cleanupStrength, 0\\.16\\)/, "mouse-driven takes must retain a baseline stabilization pass");\nassert.match(controller, /resampleStep = phoneTake \\? 1 \\/ 30 : 1 \\/ 15/, "physical takes must preserve a denser editable sample clock than mouse takes");\nassert.match(controller, /sampleInterval = recordInput === "phone" \\? 1 \\/ 60 : 1 \\/ 30/, "Physical Camera must sample live motion at display-class cadence before reduction");\nassert.match(controller, /positionTolerance: 0\\.00055/, "Physical Camera key reduction must retain small intentional position moves");\nassert.match(controller, /angleTolerance: 0\\.07/, "Physical Camera key reduction must retain fine pan and tilt changes");\nassert.match(controller, /maxGap: 0\\.22 \\+ cleanupStrength \\* 0\\.10/, "Physical Camera must not leave long gaps between editable keys");\nassert.match(controller, /startPhysical: startPhysicalRecording/, "Physical Camera must enter a dedicated recording path instead of masquerading as mouse input");\nassert.match(controller, /adoptStartPose/, "Physical Camera must rewrite the take start key to the adopted LIVE phone pose");\n',
-)
-
-replace(
-    server_test,
-    '  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아니라/);\n',
-    '  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아/);\n',
 )
 
 replace(
