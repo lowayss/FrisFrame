@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "description": "FrisFrame desktop previs studio",
-  "main": "electron/main.cjs",
+  "main": "electron/main-entry.cjs",
   "author": "Egoist Film",
   "copyright": "Copyright (c) 2026 Egoist Film",
   "license": "MIT",
@@ -42,11 +42,14 @@
       "buildResources": "build"
     },
     "files": [
+      "electron/main-entry.cjs",
       "electron/main.cjs",
       "electron/clipboard.cjs",
       "electron/file-save.cjs",
       "electron/preload.cjs",
       "electron/phone-remote-preload.cjs",
+      "electron/camera-take-path-core.js",
+      "electron/camera-take-replay-ux.js",
       "electron/workspace-ux.js",
       "electron/hud-export-ux.js",
       "electron/interaction-ux.js",

@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const packageLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+const mainEntry = fs.readFileSync(path.join(root, "electron/main-entry.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const clipboardBridge = fs.readFileSync(path.join(root, "electron/clipboard.cjs"), "utf8");
 const fileSaveBridge = fs.readFileSync(path.join(root, "electron/file-save.cjs"), "utf8");
@@ -20,7 +21,11 @@ const desktopWorkflow = fs.readFileSync(path.join(root, ".github/workflows/deskt
 const signingGuide = fs.readFileSync(path.join(root, "SIGNING.md"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 
-assert.equal(packageJson.main, "electron/main.cjs");
+assert.equal(packageJson.main, "electron/main-entry.cjs");
+assert.match(mainEntry, /require\("\.\/main\.cjs"\)/,
+  "the replay prelude entrypoint must always hand control to the existing trusted desktop main runtime");
+assert.match(mainEntry, /camera-take-path-core\.js/);
+assert.match(mainEntry, /camera-take-replay-ux\.js/);
 assert.equal(packageLock.version, packageJson.version);
 assert.equal(packageLock.packages[""].version, packageJson.version);
 assert.ok(readme.includes(`FrisFrame-${packageJson.version}-arm64.dmg`));
@@ -34,6 +39,8 @@ assert.equal(Object.prototype.hasOwnProperty.call(packageJson.build.mac, "identi
 assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "runtime" && entry.from === "dist-runtime/staged-runtime"));
 assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "licenses/THIRD_PARTY_NOTICES.md"));
 assert.equal(packageJson.build.mac.icon, "build/icon.icns");
+assert.ok(packageJson.build.files.includes("electron/main-entry.cjs"));
+assert.ok(packageJson.build.files.includes("electron/main.cjs"));
 assert.ok(packageJson.build.files.includes("electron/clipboard.cjs"));
 assert.ok(packageJson.build.files.includes("electron/file-save.cjs"));
 assert.ok(packageJson.build.files.includes("electron/selection-ux.js"));
