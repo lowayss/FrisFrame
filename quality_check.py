@@ -38,6 +38,7 @@ def check_python_syntax() -> None:
         ROOT / "reference_space_orientation_mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
+        ROOT / "tests/mcp-camera-take-motion-hint.py",
         ROOT / "tests/seed-packaged-reference-project.py",
         ROOT / "add_license.py",
     ):
@@ -162,6 +163,7 @@ def main() -> None:
     run("Reference Space 화면 방향", [sys.executable, "tests/reference-space-orientation-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
+    run("Camera Take Motion Hint MCP", [sys.executable, "tests/mcp-camera-take-motion-hint.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
     run("MCP 프리비즈 매크로", [sys.executable, "tests/mcp-previs-macros.py"])
     run("MCP 프리비즈 E2E", [sys.executable, "tests/mcp-previs-e2e.py"])
