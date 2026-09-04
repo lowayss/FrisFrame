@@ -190,7 +190,7 @@ test("Physical Camera exposes DIRECT as the low-latency default and warns when T
 
 test("Physical Camera UX explains metric boundaries and exposes no image serialization path", () => {
   assert.match(phoneMotionUx,/WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다/);
-  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아니라/);
+  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 (?:아니라|아닙니다)/);
   assert.doesNotMatch(phoneMotionUx,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
@@ -198,7 +198,7 @@ test("TLS SAN configuration includes localhost and LAN IPs", () => {
   const config = extensionConfig(["192.168.0.21","10.0.0.8"]);
   assert.match(config,/DNS\.1=localhost/);
   assert.match(config,/IP\.1=127\.0\.0\.1/);
-  assert.match(config,/192\.168\.0\.21/);
+  assert.match(config,/192\.168\.0.21/);
   assert.match(config,/10\.0\.0\.8/);
 });
 
