@@ -528,6 +528,77 @@ def _camera_path_summary(take):
     }
 
 
+def _camera_path_motion_hint(path_summary):
+    if not isinstance(path_summary, dict) or path_summary.get("available") is not True:
+        return {
+            "available": False,
+            "reason": path_summary.get("reason") if isinstance(path_summary, dict) else "no-summary",
+        }
+
+    motion = path_summary.get("motion_phases") if isinstance(path_summary.get("motion_phases"), dict) else {}
+    phases = motion.get("phases") if isinstance(motion.get("phases"), list) else []
+    sequence = []
+    action_types = []
+    signed_directions = {"pan": set(), "tilt": set(), "lens": set()}
+    has_hold = False
+
+    for phase in phases:
+        cues = phase.get("cues") if isinstance(phase, dict) and isinstance(phase.get("cues"), list) else []
+        tokens = []
+        for cue in cues:
+            if not isinstance(cue, dict):
+                continue
+            cue_type = str(cue.get("type") or "").strip()
+            if not cue_type:
+                continue
+            if cue_type not in action_types:
+                action_types.append(cue_type)
+            if cue_type == "hold":
+                has_hold = True
+                tokens.append("hold")
+                continue
+            if cue_type in ("pan", "tilt"):
+                direction = str(cue.get("direction") or "mixed")
+                if direction in ("positive", "negative"):
+                    signed_directions[cue_type].add(direction)
+                token_direction = "+" if direction == "positive" else "-" if direction == "negative" else "mixed"
+                tokens.append(f"{cue_type}:{token_direction}")
+                continue
+            if cue_type == "lens":
+                direction = str(cue.get("direction") or "mixed")
+                if direction in ("positive", "negative"):
+                    signed_directions[cue_type].add(direction)
+                fov = str(cue.get("fov_change") or "mixed")
+                tokens.append("lens:in" if fov == "narrower" else "lens:out" if fov == "wider" else "lens:mixed")
+                continue
+            if cue_type == "stage-translate":
+                tokens.append("move")
+                continue
+            tokens.append(cue_type)
+        if tokens:
+            sequence.append("/".join(tokens))
+
+    preview_limit = 6
+    preview = sequence[:preview_limit]
+    omitted = max(0, len(sequence) - len(preview))
+    reversals = [
+        axis
+        for axis, directions in signed_directions.items()
+        if {"positive", "negative"}.issubset(directions)
+    ]
+    return {
+        "available": True,
+        "phase_count": int(motion.get("phase_count") or len(phases)),
+        "raw_phase_count": int(motion.get("raw_phase_count") or len(phases)),
+        "compacted": motion.get("compacted") is True,
+        "sequence": preview,
+        "omitted_phase_count": omitted,
+        "action_types": action_types,
+        "has_hold": has_hold,
+        "direction_reversals": reversals,
+    }
+
+
 def _take_summary(take, record_index, selected_id, latest_id):
     tracking = take.get("tracking") if isinstance(take.get("tracking"), dict) else {}
     confidence = tracking.get("confidence") if isinstance(tracking.get("confidence"), dict) else {}
@@ -563,6 +634,7 @@ def _take_summary(take, record_index, selected_id, latest_id):
             "keyframe_count": path_summary.get("keyframe_count", 0),
             "reason": path_summary.get("reason"),
         },
+        "motion_hint": _camera_path_motion_hint(path_summary),
         "prompt_seed": take.get("promptSeed"),
         "metric_distance_allowed": prompt_policy.get("metricDistanceAllowed") is True,
     }
