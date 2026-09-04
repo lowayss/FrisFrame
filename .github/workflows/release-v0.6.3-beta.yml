@@ -1,0 +1,129 @@
+name: Release v0.6.3 beta
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release-v0.6.3-beta.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS · Apple Silicon
+    runs-on: macos-latest
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify latest source
+        run: npm run check
+      - name: Set beta build version
+        run: npm version 0.6.3 --no-git-tag-version
+      - name: Build unsigned macOS package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --mac dmg zip --arm64 --publish never
+      - name: Verify macOS package
+        run: npm run desktop:verify
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-v0.6.3-beta-macOS-arm64
+          if-no-files-found: error
+          path: |
+            release/FrisFrame-0.6.3-arm64.dmg
+            release/FrisFrame-0.6.3-arm64.zip
+
+  windows:
+    name: Windows · x64
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify latest source
+        run: npm run check
+      - name: Set beta build version
+        run: npm version 0.6.3 --no-git-tag-version
+      - name: Build unsigned Windows package
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --win nsis --x64 --publish never
+      - name: Verify Windows package
+        run: npm run desktop:verify
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-v0.6.3-beta-Windows-x64
+          if-no-files-found: error
+          path: release/FrisFrame-0.6.3-x64.exe
+
+  release:
+    name: Publish v0.6.3-beta
+    needs:
+      - macos
+      - windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: FrisFrame-v0.6.3-beta-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release-assets/FrisFrame-0.6.3-arm64.dmg
+          test -f release-assets/FrisFrame-0.6.3-arm64.zip
+          test -f release-assets/FrisFrame-0.6.3-x64.exe
+          ls -lh release-assets
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.6.3-beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "FrisFrame v0.6.3-beta" \
+              --notes "Physical Camera direct tracking fix. WebXR 6DoF displacement is transformed into the phone's recentered local coordinate frame and mapped onto the virtual camera pose at recenter, so lifting the phone raises the camera, pushing forward dollies forward, and lateral movement trucks left/right while rotation independently drives pan/tilt. Visual Flow remains a non-metric fallback. Includes the Android local CA fix from v0.6.2-beta. Built from commit $GITHUB_SHA. Unsigned test build; macOS Gatekeeper or Windows SmartScreen may warn."
+          fi
