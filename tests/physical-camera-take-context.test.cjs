@@ -6,6 +6,7 @@ const vm = require("node:vm");
 
 const root = path.join(__dirname, "..");
 const ux = fs.readFileSync(path.join(root, "electron", "phone-motion-camera-ux.js"), "utf8");
+const cameraOperatorUx = fs.readFileSync(path.join(root, "electron", "camera-operator-live-ux.js"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const mcp = fs.readFileSync(path.join(root, "mcp_previs_server.py"), "utf8");
 
@@ -100,6 +101,21 @@ test("Physical Camera metadata is gated to an actual Camera Operator finish comm
   assert.match(ux, /TAKE_HISTORY_LIMIT = 20/);
   assert.match(ux, /cameraOperatorTakes/);
   assert.match(ux, /latestCameraOperatorTakeId/);
+});
+
+test("Physical Camera REC is persisted through the Camera Operator camera-keyframe path", () => {
+  assert.match(ux, /const starter = inputs\(\)\?\.startRecording/,
+    "phone REC must enter the existing Camera Operator recording path");
+  assert.match(cameraOperatorUx, /if \(time - lastSampleTime >= 1 \/ 30 \|\| time >= maxTimelineTime\(\)\) sampleCurrentPose\(time\)/,
+    "Camera Operator must continuously sample the live Physical Camera pose");
+  assert.match(cameraOperatorUx, /core\.resampleSamples\(smoothed, 1 \/ 15\)/,
+    "recorded pose samples must be converted into an editable timeline path");
+  assert.match(cameraOperatorUx, /captureSourceKeyframe\("camera", sample\.time, undefined, "straight"\)/,
+    "the finished Physical Camera take must materialize as camera keyframes");
+  assert.match(cameraOperatorUx, /state\.motion\.keyframes\.push\(keyframe\)/,
+    "materialized camera keys must be stored in the project timeline");
+  assert.match(cameraOperatorUx, /commit\(\{ preserveSourceIds: \["camera"\] \}\)/,
+    "the keyframed camera take must be committed as authored camera motion");
 });
 
 test("unrelated camera commit during REC cannot finalize Physical Camera metadata", () => {
