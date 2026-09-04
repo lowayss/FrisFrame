@@ -65,6 +65,7 @@ CAMERA_TAKE_CONTEXT_TOOLS = [
 ]
 
 _ORIGINAL_CALL_TOOL = base.call_tool
+_MOTION_PHASE_LIMIT = 12
 
 
 def _clone(value):
@@ -191,6 +192,197 @@ def _pose_summary(pose):
     }
 
 
+def _signed_direction(value, epsilon):
+    number = _finite(value)
+    if abs(number) < epsilon:
+        return "steady"
+    return "positive" if number > 0 else "negative"
+
+
+def _travel_direction(net, travel, epsilon):
+    net_value = _finite(net)
+    travel_value = abs(_finite(travel))
+    if travel_value < epsilon:
+        return None
+    if abs(net_value) / max(travel_value, epsilon) < 0.75:
+        return "mixed"
+    return "positive" if net_value > 0 else "negative"
+
+
+def _segment_signature(left, right):
+    left_pose = left["pose"]
+    right_pose = right["pose"]
+    dx = _finite(right_pose.get("x")) - _finite(left_pose.get("x"))
+    dy = _finite(right_pose.get("y")) - _finite(left_pose.get("y"))
+    dh = _finite(right_pose.get("height"), 1.6) - _finite(left_pose.get("height"), 1.6)
+    return (
+        _signed_direction(_shortest_angle_delta(left_pose.get("panDeg"), right_pose.get("panDeg")), 0.05),
+        _signed_direction(_finite(right_pose.get("tiltDeg")) - _finite(left_pose.get("tiltDeg")), 0.05),
+        _signed_direction(_finite(right_pose.get("focal"), 35) - _finite(left_pose.get("focal"), 35), 0.05),
+        _signed_direction(dx, 0.0005),
+        _signed_direction(dy, 0.0005),
+        _signed_direction(dh, 0.0005),
+        str(left.get("transition") or "linear"),
+        left.get("operator_continuity") is not False,
+    )
+
+
+def _phase_summary(frames, start_index, end_index, phase_index):
+    selected = frames[start_index:end_index + 1]
+    start = selected[0]
+    end = selected[-1]
+    pan_steps = [
+        _shortest_angle_delta(selected[index - 1]["pose"].get("panDeg"), selected[index]["pose"].get("panDeg"))
+        for index in range(1, len(selected))
+    ]
+    tilt_steps = [
+        _finite(selected[index]["pose"].get("tiltDeg")) - _finite(selected[index - 1]["pose"].get("tiltDeg"))
+        for index in range(1, len(selected))
+    ]
+    focal_steps = [
+        _finite(selected[index]["pose"].get("focal"), 35) - _finite(selected[index - 1]["pose"].get("focal"), 35)
+        for index in range(1, len(selected))
+    ]
+    stage_steps = []
+    for index in range(1, len(selected)):
+        left_pose = selected[index - 1]["pose"]
+        right_pose = selected[index]["pose"]
+        step_dx = _finite(right_pose.get("x")) - _finite(left_pose.get("x"))
+        step_dy = _finite(right_pose.get("y")) - _finite(left_pose.get("y"))
+        step_dh = _finite(right_pose.get("height"), 1.6) - _finite(left_pose.get("height"), 1.6)
+        stage_steps.append((step_dx, step_dy, step_dh, math.sqrt(step_dx * step_dx + step_dy * step_dy + step_dh * step_dh)))
+
+    start_pose = _pose_summary(start["pose"])
+    end_pose = _pose_summary(end["pose"])
+    pan_net = sum(pan_steps)
+    pan_travel = sum(abs(value) for value in pan_steps)
+    tilt_net = sum(tilt_steps)
+    tilt_travel = sum(abs(value) for value in tilt_steps)
+    focal_net = sum(focal_steps)
+    focal_travel = sum(abs(value) for value in focal_steps)
+    dx = sum(step[0] for step in stage_steps)
+    dy = sum(step[1] for step in stage_steps)
+    dh = sum(step[2] for step in stage_steps)
+    stage_travel = sum(step[3] for step in stage_steps)
+    stage_distance = math.sqrt(dx * dx + dy * dy + dh * dh)
+
+    cues = []
+    pan_direction = _travel_direction(pan_net, pan_travel, 0.05)
+    if pan_direction:
+        cues.append({
+            "type": "pan",
+            "direction": pan_direction,
+            "net_deg": _rounded(pan_net, 3),
+            "travel_deg": _rounded(pan_travel, 3),
+        })
+    tilt_direction = _travel_direction(tilt_net, tilt_travel, 0.05)
+    if tilt_direction:
+        cues.append({
+            "type": "tilt",
+            "direction": tilt_direction,
+            "net_deg": _rounded(tilt_net, 3),
+            "travel_deg": _rounded(tilt_travel, 3),
+        })
+    focal_direction = _travel_direction(focal_net, focal_travel, 0.05)
+    if focal_direction:
+        cues.append({
+            "type": "lens",
+            "direction": focal_direction,
+            "start_focal_mm": start_pose["focal_mm"],
+            "end_focal_mm": end_pose["focal_mm"],
+            "change_mm": _rounded(focal_net, 3),
+            "travel_mm": _rounded(focal_travel, 3),
+            "fov_change": "narrower" if focal_direction == "positive" else "wider" if focal_direction == "negative" else "mixed",
+        })
+    if stage_travel >= 0.0005:
+        cues.append({
+            "type": "stage-translate",
+            "x": _rounded(dx, 4),
+            "y": _rounded(dy, 4),
+            "height": _rounded(dh, 4),
+            "distance": _rounded(stage_distance, 4),
+            "travel": _rounded(stage_travel, 4),
+            "units": "frisframe-stage-units",
+            "physical_meters": False,
+        })
+    if not cues:
+        cues.append({"type": "hold"})
+
+    transitions = []
+    continuity = True
+    for frame in selected[:-1]:
+        transition = str(frame.get("transition") or "linear")
+        if transition not in transitions:
+            transitions.append(transition)
+        if frame.get("operator_continuity") is False:
+            continuity = False
+
+    return {
+        "index": int(phase_index),
+        "start_time": _rounded(start["time"], 6),
+        "end_time": _rounded(end["time"], 6),
+        "duration": _rounded(max(0.0, end["time"] - start["time"]), 6),
+        "keyframe_count": len(selected),
+        "start_pose": start_pose,
+        "end_pose": end_pose,
+        "transitions": transitions,
+        "operator_continuity": continuity,
+        "cues": cues,
+    }
+
+
+def _camera_path_motion_phases(frames):
+    if len(frames) < 2:
+        return {
+            "phase_count": 0,
+            "raw_phase_count": 0,
+            "compacted": False,
+            "max_phases": _MOTION_PHASE_LIMIT,
+            "phases": [],
+        }
+
+    groups = []
+    for right_index in range(1, len(frames)):
+        signature = _segment_signature(frames[right_index - 1], frames[right_index])
+        if groups and groups[-1]["signature"] == signature:
+            groups[-1]["end"] = right_index
+        else:
+            groups.append({"start": right_index - 1, "end": right_index, "signature": signature})
+
+    raw_phase_count = len(groups)
+    while len(groups) > _MOTION_PHASE_LIMIT:
+        durations = [
+            max(0.0, frames[group["end"]]["time"] - frames[group["start"]]["time"])
+            for group in groups
+        ]
+        index = min(range(len(groups)), key=lambda candidate: (durations[candidate], candidate))
+        if index == 0:
+            neighbor = 1
+        elif index == len(groups) - 1:
+            neighbor = index - 1
+        else:
+            neighbor = index - 1 if durations[index - 1] <= durations[index + 1] else index + 1
+        left_index, right_index = sorted((index, neighbor))
+        merged = {
+            "start": groups[left_index]["start"],
+            "end": groups[right_index]["end"],
+            "signature": ("compacted",),
+        }
+        groups[left_index:right_index + 1] = [merged]
+
+    phases = [
+        _phase_summary(frames, group["start"], group["end"], index)
+        for index, group in enumerate(groups)
+    ]
+    return {
+        "phase_count": len(phases),
+        "raw_phase_count": raw_phase_count,
+        "compacted": len(phases) < raw_phase_count,
+        "max_phases": _MOTION_PHASE_LIMIT,
+        "phases": phases,
+    }
+
+
 def _camera_path_summary(take):
     if not isinstance(take, dict):
         return {"available": False, "reason": "no-take"}
@@ -208,7 +400,12 @@ def _camera_path_summary(take):
             continue
         if not math.isfinite(time_value):
             continue
-        frames.append({"time": time_value, "pose": raw["pose"]})
+        frames.append({
+            "time": time_value,
+            "pose": raw["pose"],
+            "transition": str(raw.get("transition") or "linear"),
+            "operator_continuity": raw.get("operatorContinuity") is not False,
+        })
     frames.sort(key=lambda item: item["time"])
     if not frames:
         return {"available": False, "reason": "camera-path-has-no-valid-keyframes"}
@@ -327,6 +524,7 @@ def _camera_path_summary(take):
             "distance_guard": policy.get("distanceGuard"),
         },
         "actions": actions,
+        "motion_phases": _camera_path_motion_phases(frames),
     }
 
 
