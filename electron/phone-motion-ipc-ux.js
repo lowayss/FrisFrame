@@ -26,6 +26,8 @@
   function resetSequence(sessionId) {
     lastSessionId = sessionId;
     lastSeq = -1;
+    lastMetric = null;
+    modeEpoch += 1;
     pending = null;
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
@@ -93,6 +95,11 @@
     if (!pending) return;
     const detail = pending;
     pending = null;
+    const ageNow = Math.max(0, Date.now() - Number(detail.receivedAt || Date.now()));
+    if (!detail.command && ageNow > MAX_RENDER_AGE_MS) {
+      stats.droppedRendererAge += 1;
+      return;
+    }
     dispatch(detail);
   }
 
