@@ -1,0 +1,46 @@
+name: Recover v0.6.0 beta release assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/recover-v0.6.0-beta-release.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  recover-release-assets:
+    name: Upload existing beta artifacts to GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts from the successful v0.6.0-beta build jobs
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 33509203119
+          pattern: FrisFrame-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify recovered release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lah release-assets
+          test -n "$(find release-assets -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$(find release-assets -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$(find release-assets -maxdepth 1 -type f -name '*.exe' -print -quit)"
+
+      - name: Upload recovered files to v0.6.0-beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload v0.6.0-beta release-assets/* --clobber --repo "$GH_REPO"
