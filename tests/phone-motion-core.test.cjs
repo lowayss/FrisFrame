@@ -10,6 +10,22 @@ const near = (actual, expected, epsilon = 1e-6) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, got ${actual}`);
 };
 
+const axisQuaternion = (axis, degrees) => {
+  const radians = degrees * Math.PI / 180;
+  const half = Math.sin(radians / 2);
+  const scalar = Math.cos(radians / 2);
+  return {
+    x: axis === "x" ? half : 0,
+    y: axis === "y" ? half : 0,
+    z: axis === "z" ? half : 0,
+    w: scalar,
+  };
+};
+
+const xrSample = ({ position = {x:0,y:0,z:0}, orientation = {x:0,y:0,z:0,w:1}, confidence = 1 } = {}) => ({
+  spatial:{mode:"webxr",metric:true,position,orientation,confidence},
+});
+
 test("phone motion yaw crosses 360 without a camera jump", () => {
   assert.equal(core.shortestAngleDelta(358, 2), 4);
   assert.equal(core.shortestAngleDelta(2, 358), -4);
@@ -56,14 +72,14 @@ test("legacy visualScaleMeters option remains a compatibility alias", () => {
   assert.equal(pose.x, 0.7);
 });
 
-test("WebXR 6DoF maps recentered phone-local movement one-to-one into the virtual camera frame", () => {
+test("WebXR 6DoF maps gravity-locked recentered movement one-to-one into the virtual camera frame", () => {
   const baseline = {
-    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+    ...xrSample(),
     orientation:{alpha:200,beta:80,gamma:20},
   };
   const anchor = core.createAnchor(baseline,{x:0.5,y:0.5,height:1.6,panDeg:30,tiltDeg:5,focal:35});
   const pose = core.derivePose(anchor,{
-    spatial:{mode:"webxr",metric:true,position:{x:0.5,y:0.2,z:-1},orientation:{x:0,y:0,z:0,w:1},confidence:1},
+    ...xrSample({position:{x:0.5,y:0.2,z:-1}}),
     orientation:{alpha:320,beta:-80,gamma:-20},
   },{stageWidth:10,stageDepth:20,forward:{x:1,z:0},confidenceThreshold:0.2});
 
@@ -77,64 +93,97 @@ test("WebXR 6DoF maps recentered phone-local movement one-to-one into the virtua
   assert.equal(pose.panDeg,30,"identity WebXR orientation should ignore conflicting DeviceOrientation data");
   assert.equal(pose.tiltDeg,5);
   assert.equal(pose.diagnostic.trackingMode,"webxr");
+  assert.equal(pose.diagnostic.orientationSource,"webxr-view-forward");
   assert.equal(pose.diagnostic.translation.metric,true);
   assert.equal(pose.diagnostic.translation.sourceUnits,"meters");
   assert.equal(pose.diagnostic.translation.outputUnits,"virtual-scene-meters");
-  assert.equal(pose.diagnostic.translation.referenceFrame,"recentered-phone-local");
+  assert.equal(pose.diagnostic.translation.referenceFrame,"gravity-locked-recenter-frame");
   assert.equal(pose.diagnostic.translation.truck,0.5);
   assert.equal(pose.diagnostic.translation.pedestal,0.2);
   assert.equal(pose.diagnostic.translation.dolly,1);
 });
 
-test("WebXR forward movement follows the direction the phone faced at recenter", () => {
-  const half = Math.sin(Math.PI / 4);
-  const scalar = Math.cos(Math.PI / 4);
-  const anchor = core.createAnchor({
-    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
-  },{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
-  const pose = core.derivePose(anchor,{
-    spatial:{mode:"webxr",metric:true,position:{x:-1,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
-  },{stageWidth:10,stageDepth:10,forward:{x:0,z:1}});
+test("WebXR forward movement follows the horizontal direction the phone faced at recenter", () => {
+  const orientation = axisQuaternion("y", 90);
+  const anchor = core.createAnchor(xrSample({orientation}),{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,xrSample({position:{x:-1,y:0,z:0},orientation}),{stageWidth:10,stageDepth:10,forward:{x:0,z:1}});
   near(pose.diagnostic.translation.truck,0);
   near(pose.diagnostic.translation.dolly,1);
   near(pose.x,0.6);
   near(pose.y,0.5);
 });
 
-test("WebXR lifting the phone raises the virtual camera by the same meter displacement", () => {
-  const anchor = core.createAnchor({
-    spatial:{mode:"webxr",metric:true,position:{x:2,y:1,z:-3},orientation:{x:0,y:0,z:0,w:1},confidence:1},
-  },{x:0.4,y:0.6,height:1.5,panDeg:90,tiltDeg:0,focal:35});
-  const pose = core.derivePose(anchor,{
-    spatial:{mode:"webxr",metric:true,position:{x:2,y:1.75,z:-3},orientation:{x:0,y:0,z:0,w:1},confidence:1},
-  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+test("WebXR lifting the phone raises the virtual camera even when the phone is pitched", () => {
+  const orientation = axisQuaternion("x", 45);
+  const anchor = core.createAnchor(xrSample({position:{x:2,y:1,z:-3},orientation}),{x:0.4,y:0.6,height:1.5,panDeg:90,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,xrSample({position:{x:2,y:1.75,z:-3},orientation}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
   assert.equal(pose.height,2.25);
   near(pose.x,0.4);
   near(pose.y,0.6);
+  near(pose.diagnostic.translation.truck,0);
+  near(pose.diagnostic.translation.dolly,0);
+  near(pose.diagnostic.translation.pedestal,0.75);
 });
 
-test("WebXR orientation takes precedence over DeviceOrientation and drives relative pan", () => {
-  const half = Math.sin(Math.PI / 8);
-  const scalar = Math.cos(Math.PI / 8);
-  const anchor = core.createAnchor({
-    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
-    orientation:{alpha:250,beta:70,gamma:30},
-  },{x:0.5,y:0.5,height:1.6,panDeg:100,tiltDeg:0,focal:35});
-  const pose = core.derivePose(anchor,{
-    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:half,z:0,w:scalar},confidence:1},
-    orientation:{alpha:10,beta:-70,gamma:-30},
-  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
-  assert.ok(Math.abs(core.shortestAngleDelta(145,pose.panDeg)) < 0.001,`unexpected WebXR pan ${pose.panDeg}`);
-  assert.equal(pose.diagnostic.translation.metric,true);
+test("WebXR forward translation does not leak into pedestal when the phone starts tilted", () => {
+  const orientation = axisQuaternion("x", 45);
+  const anchor = core.createAnchor(xrSample({orientation}),{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,xrSample({position:{x:0,y:0,z:-1},orientation}),{stageWidth:10,stageDepth:10,forward:{x:0,z:1}});
+  near(pose.diagnostic.translation.dolly,1);
+  near(pose.diagnostic.translation.pedestal,0);
+  near(pose.x,0.6);
+  near(pose.height,1.6);
+});
+
+test("WebXR left turn pans FrisFrame left and right turn pans right", () => {
+  const anchor = core.createAnchor(xrSample(),{x:0.5,y:0.5,height:1.6,panDeg:100,tiltDeg:0,focal:35});
+  const left = core.derivePose(anchor,xrSample({orientation:axisQuaternion("y",45)}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  const right = core.derivePose(anchor,xrSample({orientation:axisQuaternion("y",-45)}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  near(left.panDeg,55);
+  near(right.panDeg,145);
+  near(left.diagnostic.yawDelta,-45);
+  near(right.diagnostic.yawDelta,45);
+});
+
+test("WebXR pitch up tilts FrisFrame up without roll contamination", () => {
+  const anchor = core.createAnchor(xrSample(),{x:0.5,y:0.5,height:1.6,panDeg:100,tiltDeg:5,focal:35});
+  const up = core.derivePose(anchor,xrSample({orientation:axisQuaternion("x",30)}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  near(up.panDeg,100);
+  near(up.tiltDeg,35);
+  near(up.diagnostic.pitchDelta,30);
+
+  const roll = core.derivePose(anchor,xrSample({orientation:axisQuaternion("z",30)}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  near(roll.panDeg,100);
+  near(roll.tiltDeg,5);
+});
+
+test("WebXR translation basis stays fixed at recenter while phone rotation changes pan", () => {
+  const anchor = core.createAnchor(xrSample(),{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,xrSample({position:{x:0,y:0,z:-1},orientation:axisQuaternion("y",45)}),{stageWidth:10,stageDepth:10,forward:{x:0,z:1}});
+  near(pose.diagnostic.translation.dolly,1);
+  near(pose.diagnostic.translation.truck,0);
+  near(pose.x,0.6);
+  near(pose.panDeg,-45);
+});
+
+test("WebXR metric deadband removes millimeter jitter without scaling real movement", () => {
+  const anchor = core.createAnchor(xrSample(),{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const jitter = core.derivePose(anchor,xrSample({position:{x:0.001,y:0.002,z:-0.001}}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  near(jitter.diagnostic.translation.truck,0);
+  near(jitter.diagnostic.translation.dolly,0);
+  near(jitter.diagnostic.translation.pedestal,0);
+  near(jitter.x,0.5);
+  near(jitter.y,0.5);
+  near(jitter.height,1.6);
+
+  const move = core.derivePose(anchor,xrSample({position:{x:0,y:0,z:-0.01}}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0}});
+  near(move.diagnostic.translation.dolly,0.01);
+  near(move.x,0.501);
 });
 
 test("low-confidence WebXR translation is marked untrusted and can be held by the stabilizer", () => {
-  const anchor = core.createAnchor({
-    spatial:{mode:"webxr",metric:true,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:1},
-  },{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
-  const pose = core.derivePose(anchor,{
-    spatial:{mode:"webxr",metric:true,position:{x:5,y:5,z:-5},orientation:{x:0,y:0,z:0,w:1},confidence:0.05},
-  },{stageWidth:10,stageDepth:10,forward:{x:1,z:0},confidenceThreshold:0.2});
+  const anchor = core.createAnchor(xrSample(),{x:0.5,y:0.5,height:1.6,panDeg:0,tiltDeg:0,focal:35});
+  const pose = core.derivePose(anchor,xrSample({position:{x:5,y:5,z:-5},confidence:0.05}),{stageWidth:10,stageDepth:10,forward:{x:1,z:0},confidenceThreshold:0.2});
   assert.equal(pose.diagnostic.translation.metric,true);
   assert.equal(pose.diagnostic.translationTrusted,false);
   assert.equal(pose.x,0.5);
