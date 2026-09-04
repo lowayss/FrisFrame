@@ -5,6 +5,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  const RAD_TO_DEG = 180 / Math.PI;
+  const DEFAULT_METRIC_DEADBAND_M = 0.003;
+  const DEFAULT_ANGLE_DEADBAND_DEG = 0.05;
+
   function finite(value, fallback = 0) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -109,18 +113,66 @@
     };
   }
 
+  function quaternionAxes(value = {}) {
+    const orientation = normalizeQuaternion(value);
+    return {
+      forward: rotateVectorByQuaternion({x:0,y:0,z:-1}, orientation),
+      right: rotateVectorByQuaternion({x:1,y:0,z:0}, orientation),
+      up: rotateVectorByQuaternion({x:0,y:1,z:0}, orientation),
+    };
+  }
+
+  function horizontalReferenceFrame(value = {}) {
+    const axes = quaternionAxes(value);
+    let forwardX = finite(axes.forward.x);
+    let forwardZ = finite(axes.forward.z);
+    let horizontal = Math.hypot(forwardX, forwardZ);
+
+    if (horizontal < 0.05) {
+      const rightLength = Math.hypot(finite(axes.right.x), finite(axes.right.z));
+      if (rightLength >= 0.05) {
+        const rightX = finite(axes.right.x) / rightLength;
+        const rightZ = finite(axes.right.z) / rightLength;
+        forwardX = rightZ;
+        forwardZ = -rightX;
+        horizontal = 1;
+      } else {
+        forwardX = 0;
+        forwardZ = -1;
+        horizontal = 1;
+      }
+    }
+
+    forwardX /= horizontal;
+    forwardZ /= horizontal;
+    return {
+      forward:{x:forwardX,z:forwardZ},
+      right:{x:-forwardZ,z:forwardX},
+      source:"gravity-locked-recenter-yaw",
+    };
+  }
+
   function quaternionToOrientation(value = {}) {
     const q = normalizeQuaternion(value);
-    const yaw = Math.atan2(
-      2 * (q.w * q.y + q.x * q.z),
-      1 - 2 * (q.x * q.x + q.y * q.y),
-    ) * 180 / Math.PI;
-    const pitch = Math.asin(clamp(2 * (q.w * q.x - q.y * q.z), -1, 1)) * 180 / Math.PI;
-    const roll = Math.atan2(
-      2 * (q.w * q.z + q.x * q.y),
-      1 - 2 * (q.x * q.x + q.z * q.z),
-    ) * 180 / Math.PI;
-    return { yaw:wrapDegrees(yaw),pitch:wrapDegrees(pitch),roll:wrapDegrees(roll),screenAngle:0 };
+    const axes = quaternionAxes(q);
+    const horizontal = Math.max(0.000001, Math.hypot(axes.forward.x, axes.forward.z));
+
+    // WebXR uses +X right, +Y up and -Z forward. FrisFrame's operator semantics
+    // use positive pan for turning right and positive tilt for looking up.
+    const yaw = Math.atan2(axes.forward.x, -axes.forward.z) * RAD_TO_DEG;
+    const pitch = Math.atan2(axes.forward.y, horizontal) * RAD_TO_DEG;
+
+    const reference = horizontalReferenceFrame(q);
+    const levelRight = {x:reference.right.x,y:0,z:reference.right.z};
+    const right = axes.right;
+    const rightHorizontal = right.x * levelRight.x + right.z * levelRight.z;
+    const roll = Math.atan2(right.y, rightHorizontal) * RAD_TO_DEG;
+    return {
+      yaw:wrapDegrees(yaw),
+      pitch:wrapDegrees(pitch),
+      roll:wrapDegrees(roll),
+      screenAngle:0,
+    };
   }
 
   function sampleOrientation(phoneSample = {}) {
@@ -145,6 +197,40 @@
     };
   }
 
+  function applyMetricDeadband(truck, pedestal, dolly, deadbandMeters) {
+    const deadband = Math.max(0, finite(deadbandMeters, DEFAULT_METRIC_DEADBAND_M));
+    const horizontal = Math.hypot(truck, dolly);
+    return {
+      truck: horizontal <= deadband ? 0 : truck,
+      dolly: horizontal <= deadband ? 0 : dolly,
+      pedestal: Math.abs(pedestal) <= deadband ? 0 : pedestal,
+      deadband,
+    };
+  }
+
+  function metricTranslationFromAnchor(baseSpatial, spatial, deadbandMeters = DEFAULT_METRIC_DEADBAND_M) {
+    const reference = horizontalReferenceFrame(baseSpatial.orientation);
+    const dx = finite(spatial.position.x) - finite(baseSpatial.position.x);
+    const dy = finite(spatial.position.y) - finite(baseSpatial.position.y);
+    const dz = finite(spatial.position.z) - finite(baseSpatial.position.z);
+    const rawTruck = dx * reference.right.x + dz * reference.right.z;
+    const rawDolly = dx * reference.forward.x + dz * reference.forward.z;
+    const filtered = applyMetricDeadband(rawTruck, dy, rawDolly, deadbandMeters);
+    return {
+      truck:filtered.truck,
+      pedestal:filtered.pedestal,
+      dolly:filtered.dolly,
+      raw:{truck:rawTruck,pedestal:dy,dolly:rawDolly},
+      deadbandMeters:filtered.deadband,
+      reference,
+    };
+  }
+
+  function applyAngleDeadband(value, deadbandDeg) {
+    const threshold = Math.max(0, finite(deadbandDeg, DEFAULT_ANGLE_DEADBAND_DEG));
+    return Math.abs(value) <= threshold ? 0 : value;
+  }
+
   function derivePose(anchor, phoneSample = {}, context = {}) {
     if (!anchor) return null;
     const orientation = sampleOrientation(phoneSample);
@@ -152,8 +238,10 @@
     const spatial = normalizeSpatial(phoneSample.spatial);
     const baseVisual = anchor.visual || normalizeVisual();
     const baseSpatial = anchor.spatial || normalizeSpatial();
-    const yawDelta = shortestAngleDelta(anchor.orientation.yaw, orientation.yaw);
-    const pitchDelta = wrapDegrees(orientation.pitch - anchor.orientation.pitch);
+    const orientationMetric = spatial.metric && baseSpatial.metric;
+    const angleDeadbandDeg = Math.max(0, finite(context.angleDeadbandDeg, DEFAULT_ANGLE_DEADBAND_DEG));
+    const yawDelta = applyAngleDeadband(shortestAngleDelta(anchor.orientation.yaw, orientation.yaw), angleDeadbandDeg);
+    const pitchDelta = applyAngleDeadband(wrapDegrees(orientation.pitch - anchor.orientation.pitch), angleDeadbandDeg);
     const rollDelta = wrapDegrees(orientation.roll - anchor.orientation.roll);
     const panSensitivity = clamp(finite(context.panSensitivity, 1), 0.1, 3);
     const tiltSensitivity = clamp(finite(context.tiltSensitivity, 1), 0.1, 3);
@@ -162,6 +250,7 @@
       finite(context.visualScaleMeters, 1.75),
     ), 0.1, 10);
     const confidenceThreshold = clamp(finite(context.confidenceThreshold, 0.2), 0, 1);
+    const metricDeadbandMeters = Math.max(0, finite(context.metricDeadbandMeters, DEFAULT_METRIC_DEADBAND_M));
     const stageWidth = Math.max(0.01, finite(context.stageWidth, 10));
     const stageDepth = Math.max(0.01, finite(context.stageDepth, 10));
     const fallbackForward = context.forward || { x: 1, z: 0 };
@@ -174,26 +263,27 @@
     let translationConfidence = visual.confidence;
     let sourceUnits = "relative-optical-flow";
     let outputUnits = "virtual-scene-travel";
+    let referenceFrame = "screen-relative-flow";
+    let metricRaw = null;
+    let metricReference = null;
     let forward = fallbackForward;
 
-    if (spatial.metric && baseSpatial.metric) {
+    if (orientationMetric) {
       translationMetric = true;
       translationConfidence = spatial.confidence;
       translationTrusted = spatial.confidence >= confidenceThreshold;
       sourceUnits = "meters";
       outputUnits = "virtual-scene-meters";
+      referenceFrame = "gravity-locked-recenter-frame";
       const panRad = finite(anchor.camera.panDeg) * Math.PI / 180;
       forward = { x:Math.cos(panRad), z:Math.sin(panRad) };
       if (translationTrusted) {
-        const worldDelta = {
-          x:spatial.position.x - baseSpatial.position.x,
-          y:spatial.position.y - baseSpatial.position.y,
-          z:spatial.position.z - baseSpatial.position.z,
-        };
-        const phoneLocal = rotateVectorByQuaternion(worldDelta, inverseQuaternion(baseSpatial.orientation));
-        truck = phoneLocal.x;
-        pedestal = phoneLocal.y;
-        dolly = -phoneLocal.z;
+        const translation = metricTranslationFromAnchor(baseSpatial, spatial, metricDeadbandMeters);
+        truck = translation.truck;
+        pedestal = translation.pedestal;
+        dolly = translation.dolly;
+        metricRaw = translation.raw;
+        metricReference = translation.reference;
       }
     } else {
       translationTrusted = visual.confidence >= confidenceThreshold;
@@ -211,16 +301,18 @@
     const rightY = forwardX;
     const worldX = rightX * truck + forwardX * dolly;
     const worldY = rightY * truck + forwardY * dolly;
+    const tiltStep = orientationMetric ? pitchDelta : -pitchDelta;
 
     return {
       x: finite(anchor.camera.x) + worldX / stageWidth,
       y: finite(anchor.camera.y) + worldY / stageDepth,
       height: finite(anchor.camera.height, 1.6) + pedestal,
       panDeg: finite(anchor.camera.panDeg) + yawDelta * panSensitivity,
-      tiltDeg: finite(anchor.camera.tiltDeg) - pitchDelta * tiltSensitivity,
+      tiltDeg: finite(anchor.camera.tiltDeg) + tiltStep * tiltSensitivity,
       focal: finite(anchor.camera.focal, 35),
       diagnostic: {
         trackingMode: translationMetric ? "webxr" : "visual-flow",
+        orientationSource: orientationMetric ? "webxr-view-forward" : "device-orientation",
         yawDelta: Number(yawDelta.toFixed(3)),
         pitchDelta: Number(pitchDelta.toFixed(3)),
         rollDelta: Number(rollDelta.toFixed(3)),
@@ -232,7 +324,10 @@
           metric: translationMetric,
           sourceUnits,
           outputUnits,
-          referenceFrame: translationMetric ? "recentered-phone-local" : "screen-relative-flow",
+          referenceFrame,
+          deadbandMeters:translationMetric ? metricDeadbandMeters : 0,
+          raw:metricRaw,
+          reference:metricReference,
         },
         translationTrusted,
       },
@@ -356,9 +451,14 @@
     inverseQuaternion,
     rotateVectorByQuaternion,
     normalizeSpatial,
+    quaternionAxes,
+    horizontalReferenceFrame,
     quaternionToOrientation,
     sampleOrientation,
     createAnchor,
+    applyMetricDeadband,
+    metricTranslationFromAnchor,
+    applyAngleDeadband,
     derivePose,
     smoothingAlpha,
     createPoseStabilizer,
