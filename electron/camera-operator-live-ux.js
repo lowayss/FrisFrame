@@ -458,7 +458,7 @@
         ? timelineTimesMatch(keyframe.time, requestedTime)
         : Math.abs(Number(keyframe.time) - Number(requestedTime)) < 0.0005
     ));
-    let firstKey = exactKey || [...cameraKeys].sort((left, right) => Number(left.time) - Number(right.time))[0];
+    let firstKey = exactKey || (ensureStartKey ? null : [...cameraKeys].sort((left, right) => Number(left.time) - Number(right.time))[0]);
     if (!firstKey && ensureStartKey && canStartAtRequestedTime && typeof captureSourceKeyframe === "function") {
       const createdStartKey = captureSourceKeyframe("camera", requestedTime, undefined, "straight");
       if (createdStartKey) {

@@ -37,6 +37,7 @@ assert.match(controller, /angleTolerance: 0\.07/, "Physical Camera key reduction
 assert.match(controller, /maxGap: 0\.22 \+ cleanupStrength \* 0\.10/, "Physical Camera must not leave long gaps between editable keys");
 assert.match(controller, /startPhysical: startPhysicalRecording/, "Physical Camera must enter a dedicated recording path instead of masquerading as mouse input");
 assert.match(controller, /adoptStartPose/, "Physical Camera must rewrite the take start key to the adopted LIVE phone pose");
+assert.match(controller, /exactKey \|\| \(ensureStartKey \? null : \[\.\.\.cameraKeys\]/, "Physical Camera must start at the current playhead instead of jumping to an older camera key");
 assert.match(controller, /maxGap: 0\.42 \+ cleanupStrength \* 0\.18/, "camera take key reduction must leave enough time between operator spline keys");
 assert.match(controller, /keyframe\.operatorContinuity = true;/, "recorded camera keys must opt into continuous pose interpolation");
 assert.match(controller, /interpolateCameraOperatorPose = interpolateOperatorVectorPose;/, "Camera Operator must replace scalar PCHIP playback with its vector spline policy");
