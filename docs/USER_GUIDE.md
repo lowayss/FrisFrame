@@ -266,7 +266,7 @@ FrisFrame MCP는 AI API를 호출하지 않습니다. 전달받은 결정된 값
 - `apply_motion_macros`
 - `apply_previs_plan`
 
-지원 모션 매크로에는 camera orbit, dolly+zoom, jib, actor follow, pair approach, generic subject movement 등이 있습니다. 매크로 결과도 일반 FrisFrame 키프레임으로 저장되므로 이후 UI에서 직접 수정할 수 있습니다.
+지원 모션 매크로에는 camera orbit, dolly+zoom, actor follow, pair approach, generic subject movement 등이 있습니다. 매크로 결과도 일반 FrisFrame 키프레임으로 저장되므로 이후 UI에서 직접 수정할 수 있습니다.
 
 수동 편집과 MCP 편집을 섞을 때는 최신 `revision`을 기준으로 작업합니다. 오래된 revision을 가진 MCP 요청이 더 최신 수동 편집을 조용히 덮어쓰지 않도록 충돌 검사가 적용됩니다.
 

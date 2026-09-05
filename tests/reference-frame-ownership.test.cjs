@@ -56,8 +56,8 @@ const to = { focal: 70, trackingTargetId: "actor-b" };
 
 assert.equal(motionCore.installReferenceFrameSemantics(fakeWindow), true);
 const quarter = fakeWindow.interpolatePoseFor({}, "camera", from, to, 0.25, {}, { transition: "smooth" });
-assert.equal(quarter.evaluatedProgress, 0.125);
-assert.equal(quarter.focal, 29.75);
+assert.equal(quarter.evaluatedProgress, 0.25);
+assert.equal(quarter.focal, 35.5);
 assert.equal(quarter.trackingTargetId, "actor-a");
 const almost = fakeWindow.interpolatePoseFor({}, "camera", from, to, 0.999999, {}, { transition: "linear" });
 assert.equal(almost.trackingTargetId, "actor-a");
@@ -90,8 +90,8 @@ const secondRunFrame = fakeWindow.interpolatePoseFor(
   {}, "camera", secondRunPlan.start.pose, secondRunPlan.end.pose, secondRunPlan.progress, {}, secondRunPlan.end,
   { referenceProgress: secondRunPlan.referenceProgress },
 );
-assert.equal(firstRunFrame.evaluatedProgress, 0.375, "smooth run must ease in only at its outer start");
-assert.equal(secondRunFrame.evaluatedProgress, 0.625, "smooth run must ease out only at its outer end");
+assert.equal(firstRunFrame.evaluatedProgress, 0.5, "reference easing must not brake spatial motion at the outer start");
+assert.equal(secondRunFrame.evaluatedProgress, 0.5, "reference easing must not brake spatial motion at the outer end");
 
 // Numerical fixture for the full authored-frame semantics used by both preview
 // and MP4 export. App-level contract tests ensure both surfaces enter the same
@@ -180,9 +180,7 @@ function fixtureSourceEvaluator(renderState, sourceId, time, fallbackPose) {
   const plan = motionCore.sourceKeyframeEvaluationPlan(keys, time);
   if (plan.kind === "fallback") return motionCore.cloneValue(fallbackPose);
   if (plan.kind === "key") return { ...fallbackPose, ...motionCore.cloneValue(plan.keyframe.pose || {}) };
-  const interpolationProgress = sourceId !== "camera" && fallbackPose?.type === "actor"
-    ? plan.referenceProgress
-    : plan.progress;
+  const interpolationProgress = plan.progress;
   return fixtureWindow.interpolatePoseFor(
     renderState,
     sourceId,
@@ -191,7 +189,9 @@ function fixtureSourceEvaluator(renderState, sourceId, time, fallbackPose) {
     interpolationProgress,
     fallbackPose,
     plan.end,
-    sourceId === "camera" ? { referenceProgress: plan.referenceProgress } : null,
+    sourceId === "camera"
+      ? { movementProgress: plan.progress, referenceProgress: plan.referenceProgress }
+      : null,
   );
 }
 
@@ -211,19 +211,19 @@ for (const sampleTime of [0, 0.5, 1, 1.5, 2]) {
 
 const quarterFrame = fixtureFrame(0.5);
 near(quarterFrame.motion.playhead, 0.5);
-near(quarterFrame.camera.x, 0.2);
-near(quarterFrame.camera.y, 0.25);
-near(quarterFrame.camera.height, 1.125);
-near(quarterFrame.camera.panDeg, 352.5);
-near(quarterFrame.camera.tiltDeg, -7.5);
+near(quarterFrame.camera.x, 0.3);
+near(quarterFrame.camera.y, 0.3);
+near(quarterFrame.camera.height, 1.25);
+near(quarterFrame.camera.panDeg, 355);
+near(quarterFrame.camera.tiltDeg, -5);
 near(quarterFrame.camera.focal, 29.75);
 assert.equal(Number.isInteger(quarterFrame.camera.focal), false, "24→70 mm zoom must retain sub-mm evaluation precision");
 assert.equal(quarterFrame.camera.trackingTargetId, "actor-a");
-near(quarterFrame.items[0].x, 0.25);
-near(quarterFrame.items[0].y, 0.525);
-near(quarterFrame.items[0].verticalOffset, 0.125);
-near(quarterFrame.items[0].facing, 11.25);
-assert.deepEqual(quarterFrame.items[0].bodyPose, neutralPose, "actor pose must stay held during eased root motion");
+near(quarterFrame.items[0].x, 0.3);
+near(quarterFrame.items[0].y, 0.55);
+near(quarterFrame.items[0].verticalOffset, 0.25);
+near(quarterFrame.items[0].facing, 22.5);
+assert.deepEqual(quarterFrame.items[0].bodyPose, neutralPose, "actor pose must stay held during root motion");
 
 const preArrivalFrame = fixtureFrame(1.999999);
 assert.equal(preArrivalFrame.camera.trackingTargetId, "actor-a", "tracking must not switch before the destination key");

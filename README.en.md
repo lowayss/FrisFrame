@@ -59,7 +59,7 @@ An external MCP client may interpret a reference image and natural-language dire
 
 MCP output is ordinary FrisFrame project data and ordinary keyframes, so the result can be refined manually in the desktop UI. Manual and MCP edits share the same project revision contract to avoid silently overwriting newer work.
 
-The deterministic MCP surface supports project reads, stage layout operations, explicit motion timelines, motion macros, and a combined previs-plan operation. Macros such as orbit, dolly+zoom, jib, actor follow, two-actor approach, and subject movement expand into editable ordinary keyframes.
+The deterministic MCP surface supports project reads, stage layout operations, explicit motion timelines, motion macros, and a combined previs-plan operation. Macros such as orbit, dolly+zoom, actor follow, two-actor approach, and subject movement expand into editable ordinary keyframes.
 
 ## Desktop builds
 
@@ -138,7 +138,7 @@ The MCP process resolves the same FrisFrame managed-project database used by the
 - Pedestal Up / Down
 - Arc Left / Right
 - Follow Actor
-- Free-curve camera paths with near-constant travel speed
+- Near-constant travel speed on free-curve camera, actor, and prop paths
 - Continuous focal-length interpolation
 - Destination-boundary tracking target changes
 - Smooth multi-key camera runs without braking at every internal key
@@ -149,7 +149,8 @@ Camera presets are **keyframe macros**, not a separate animation system. The gen
 
 - Root position, height, facing, and timing
 - Explicit authored pose states
-- Smooth or linear root-motion timing
+- Constant root-motion travel between keys with arc-length correction for free curves
+- Intentional stops or cuts only when `Hold` / `Cut` is authored
 - Pose hold until the authored destination key
 
 FrisFrame intentionally avoids inventing secondary body motion. Seedance can follow unnecessary motion in a reference too literally, which may make the result look stiff or robotic.

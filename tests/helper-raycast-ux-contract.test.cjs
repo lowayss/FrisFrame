@@ -10,8 +10,10 @@ const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 
 assert.match(source, /function hasInteractiveMetadata\(/,
   "raycast pruning must preserve objects that participate in editor interaction");
-assert.match(source, /data\.editor \|\| data\.poseJoint \|\| data\.gizmoAxis \|\| data\.isMoveHandle/,
-  "editor, pose, gizmo, and move-handle metadata must keep raycasting enabled");
+assert.match(source, /function pruneVisualGroup\([\s\S]*hasInteractiveMetadata\(object, root\.parent\)/,
+  "cached visual groups must preserve interactive descendants while pruning decoration");
+assert.match(source, /data\.editor \|\| data\.poseJoint \|\| data\.gizmoAxis \|\| data\.isMoveHandle \|\| data\.cameraFovGuide \|\| data\.freeCurveHandle/,
+  "editor, pose, gizmo, move-handle, and free-curve metadata must keep raycasting enabled");
 assert.match(source, /child\.geometry\?\.type !== "PlaneGeometry"/,
   "the noninteractive stage floor must be removed from exact raycast work");
 assert.match(source, /frisframe:cached-motion-paths/,
@@ -39,6 +41,10 @@ const editorParent = { userData: { editor: { kind: "camera" } }, parent: null };
 const visualChild = { userData: {}, parent: editorParent };
 assert.equal(api.hasInteractiveMetadata(visualChild, null), true,
   "a mesh under an editor-owned camera body must remain raycastable");
+const freeCurveParent = { userData: { freeCurveHandle: { keyframeId: "key-2" } }, parent: null };
+const freeCurveChild = { userData: {}, parent: freeCurveParent };
+assert.equal(api.hasInteractiveMetadata(freeCurveChild, null), true,
+  "a mesh under a free-curve handle must remain raycastable");
 const decorativeParent = { userData: {}, parent: null };
 const decorativeChild = { userData: {}, parent: decorativeParent };
 assert.equal(api.hasInteractiveMetadata(decorativeChild, null), false,

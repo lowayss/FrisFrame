@@ -54,7 +54,7 @@
     const pose = { ...start };
     TRANSFORM_FIELDS.forEach((field) => { pose[field] = lerp(start[field], end[field], t); });
     pose.facing = lerpAngle(start.facing, end.facing, t);
-    ["color", "shape", "assetType", "dummyType", "name", "mountId", "seatIndex", "visible"].forEach((field) => {
+    ["color", "shape", "assetType", "dummyType", "name", "mountId", "mountAction", "seatIndex", "visible"].forEach((field) => {
       if (field in start || field in end) pose[field] = t < 0.5 ? start[field] : end[field];
     });
     return pose;

@@ -296,6 +296,7 @@
           targetState.camera.aimX = trackingFrame.camera.aimX;
           targetState.camera.aimY = trackingFrame.camera.aimY;
           targetState.camera.focusHeight = trackingFrame.camera.focusHeight;
+          applyPhoneAimOffset(targetState);
           return;
         }
       } catch (_error) {
@@ -304,16 +305,36 @@
       }
     }
     applyCameraTracking(targetState);
+    applyPhoneAimOffset(targetState);
   };
 
-  const applyCameraPose = (pose, targetState = state) => {
+  const applyPhoneAimOffset = (targetState = state) => {
+    const inputs = window.FrisFrameCameraOperatorInputs;
+    const phoneOffset = inputs?.phoneAimOffset;
+    const operatorOffset = inputs?.operatorAimOffset;
+    const offsets = [phoneOffset, operatorOffset].filter((offset) => typeof offset === "object" && offset);
+    if (!offsets.length) return;
+    targetState.camera.panDeg = normalizeAngle(
+      Number(targetState.camera.panDeg || 0)
+      + offsets.reduce((sum, offset) => sum + Number(offset.panDeg || 0), 0),
+    );
+    targetState.camera.tiltDeg = clamp(
+      Number(targetState.camera.tiltDeg || 0)
+      + offsets.reduce((sum, offset) => sum + Number(offset.tiltDeg || 0), 0),
+      -90,
+      90,
+    );
+    if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(targetState.camera, targetState);
+  };
+
+  const applyCameraPose = (pose, targetState = state, { maintainTarget = true } = {}) => {
     targetState.camera.x = Number(pose.x);
     targetState.camera.y = Number(pose.y);
     targetState.camera.height = Number(pose.height);
     targetState.camera.panDeg = normalizeAngle(pose.panDeg);
     targetState.camera.tiltDeg = clamp(pose.tiltDeg, -90, 90);
     targetState.camera.focal = Number(pose.focal || targetState.camera.focal || 35);
-    maintainCameraTracking(targetState, targetState?.motion?.playhead);
+    if (maintainTarget) maintainCameraTracking(targetState, targetState?.motion?.playhead);
   };
 
   const operatorTime = () => Math.min(
@@ -330,10 +351,9 @@
     button.classList.toggle("is-armed", mode === "armed");
     button.classList.toggle("is-recording", mode === "recording");
     settings.hidden = mode === "idle";
-    // Keep the preview surface mounted even before STBY. A user should be able
-    // to grab the camera preview and drag immediately; the first pointerdown
-    // below arms and starts the take without requiring a separate button click.
-    surface.hidden = false;
+    // Direct shooting is a per-take session. Keep the live surface hidden until
+    // the user explicitly presses the button and enters STBY.
+    surface.hidden = mode === "idle";
     surface.classList.toggle("is-recording", mode === "recording");
     cameraFrame.classList.toggle("frisframe-camera-operator-monitor", mode !== "idle");
     cameraFrame.classList.toggle("frisframe-camera-operator-recording", mode === "recording");
@@ -345,7 +365,7 @@
 
     if (mode === "idle") {
       button.textContent = "● 직접 촬영";
-      status.textContent = "프리뷰를 드래그하면 REC 시작";
+      status.textContent = "직접 촬영을 눌러 STBY 준비";
       if (monitorHud) monitorHud.textContent = "STBY";
       return;
     }
@@ -376,7 +396,10 @@
     }
     if (renderState !== state) {
       renderState.camera = { ...renderState.camera };
-      applyCameraPose(livePose, renderState);
+      // Copy the already-composed live pose into the preview without running
+      // tracking a second time and wiping the phone's angle offset.
+      applyCameraPose(livePose, renderState, { maintainTarget: false });
+      renderState.camera.__preserveLiveCameraOrientation = true;
     }
     return renderState;
   };
@@ -445,6 +468,7 @@
       return;
     }
     if (typeof cancelPreview === "function") cancelPreview();
+    window.FrisFrameCameraOperatorInputs?.resetAimOffset?.();
     const requestedTime = typeof readTimelineTimeInput === "function"
       ? readTimelineTimeInput(state.motion.playhead)
       : Number(state.motion.playhead || 0);
@@ -539,11 +563,7 @@
   };
 
   const beginPointerControl = (event) => {
-    if (mode === "idle" && event.button === 0) {
-      armOperator();
-      if (mode === "armed") beginRecording(event);
-      return;
-    }
+    if (mode === "idle") return;
     if (mode === "armed") {
       beginRecording(event);
       return;
@@ -645,7 +665,7 @@
     releasePointerControl(event);
   };
   const beginMouseFallback = (event) => {
-    if (event.button !== 0 || isCameraFrameControlTarget(event.target) || pointerId != null) return;
+    if (event.button !== 0 || isCameraFrameControlTarget(event.target) || pointerId != null || mode === "idle") return;
     mouseFallbackActive = true;
     beginPointerControl(event);
   };

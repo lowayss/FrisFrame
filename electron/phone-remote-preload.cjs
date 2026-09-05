@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("frisframePhoneRemote", Object.freeze({
   start: () => ipcRenderer.invoke("phone-remote:start"),
   stop: () => ipcRenderer.invoke("phone-remote:stop"),
   status: () => ipcRenderer.invoke("phone-remote:status"),
+  setPreview: (dataUrl) => ipcRenderer.invoke("phone-remote:preview", dataUrl),
 }));

@@ -18,6 +18,8 @@
     "desktop:build": "npm run desktop:build:mac",
     "desktop:dir:mac": "npm run desktop:prepare && electron-builder --mac dir --arm64",
     "desktop:build:mac": "npm run desktop:prepare && electron-builder --mac dmg zip --arm64",
+    "desktop:install:mac": "node electron/scripts/install-mac.cjs",
+    "desktop:update:mac": "npm run desktop:dir:mac && npm run desktop:verify && npm run desktop:install:mac",
     "desktop:dir:win": "npm run desktop:prepare && electron-builder --win dir --x64",
     "desktop:build:win": "npm run desktop:prepare && electron-builder --win nsis --x64",
     "desktop:migrate-data": "node electron/scripts/migrate-local-data.cjs",

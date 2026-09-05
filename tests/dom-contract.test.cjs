@@ -5,6 +5,8 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const styles = fs.readFileSync(path.join(root, "styles.css"), "utf8");
+const manualGuide = fs.readFileSync(path.join(root, "manual-guide-core.js"), "utf8");
 const motion = fs.readFileSync(path.join(root, "motion-core.js"), "utf8");
 const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map((match) => match[1]));
 const selectors = [...app.matchAll(/\$\(\s*["'`]([^"'`]+)["'`]\s*\)/g)].map((match) => match[1]);
@@ -34,6 +36,35 @@ assert.equal(html.includes("cdn.jsdelivr.net"), false);
 assert.equal(html.includes("unpkg.com"), false);
 assert.equal(ids.has("focalPresets"), false, "camera focal preset buttons must stay removed");
 assert.equal(app.includes("focalPresets"), false, "camera focal preset behavior must stay removed");
+for (const source of [html, app, manualGuide]) {
+  assert.equal(source.includes("수동 탑승"), false, "boarding mode must not expose manual boarding");
+  assert.equal(source.includes("자동 탑승"), false, "boarding mode must not expose automatic boarding as a choice");
+}
+assert.equal(ids.has("actorPlacementMode"), false, "actors must not expose a boarding-mode selector");
+assert.ok(ids.has("actorMountSelect"), "actors need an explicit seat-object selector");
+assert.ok(ids.has("actorInteractionSelect"), "actors need an explicit interaction selector");
+assert.ok(ids.has("actorSeatSelect"), "actors need an explicit seat selector");
+assert.ok(ids.has("actorMountStatus"), "actors need a read-only automatic seat-match status");
+assert.ok(ids.has("actorMountApplyBtn"), "actors need an explicit boarding action");
+assert.ok(ids.has("actorDetachMountBtn"), "mounted actors need an explicit detach action");
+assert.ok(app.includes("function isSeatProp("), "seat-capable props need a shared predicate");
+assert.ok(app.includes("function propInteractionDefinitions("), "props need extensible interaction definitions");
+assert.ok(app.includes("function attachActorToInteraction("), "actors need an explicit interaction-application path");
+assert.ok(app.includes('id: \"lie\"'), "lying interactions need a dedicated action id");
+assert.ok(app.includes('posePreset: \"lieDown\"'), "lying interactions need the lie-down pose preset");
+assert.ok(app.includes('label: \"작업하기\"'), "desks need a work interaction");
+assert.ok(app.includes('label: \"칠판에 쓰기\"'), "blackboards need a write interaction");
+assert.ok(app.includes('label: \"창밖 보기\"'), "windows need a look interaction");
+assert.ok(app.includes('label: \"시청하기\"'), "televisions need a watch interaction");
+assert.match(app, /chair:[\s\S]{0,260}facing: 90/, "chair anchors need to face the chair front");
+assert.match(app, /sofa:[\s\S]{0,700}facing: 90/, "sofa anchors need to face the sofa front");
+assert.ok(app.includes("function mountActorToSeat("), "actors need an explicit seat-application path");
+assert.ok(app.includes("function detachAutoMountedActor("), "mounted actors need a separate detach path");
+assert.ok(app.includes("function prepareActorForDirectManipulation("), "direct actor dragging must detach mounted actors before editing");
+assert.doesNotMatch(app, /commit\([\s\S]{0,500}autoMatchActorsToSeats/, "commits must not auto-board actors");
+assert.doesNotMatch(app, /function sanitizeState\([\s\S]{0,1200}autoMatchActorsToSeats/, "loading a project must not auto-board actors");
+assert.match(app, /drag\.detachableActorId[\s\S]*?prepareActorForDirectManipulation/, "2D direct manipulation must detach a mounted actor");
+assert.match(app, /threeDrag\.detachableActorId[\s\S]*?prepareActorForDirectManipulation/, "3D direct manipulation must detach a mounted actor");
 
 assert.ok(html.includes("class=\"manual-example\""), "manual needs a visual walkthrough example");
 assert.ok(html.includes("class=\"manual-storage-map\""), "manual needs a project storage comparison");
@@ -112,10 +143,38 @@ assert.ok(app.includes("function captureActorPoseKeyframe("), "actor poses need 
 assert.ok(app.includes("function actorFocusHeight("), "camera tracking must include actor elevation and pitch");
 assert.ok(app.includes("const spatialScaleCore = window.FrisFrameSpatialScaleCore;"), "3D blocking must use the shared metric scale core");
 assert.ok(app.includes("function actorPhysicalDimensions("), "actor framing must use physical dimensions");
+assert.match(app, /function actorFocusHeight\(item, renderState = state\)[\s\S]*?const trackingItem = item\?\.type === "actor"[\s\S]*?actorBodyPoseForRender\(trackingItem, renderState\)/,
+  "subject tracking must resolve the actor's evaluated pose before choosing the focus height");
+assert.match(app, /const mountedRootOffset = trackingItem\?\.autoMounted \? -0\.79 \* rigScale : 0;/,
+  "mounted seated tracking must use the same lowered rig root as the renderer");
+assert.match(app, /function actorInteractionPosePreset\(actor, renderState = state\)/,
+  "actor tracking and rendering must share the interaction pose preset");
 assert.ok(app.includes("fitThreeBodyToPhysicalBounds"), "prop meshes must be fitted to physical catalog dimensions");
 assert.ok(ids.has("physicalScaleReadout") && app.includes("실측 스케일"), "properties must expose the resolved metric dimensions");
 assert.ok(app.includes("function cameraPerspectiveForSubject("), "metric perspective checks must remain available to the editor");
 assert.ok(app.includes("function updateThreePoseDrag("), "3D actors need direct joint dragging");
+assert.ok(app.includes("function focusThreeViewOnCamera("), "stage reset needs a visible 3D camera framing");
+assert.match(app, /focusThreeViewOnNextRender = true;[\s\S]{0,240}evaluatedViewState = null;/,
+  "stage reset must request a 3D camera refocus before the next render");
+assert.match(app, /state = \{[\s\S]{0,500}previs: clone\(previous\.previs \|\| fresh\.previs\),[\s\S]{0,180}\};\s*\/\/[\s\S]{0,120}Normalize[\s\S]{0,180}sanitizeState\(\);/,
+  "stage reset must normalize camera profiles before committing the fresh document");
+assert.equal(app.includes('return { kind: "camera", profileId: state.activeCameraId || "camera-1", fieldOffset: { x: 0, y: 0 }, forceMode: "move" };'), false,
+  "camera picking must not use an unconditional diagnostic bypass");
+assert.match(styles, /\.camera-frame\s*\{[\s\S]*?pointer-events:\s*none;/,
+  "floating camera preview must let stage picks pass through when it covers a rig");
+assert.match(styles, /#cameraFrameCanvas\s*\{[\s\S]*?pointer-events:\s*none;/,
+  "camera preview canvas must not block 3D camera dragging");
+assert.match(styles, /\.camera-frame-resize-handle\s*\{[\s\S]*?pointer-events:\s*auto;/,
+  "camera preview resize handle must remain interactive while the preview shell passes stage picks through");
+assert.match(app, /function makeCameraConeMesh\([\s\S]*?cameraFovGuide\s*=\s*true[\s\S]*?group\.traverse\(markGuide\);/,
+  "camera FOV floor overlay must remain a guarded visual guide");
+assert.match(app, /if \(editor\?\.kind === "cameraFovGuide"\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?return;/,
+  "camera FOV floor overlay must consume pointer gestures without orbiting or editing the camera");
+assert.match(app, /const firstHit = hits\[0\]\?\.object;[\s\S]*?cameraFovGuide[\s\S]*?return \{ kind: "cameraFovGuide" \};/,
+  "3D picking must recognize the FOV guide before the camera screen-anchor fallback");
+assert.ok(app.includes("function makeCameraPreviewFloor("), "camera preview must provide a neutral floor for vertical and horizontal composition");
+assert.match(app, /threeView\.previewWorld\.add\(makeCameraPreviewFloor\(renderState\)\);[\s\S]{0,180}renderState\.items/,
+  "camera preview floor must render beneath authored subjects without restoring the full editor stage shell");
 assert.ok(app.includes("function updateExistingSourceKeyframe(sourceId, time"), "pose edits should update an existing key without creating an implicit one");
 assert.equal(app.includes("function autoSaveDraggedPose(sourceId)"), false, "drag edits must not expose an implicit keyframe save path");
 assert.equal(app.includes("const newKey = captureSourceKeyframe(sourceId, time, undefined, \"straight\");"), false, "drag edits must never create a new keyframe");
@@ -128,6 +187,10 @@ assert.match(app, /function interpolateStateAtTime\(time\) \{\s*return interpola
 assert.ok(app.includes("window.FrisFrameMotionCore?.composeEvaluatedFrameBase"), "app frame evaluation must delegate base frame assembly to motion-core");
 assert.ok(motion.includes("function composeEvaluatedFrameBase"), "motion-core must own base frame assembly");
 assert.match(app, /const DIRECT_MANIPULATION_THRESHOLD_PX = 5/, "stage selection and direct manipulation need a click threshold");
+assert.match(app, /function beginThreeDrag\([\s\S]*?const planeHeight = 0;/,
+  "3D camera grabs must project stage position edits onto the ground plane");
+assert.match(app, /function updateThreeEditorDrag\([\s\S]*?const planeHeight = 0;/,
+  "3D camera movement must keep using the stage ground plane while dragging");
 assert.match(app, /if \(drag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "2D click selection must not materialize evaluated poses");
 assert.match(app, /if \(threeDrag\.pending\)[\s\S]{0,500}materializeEvaluatedViewForEditing/, "3D click selection must not materialize evaluated poses");
 assert.match(app, /else if \(sourceId === "camera"\) \{[\s\S]*?state\.camera = clone\(baseFrame\.camera\);[\s\S]*?state\.items = clone\(visibleFrame\.items\);/, "camera editing must preserve the visible actor frame");
@@ -140,15 +203,31 @@ assert.match(app, /const renderState = threeDrag\.renderState \|\| state;[\s\S]*
 assert.match(app, /function updateActorPoseAxis\([\s\S]*?evaluatedViewState = interpolateStateAtTime\(state\.motion\.playhead\);[\s\S]*?draw\(evaluatedViewState\);/, "live actor pose edits must redraw the current evaluated camera frame");
 assert.ok(app.includes("function preserveLiveSourcePreview("), "unkeyed edits must remain visible until the user adds a key");
 assert.ok(app.includes("function applyLiveSourceEdits("), "unkeyed edits must survive scrubbing until they are keyed");
+assert.match(app, /function preserveItemStructure\([\s\S]*?color: definition\.color \?\? pose\.color,[\s\S]*?shape: definition\.shape \?\? pose\.shape,[\s\S]*?dummyType: definition\.type === "actor"/,
+  "keyframe evaluation must preserve current inspector color, shape, and actor dummy type");
+assert.match(app, /\.facing-grid"\)\.addEventListener\("click",[\s\S]*?const sourceId = transformLeaderIdForItem\([\s\S]*?materializeEvaluatedViewForEditing\(sourceId\)[\s\S]*?commit\(\{ preserveSourceIds: \[sourceId\] \}\)/,
+  "direction presets must edit the visible selected source and keep the result on screen");
+assert.match(app, /function nudge\(item, dx, dy, amount\)[\s\S]*?const sourceId = transformLeaderIdForItem\([\s\S]*?materializeEvaluatedViewForEditing\(sourceId\)[\s\S]*?commit\(\{ preserveSourceIds: \[sourceId\] \}\)/,
+  "nudge buttons must move the visible selected source instead of an unevaluated base pose");
 assert.match(app, /function switchActiveCamera\(profileId\)[\s\S]*?syncActiveCameraProfile\(\);[\s\S]*?liveSourceEdits\.delete\("camera"\);/, "switching cameras must not transfer an unkeyed preview pose between rigs");
 assert.doesNotMatch(app, /if \(hit\.kind === "camera"[\s\S]{0,220}switchActiveCamera\(hit\.profileId\);[\s\S]{0,220}return;/, "grabbing an inactive camera must select and drag it in one gesture");
 assert.match(app, /\.sort\(\(a, b\) => a\.distance - b\.distance \|\| Number\(b\.entry\.active\) - Number\(a\.entry\.active\)\)/, "overlapping camera rigs must select the closest visible icon before the active rig");
 assert.doesNotMatch(app, /autoSaveDraggedPose/, "scene dragging must never auto-update timeline keyframes");
 assert.match(motion, /const progress = transition === "smooth" \|\| transition === "linear" \? rawProgress : easedProgress;/, "motion-core source planning must not brake continuous motion at ordinary keyframe boundaries");
 assert.ok(app.includes("window.FrisFrameMotionCore?.sourceKeyframeEvaluationPlan"), "app source evaluation must delegate keyframe timing to motion-core");
+assert.match(app, /const interpolationProgress = plan\.progress;/, "all moving sources must use the authored linear motion progress");
+assert.ok(app.includes("movementProgress: plan.progress"), "camera movement must stay linear while reference-only easing remains separate");
+assert.ok(app.includes('$("#keyPathSelect").addEventListener("change", applySelectedPathMode)'), "path selection must immediately update the selected incoming segment");
+assert.doesNotMatch(html, /<option value="(?:horizontal|vertical|drone|jib-up|jib-down)">/, "removed camera path types must stay out of the timeline picker");
+assert.match(app, /const cameraPathModes = \[\.\.\.actorPathModes\];/, "camera and actor path pickers must use the same reduced path vocabulary");
+assert.match(app, /function applySelectedPathMode\([\s\S]*?첫 키에는 진입 경로가 없습니다\.[\s\S]*?reconcileSourcePathConstraints/, "path editing must distinguish the first key and reconcile the selected source");
+assert.match(app, /const constrained = constrainPathEndpoint\(previous\.pose, keyframe\.pose, mode, sourceType\);/, "explicit path modes must constrain their authored endpoint");
+assert.ok(app.includes("function makeThreeExactPath("), "3D path guides must use the authored sampled path");
+assert.equal(app.includes("new THREE.CatmullRomCurve3(points"), false, "3D path guides must not distort authored paths through Catmull-Rom");
 assert.match(app, /function cameraOperatorHermiteValue\(/, "camera operator playback must have a continuous pose interpolator");
 assert.match(app, /function interpolatePoseFor\([\s\S]*evaluationOptions = null\)/, "camera pose interpolation must receive operator continuity options");
 assert.match(app, /plan\.end\?\.operatorContinuity === true/, "only recorded camera operator keys may enable continuous pose interpolation");
+assert.match(app, /const authoredPathMode = pathModeForSegment\(segment, "camera"\);[\s\S]*?operatorPose && authoredPathMode === "straight"/, "explicit camera arc/free-curve paths must override direct-shoot spline continuity");
 assert.equal(app.includes("proceduralLocomotion"), false, "preview playback must not synthesize walking or running");
 assert.ok(app.includes("keyframe.posePreset"), "MCP pose presets must remain attached to authored keyframes");
 assert.ok(app.includes("bodyPose: presetBodyPose(posePreset)"), "MCP pose presets must resolve through the existing pose core");

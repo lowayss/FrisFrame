@@ -364,6 +364,7 @@
   function editorFromThreeObject(object) {
     let current = object;
     while (current && current !== threeView.world) {
+      if (current.userData?.cameraFovGuide) return null;
       if (current.userData?.editor) return clone(current.userData.editor);
       current = current.parent;
     }

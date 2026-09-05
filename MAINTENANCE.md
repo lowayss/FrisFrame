@@ -52,7 +52,7 @@ FrisFrame MP4는 완성 애니메이션이 아니라 Seedance가 참고하는 **
 - `직전 유지`와 `즉시 전환`은 기존 키프레임 의미를 그대로 유지합니다.
 - focal length는 평가 중 정수로 반올림하지 않습니다. 정수 표시는 UI에서만 처리할 수 있습니다.
 - `trackingTargetId`처럼 연속 보간할 수 없는 값은 목적지 키 도착 시 전환합니다.
-- 배우 root 위치·방향은 작성한 키대로 움직이되 secondary motion은 자동 생성하지 않습니다.
+- 배우 root 위치·방향은 작성한 키 사이를 일정한 이동 진행률로 연결하되 secondary motion은 자동 생성하지 않습니다.
 - 배우 body pose는 사용자가 작성한 포즈 사이의 의미만 보존합니다.
 - 프리뷰와 MP4 내보내기는 같은 프레임 평가 의미를 사용해야 합니다.
 - `previs-runtime-core.js`의 프레임 의미 guard를 바꾸면 `tests/previs-runtime-core.test.cjs`와 `tests/reference-video-contract.test.cjs`를 함께 확인합니다.
@@ -128,6 +128,14 @@ npm run desktop:build:mac
 # 또는
 npm run desktop:build:win
 ```
+
+macOS에서 설치본을 교체할 때는 다음 명령을 사용합니다.
+
+```bash
+npm run desktop:update:mac
+```
+
+이 명령은 Apple Silicon 앱을 빌드·검증한 뒤, 실행 중인 기존 FrisFrame을 종료하고 기존 앱과 중복본을 `/Applications` 밖의 휴지통으로 옮긴 다음 `/Applications/FrisFrame.app` 하나만 설치합니다. 프로젝트 DB는 앱 패키지와 분리되어 있으므로 설치 교체 과정에서 삭제하지 않습니다.
 
 패키지 검증:
 

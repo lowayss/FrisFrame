@@ -98,6 +98,23 @@ near(cameraReferenceProgress(0.25, "linear", { hasSmoothBefore: true, hasSmoothA
 near(smoothRunReferenceProgress(0.25, "smooth"), 0.125, 0.000001);
 near(smoothRunReferenceProgress(0.25, "linear"), 0.25, 0.000001);
 
+// A four-key run must pass through each interior key without a new ease-in or
+// ease-out. Hold/Cut remain the explicit exceptions for authored stops.
+const fourKeyRun = [
+  { id: "q0", time: 0, pose: { x: 0, y: 0 } },
+  { id: "q1", time: 1, transition: "smooth", pose: { x: 1, y: 0 } },
+  { id: "q2", time: 2, transition: "smooth", pose: { x: 1, y: 1 } },
+  { id: "q3", time: 3, transition: "smooth", pose: { x: 2, y: 1 } },
+];
+const fourKeyQuarterSamples = [0.25, 1.25, 2.25]
+  .map((time) => sourceKeyframeEvaluationPlan(fourKeyRun, time));
+const fourKeyThreeQuarterSamples = [0.75, 1.75, 2.75]
+  .map((time) => sourceKeyframeEvaluationPlan(fourKeyRun, time));
+fourKeyQuarterSamples.forEach((plan) => near(plan.progress, 0.25));
+fourKeyThreeQuarterSamples.forEach((plan) => near(plan.progress, 0.75));
+near(sourceKeyframeEvaluationPlan(fourKeyRun, 1).progress, 1);
+near(sourceKeyframeEvaluationPlan(fourKeyRun, 1.000001).progress, 0.000001, 0.000001);
+
 const actorSmoothPlan = sourceKeyframeEvaluationPlan([
   { id: "a0", time: 0, pose: { x: 0 } },
   { id: "a1", time: 2, transition: "smooth", pose: { x: 1 } },
@@ -108,6 +125,30 @@ const actorLinearPlan = sourceKeyframeEvaluationPlan([
 ], 0.5);
 near(actorSmoothPlan.referenceProgress, 0.125, 0.000001);
 near(actorLinearPlan.referenceProgress, 0.25, 0.000001);
+
+const propSmoothPlan = sourceKeyframeEvaluationPlan([
+  { id: "p0", time: 0, pose: { x: 0 } },
+  { id: "p1", time: 2, transition: "smooth", pose: { x: 1 } },
+], 0.5);
+near(propSmoothPlan.referenceProgress, 0.125, 0.000001);
+
+const discretePropFrame = composeBaseInterpolatedPose({
+  sourceId: "prop",
+  from: { type: "prop", x: 0, y: 0, mountId: "chair-a", mountAction: "sit", seatIndex: 0, visible: true },
+  to: { type: "prop", x: 1, y: 1, mountId: "chair-b", mountAction: "sit", seatIndex: 1, visible: false },
+  progress: 0.75,
+  discreteProgress: 0.25,
+  spatial: { x: 0.75, y: 0.75, height: 0 },
+});
+assert.equal(discretePropFrame.mountId, "chair-a", "eased spatial progress must not switch discrete prop state early");
+assert.equal(discretePropFrame.visible, true, "eased spatial progress must not hide a prop before authored arrival");
+
+const unsortedPlan = sourceKeyframeEvaluationPlan([
+  { id: "u1", time: 2, pose: { x: 1 } },
+  { id: "u0", time: 0, pose: { x: 0 } },
+], 1);
+assert.equal(unsortedPlan.start.id, "u0", "source planning must be stable even when persisted keys arrive unsorted");
+assert.equal(unsortedPlan.end.id, "u1");
 
 const sourcePlanHold = sourceKeyframeEvaluationPlan(sourcePlanKeys, 3);
 assert.equal(sourcePlanHold.end.id, "k2");
@@ -129,27 +170,18 @@ near(straightDown.z, 0, 0.000001);
 const nearVertical = cameraDirectionVector(180, 89);
 near(Math.asin(nearVertical.y) * 180 / Math.PI, 89, 0.0001);
 
-assert.equal(normalizePathMode("drone", "camera"), "drone");
-assert.equal(normalizePathMode("drone", "actor"), "straight");
+for (const removedPathMode of ["horizontal", "vertical", "drone", "jib-up", "jib-down"]) {
+  assert.equal(normalizePathMode(removedPathMode, "camera"), "straight");
+}
 assert.equal(normalizePathMode("unknown", "camera"), "straight");
 
-const horizontal = constrainPathEndpoint(
+const unchangedEndpoint = constrainPathEndpoint(
   { x: 0.1, y: 0.4, aimY: 0.5 },
   { x: 0.8, y: 0.9, aimY: 0.7 },
-  "horizontal",
+  "straight",
   "camera",
 );
-near(horizontal.y, 0.4);
-near(horizontal.aimY, 0.2);
-
-const vertical = constrainPathEndpoint(
-  { x: 0.2, y: 0.1, aimX: 0.3 },
-  { x: 0.8, y: 0.9, aimX: 0.6 },
-  "vertical",
-  "camera",
-);
-near(vertical.x, 0.2);
-near(vertical.aimX, 0);
+assert.deepEqual(unchangedEndpoint, { x: 0.8, y: 0.9, aimY: 0.7 });
 
 const straight = samplePlanarPath({ x: 0, y: 0 }, { x: 1, y: 1 }, 0.5, "straight");
 near(straight.x, 0.5);
@@ -190,8 +222,8 @@ const curveStart = { x: 0, y: 0 };
 const curveControl = { x: 0.05, y: 1.4 };
 const curveEnd = { x: 1, y: 0 };
 const equalTimeSteps = Array.from({ length: 9 }, (_entry, index) => index / 8);
-// Constant-distance remapping is camera-only by design: Seedance should receive
-// cleaner camera velocity without silently changing authored actor motion.
+// Constant-distance remapping applies to every moving source so an authored
+// free curve does not speed up near the control point.
 const cameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
   curveStart,
   curveEnd,
@@ -209,7 +241,7 @@ const actorCurve = equalTimeSteps.map((progress) => samplePlanarPath(
 const cameraSpeedSpread = spreadRatio(segmentDistances(cameraCurve));
 const actorSpeedSpread = spreadRatio(segmentDistances(actorCurve));
 assert.ok(cameraSpeedSpread < 1.08, `camera free-curve speed spread should stay low, got ${cameraSpeedSpread}`);
-assert.ok(actorSpeedSpread > 2, "actor free-curve must keep authored parameter timing instead of receiving camera-only speed remapping");
+assert.ok(actorSpeedSpread < 1.08, `actor free-curve speed spread should stay low, got ${actorSpeedSpread}`);
 
 const optedOutCameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
   curveStart,
@@ -219,6 +251,15 @@ const optedOutCameraCurve = equalTimeSteps.map((progress) => samplePlanarPath(
   { sourceType: "camera", control: curveControl, constantSpeed: false },
 ));
 assert.ok(spreadRatio(segmentDistances(optedOutCameraCurve)) > 2, "camera constant-speed remapping must be explicitly disableable");
+
+const optedOutActorCurve = equalTimeSteps.map((progress) => samplePlanarPath(
+  curveStart,
+  curveEnd,
+  progress,
+  "free-curve",
+  { sourceType: "actor", control: curveControl, constantSpeed: false },
+));
+assert.ok(spreadRatio(segmentDistances(optedOutActorCurve)) > 2, "actor constant-speed remapping must be explicitly disableable");
 
 const arcStart = circularArcPoint({ x: 0, y: 0 }, { x: 1, y: 0 }, 0, 1);
 const arcMid = circularArcPoint({ x: 0, y: 0 }, { x: 1, y: 0 }, 0.5, 1);

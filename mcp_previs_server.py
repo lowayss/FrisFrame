@@ -88,7 +88,7 @@ MOTION_OPERATION_SCHEMA = {
         "transition": {"type": "string", "enum": ["smooth", "linear", "hold", "cut"]},
         "path_mode": {
             "type": "string",
-            "enum": ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"],
+            "enum": ["straight", "arc-left", "arc-right", "free-curve"],
         },
         "pose_preset": {"type": "string", "enum": sorted(core.MCP_POSE_PRESETS)},
         "body_pose": {"type": "object"},
@@ -109,7 +109,6 @@ MOTION_MACRO_SCHEMA = {
             "enum": [
                 "camera_orbit",
                 "camera_dolly_and_zoom",
-                "camera_jib",
                 "camera_follow_actor",
                 "pair_approach",
                 "move_subject",
@@ -128,10 +127,12 @@ MOTION_MACRO_SCHEMA = {
         "distance_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
         "start_focal": {"type": "integer", "minimum": 14, "maximum": 135},
         "end_focal": {"type": "integer", "minimum": 14, "maximum": 135},
-        "start_height": {"type": "number", "minimum": 0.4, "maximum": 35},
-        "end_height": {"type": "number", "minimum": 0.4, "maximum": 35},
         "end_x": {"type": "number", "minimum": 0.02, "maximum": 0.98},
         "end_y": {"type": "number", "minimum": 0.02, "maximum": 0.98},
+        "path_mode": {
+            "type": "string",
+            "enum": ["straight", "arc-left", "arc-right", "free-curve"],
+        },
         "move_fraction": {"type": "number", "minimum": 0, "maximum": 1},
         "face_each_other": {"type": "boolean"},
         "transition": {"type": "string", "enum": ["smooth", "linear"]},
@@ -318,13 +319,13 @@ def _time_bounds(macro):
     return start, end
 
 
-def _base_key(source_id, time_value, transition, label):
+def _base_key(source_id, time_value, transition, label, path_mode="straight"):
     return {
         "op": "add_keyframe",
         "source_id": source_id,
         "time": round(float(time_value), 4),
         "transition": transition,
-        "path_mode": "straight",
+        "path_mode": path_mode,
         "label": label,
     }
 
@@ -391,25 +392,6 @@ def _expand_camera_dolly_and_zoom(blocking, macro, index):
     return [first, second]
 
 
-def _expand_camera_jib(blocking, macro, index):
-    start, end = _time_bounds(macro)
-    camera = _source_pose(blocking, "camera", start)
-    x0, y0 = float(camera.get("x", 0.9)), float(camera.get("y", 0.5))
-    x1 = _clamp(macro.get("end_x", x0))
-    y1 = _clamp(macro.get("end_y", y0))
-    h0 = float(macro.get("start_height", camera.get("height", 1.6)))
-    h1 = float(macro.get("end_height", h0 + 2.0))
-    focal = int(macro.get("end_focal") or camera.get("focal", 50))
-    transition = str(macro.get("transition", "smooth"))
-    label = str(macro.get("label") or f"지브 {index + 1}")
-    path = "jib-up" if h1 >= h0 else "jib-down"
-    first = _base_key("camera", start, transition, label)
-    first.update({"x": x0, "y": y0, "height": h0, "pan_deg": camera.get("panDeg", 180), "tilt_deg": camera.get("tiltDeg", 0), "focal": camera.get("focal", focal), "path_mode": path})
-    second = _base_key("camera", end, transition, label)
-    second.update({"x": x1, "y": y1, "height": h1, "pan_deg": camera.get("panDeg", 180), "tilt_deg": camera.get("tiltDeg", 0), "focal": focal, "path_mode": path})
-    return [first, second]
-
-
 def _expand_move_subject(blocking, macro, index):
     start, end = _time_bounds(macro)
     source_id = str(macro.get("source_id") or "")
@@ -422,9 +404,10 @@ def _expand_move_subject(blocking, macro, index):
     x1, y1 = _clamp(macro["end_x"]), _clamp(macro["end_y"])
     transition = str(macro.get("transition", "smooth"))
     label = str(macro.get("label") or f"대상 이동 {index + 1}")
-    first = _base_key(source_id, start, transition, label)
+    path_mode = str(macro.get("path_mode", "straight") or "straight")
+    first = _base_key(source_id, start, transition, label, path_mode)
     first.update({"x": x0, "y": y0})
-    second = _base_key(source_id, end, transition, label)
+    second = _base_key(source_id, end, transition, label, path_mode)
     second.update({"x": x1, "y": y1})
     if "facing" in pose:
         first["facing"] = pose["facing"]
@@ -507,7 +490,6 @@ def _expand_macros(blocking, macros):
     expanders = {
         "camera_orbit": _expand_camera_orbit,
         "camera_dolly_and_zoom": _expand_camera_dolly_and_zoom,
-        "camera_jib": _expand_camera_jib,
         "camera_follow_actor": _expand_camera_follow_actor,
         "pair_approach": _expand_pair_approach,
         "move_subject": _expand_move_subject,

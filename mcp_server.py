@@ -49,7 +49,8 @@ MCP_POSE_PRESETS = {
     "crouch", "guard", "punch", "kick", "push",
     "wave", "point", "think", "surprise", "sad", "cheer", "bow", "shrug", "stop", "clap",
 }
-MCP_PATH_MODES = {"straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"}
+MCP_PATH_MODES = {"straight", "arc-left", "arc-right", "free-curve"}
+MCP_REMOVED_PATH_MODES = {"horizontal", "vertical", "drone", "jib-up", "jib-down"}
 MCP_TRANSITIONS = {"smooth", "linear", "hold", "cut"}
 
 # During an atomic previs plan, existing command handlers reuse the outer
@@ -1042,26 +1043,22 @@ def _motion_source(blocking, source_id):
     return item, "actor" if item.get("type") == "actor" else "prop"
 
 
-def _motion_segment(path_mode, source_type):
+def _normalize_motion_path_mode(path_mode, source_type):
     mode = str(path_mode or "straight").lower()
+    if mode in MCP_REMOVED_PATH_MODES:
+        return "straight"
     if mode not in MCP_PATH_MODES:
         raise ValueError(f"지원하지 않는 동선 경로입니다: {mode}")
-    if source_type != "camera" and mode in {"drone", "jib-up", "jib-down"}:
-        mode = "straight"
+    return mode
+
+
+def _motion_segment(path_mode, source_type):
+    mode = _normalize_motion_path_mode(path_mode, source_type)
     segment = {"plan": {"kind": "line"}, "elevation": {"kind": "linear"}, "rig": "generic"}
-    if mode == "horizontal":
-        segment["plan"]["kind"] = "axis-x"
-    elif mode == "vertical":
-        segment["plan"]["kind"] = "axis-y"
-    elif mode in {"arc-left", "arc-right"}:
+    if mode in {"arc-left", "arc-right"}:
         segment["plan"] = {"kind": "arc", "bulge": 0.32 if mode == "arc-left" else -0.32}
     elif mode == "free-curve":
         segment["plan"] = {"kind": "bezier", "control": None}
-    elif mode == "drone":
-        segment["rig"] = "drone"
-    elif mode in {"jib-up", "jib-down"}:
-        segment["elevation"] = {"kind": "jib-arc", "bulge": 0.32 if mode == "jib-up" else -0.32}
-        segment["rig"] = "jib"
     return segment
 
 
@@ -1082,12 +1079,14 @@ def _sanitize_motion_body_pose(value):
     return result
 
 
-def _motion_pose_at_time(blocking, source_id, time):
+def _motion_pose_at_time(blocking, source_id, time, exclude_id=None):
     source, source_type = _motion_source(blocking, source_id)
     motion = blocking.setdefault("motion", {})
     keyframes = [
         keyframe for keyframe in motion.setdefault("keyframes", [])
-        if keyframe.get("source") == source_id and float(keyframe.get("time", 0)) <= time
+        if keyframe.get("source") == source_id
+        and keyframe.get("id") != exclude_id
+        and float(keyframe.get("time", 0)) <= time
     ]
     if keyframes:
         keyframes.sort(key=lambda keyframe: float(keyframe.get("time", 0)))
@@ -1105,7 +1104,8 @@ def _build_motion_keyframe(blocking, command, index, existing=None):
         raise ValueError(f"operations[{index}].time은 숫자여야 합니다.") from error
     if not math.isfinite(time_value) or time_value < 0 or time_value > MAX_TIMELINE_DURATION:
         raise ValueError(f"operations[{index}].time이 허용 범위를 벗어났습니다.")
-    base_pose, source_type = _motion_pose_at_time(blocking, source_id, time_value)
+    existing_id = existing.get("id") if existing else None
+    base_pose, source_type = _motion_pose_at_time(blocking, source_id, time_value, existing_id)
     pose_input = command.get("pose")
     if pose_input is not None:
         if not isinstance(pose_input, dict):
@@ -1157,7 +1157,10 @@ def _build_motion_keyframe(blocking, command, index, existing=None):
     if pose_preset and (source_type != "actor" or pose_preset not in MCP_POSE_PRESETS):
         raise ValueError(f"지원하지 않는 배우 포즈 프리셋입니다: {pose_preset}")
     previous_path_mode = existing.get("pathMode") if existing else None
-    path_mode = str(command.get("path_mode", previous_path_mode or "straight") or "straight").lower()
+    path_mode = _normalize_motion_path_mode(
+        command.get("path_mode", previous_path_mode or "straight"),
+        source_type,
+    )
     result = {
         "id": str(existing.get("id") if existing else command.get("id") or uuid.uuid4().hex[:8]),
         "source": source_id,
@@ -1545,7 +1548,7 @@ def process_mcp_message(msg_str):
                                     "id": {"type": "string"},
                                     "time": {"type": "number", "minimum": 0, "maximum": 60},
                                     "transition": {"type": "string", "enum": ["smooth", "linear", "hold", "cut"]},
-                                    "path_mode": {"type": "string", "enum": ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"]},
+                                    "path_mode": {"type": "string", "enum": ["straight", "arc-left", "arc-right", "free-curve"]},
                                     "pose_preset": {"type": "string", "enum": sorted(MCP_POSE_PRESETS)},
                                     "body_pose": {"type": "object"}
                                 }

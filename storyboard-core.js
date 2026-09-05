@@ -451,8 +451,14 @@
         }
         const beforeMounted = Boolean(before.mountId);
         const afterMounted = Boolean(after.mountId);
-        if (beforeMounted !== afterMounted || (beforeMounted && Number(before.seatIndex || 0) !== Number(after.seatIndex || 0))) {
-          findings.push(continuityFinding(previousCutId, "actor-mount", `연속성: ${label} 탑승 또는 좌석 상태가 바뀜`, [identity], [beforeMounted, before.seatIndex || 0, afterMounted, after.seatIndex || 0]));
+        if (beforeMounted !== afterMounted || (beforeMounted && (
+          String(before.mountAction || "") !== String(after.mountAction || "")
+          || Number(before.seatIndex || 0) !== Number(after.seatIndex || 0)
+        ))) {
+          findings.push(continuityFinding(previousCutId, "actor-interaction", `연속성: ${label} 행동 연결 또는 위치가 바뀜`, [identity], [
+            beforeMounted, before.mountAction || "", before.seatIndex || 0,
+            afterMounted, after.mountAction || "", after.seatIndex || 0,
+          ]));
         }
       } else {
         if (before.assetType !== after.assetType) {

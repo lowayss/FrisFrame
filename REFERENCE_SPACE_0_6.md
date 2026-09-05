@@ -12,9 +12,8 @@ This preserves the current Camera Operator, keyframe, MP4, and Seedance Video Re
 
 1. Scale Anchor
 2. Perspective Calibration
-3. Reference Overlay / Ghost View
-4. Mass Blocking
-5. MCP spatial commands
+3. Mass Blocking
+4. MCP spatial commands
 
 The current implementation keeps deterministic geometry in the shipped spatial/blocking cores and layers MCP commands onto the existing previs server. Do not restore the retired spatial-reference runtime or its old DOM symbols.
 
@@ -50,10 +49,6 @@ An external model should return observations, not rendered geometry.
       "source": "external-analysis"
     }
   ],
-  "overlay": {
-    "fit": "contain",
-    "opacity": 0.45
-  }
 }
 ```
 
@@ -149,45 +144,9 @@ Safety rules:
 
 Exact screen reframing intentionally remains separate from `apply_reference_space_plan`. The atomic plan owns camera calibration + mass application; screen orientation follows the explicit solve → inspect → apply workflow.
 
-## Reference Overlay / Ghost View
-
-The camera-preview UI includes a non-destructive Reference Ghost view.
-
-It supports:
-
-- local PNG/JPEG/WEBP image selection;
-- `contain` / `cover` fitting using the shared overlay math;
-- opacity control;
-- show/hide and clear controls;
-- automatic camera-preview resize following;
-- persisted Scale Anchor and Horizon observations drawn in the same normalized image coordinate system;
-- current FrisFrame camera predictions drawn beside the stored reference observations.
-
-Visual convention:
-
-- **solid cyan** = stored reference observation from the external analysis;
-- **dashed orange** = current FrisFrame camera prediction.
-
-For a Scale Anchor the Ghost compares both:
-
-- measured frame width/height versus the current projected scale;
-- stored `imageX/imageY` center versus the current 3D target center projected through `projectWorldPointToFrame`.
-
-When the centers differ, the Ghost draws both center markers and a connector so pan/tilt/framing drift is visible immediately. Horizon uses the same solid/dashed convention for stored versus current Y.
-
-### Screen-position policy
-
-Scale Anchor screen-center X/Y residuals are **diagnostic only** (`screenPositionPolicy: diagnostic-only-no-readiness-impact` in validation; visual-only in Ghost). They do not change Reference Space `READY` / `REVIEW` status.
-
-This is intentional. Existing authored camera direction is preserved unless the caller explicitly uses the screen-orientation solve/apply tools. X/Y itself is not a blocking validation rule.
-
-Scale fraction, physical dimensions, world X/Z and Horizon continue to use the existing validation rules.
-
-The Ghost image and all observation guides are DOM inspection layers above the camera preview. They are not drawn into the preview render canvas and are not included in MP4 export. The guide model also refreshes periodically while enabled so external MCP edits can be compared without creating a second spatial runtime.
-
 ## Reference Space validation UI
 
-The shipped `reference-workflow-core.js` also installs a local Reference Space validation panel. No second spatial runtime or extra static loader is used.
+Reference Space validation remains available to explicit MCP/headless callers and is not installed as a default user-facing panel. No second spatial runtime or extra static loader is used.
 
 The panel re-checks the current cut against persisted `spatialGuide` data:
 

@@ -346,6 +346,10 @@ ipcMain.handle("phone-remote:status", async (event) => {
   if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 요청 출처가 올바르지 않습니다.");
   return combinedPhoneRemoteConfig();
 });
+ipcMain.handle("phone-remote:preview", async (event, dataUrl) => {
+  if (!rendererEventAllowed(event)) throw new Error("Phone Camera Remote 프리뷰 요청 출처가 올바르지 않습니다.");
+  return phoneRemoteBridge?.setPreviewFrame?.(dataUrl) === true;
+});
 
 function createMainWindow(origin) {
   const window = new BrowserWindow({
@@ -378,12 +382,17 @@ function createMainWindow(origin) {
   window.webContents.on("will-redirect", preventExternalNavigation);
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
-  window.webContents.on("did-finish-load", () => {
+  window.webContents.on("did-finish-load", async () => {
     for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "phone-motion-core.js", "phone-motion-camera-ux.js", "camera-take-browser-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
       const uxPath = path.join(__dirname, filename);
       try {
         const source = fs.readFileSync(uxPath, "utf8");
-        window.webContents.executeJavaScript(source, true).catch((error) => writeLog(`${filename} injection failed: ${error.stack || error}`));
+        // These extensions have an intentional dependency order: interaction-ux
+        // creates the Camera Operator shell, live-ux binds its runtime to that
+        // shell, and inputs-ux adds the phone/gamepad controls. Starting all
+        // executeJavaScript calls at once made the later scripts race the shell
+        // creation, leaving an apparently healthy app with no preview controls.
+        await window.webContents.executeJavaScript(source, true);
       } catch (error) {
         writeLog(`${filename} file failed: ${error.stack || error}`);
       }

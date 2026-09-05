@@ -156,7 +156,6 @@ Windows 예시:
 
 - `camera_orbit` — 지정 인물을 중심으로 일정 각도만큼 카메라 회전 이동
 - `camera_dolly_and_zoom` — 피사체 쪽으로 돌리 이동하면서 렌즈를 동시에 변경
-- `camera_jib` — 카메라 높이와 위치를 함께 바꾸는 지브 업/다운
 - `camera_follow_actor` — 배우 키 타이밍을 따라 카메라 오프셋을 유지하며 추적
 - `pair_approach` — 두 배우가 서로를 향해 접근
 - `move_subject` — 배우/소품을 지정 위치까지 이동

@@ -491,7 +491,7 @@
 
     const advanced = document.createElement("details");
     advanced.className = "frisframe-secondary-disclosure frisframe-property-advanced";
-    advanced.innerHTML = '<summary>세부 속성 <span>형태 · 탑승 · 묶음 · 정밀 이동</span></summary><div class="frisframe-secondary-body"></div>';
+    advanced.innerHTML = '<summary>세부 속성 <span>형태 · 행동 연결 · 묶음 · 정밀 이동</span></summary><div class="frisframe-secondary-body"></div>';
     const advancedBody = advanced.querySelector(".frisframe-secondary-body");
     miniDetails.forEach((node) => advancedBody?.append(node));
     [actorDummyField, propSpecificFields, actorPlacementFields, manualGroupFields, actorPitchField].forEach((node) => {

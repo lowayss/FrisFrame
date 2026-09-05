@@ -86,45 +86,11 @@ assert.ok(Math.abs(readyScreen.predictedY - 0.5) < 1e-8);
 assert.ok(Math.abs(readyScreen.residualX) < 1e-8);
 assert.ok(Math.abs(readyScreen.residualY) < 1e-8);
 
-const overlayRect = { x: 100, y: 50, width: 960, height: 540 };
-let ghostProjectionCalls = 0;
-const countedSpatial = {
-  ...spatial,
-  projectWorldPointToFrame(options) {
-    ghostProjectionCalls += 1;
-    return spatial.projectWorldPointToFrame(options);
-  },
-};
-const ghostReady = workflow.buildReferenceGhostObservationModel(blocking, { spatialCore: countedSpatial, overlayRect });
-assert.equal(ghostProjectionCalls, 1, "Ghost must reuse the screen projection calculated by local validation instead of projecting the same anchor twice");
-assert.equal(ghostReady.status, "ready");
-assert.equal(ghostReady.scales.length, 1);
-assert.equal(ghostReady.horizons.length, 1);
-assert.equal(ghostReady.legend.observed, "reference");
-assert.equal(ghostReady.legend.predicted, "current-camera");
-assert.equal(ghostReady.screenPositionPolicy, "visual-diagnostic-only");
-assert.ok(Math.abs(ghostReady.scales[0].center.x - 580) < 1e-9);
-assert.ok(Math.abs(ghostReady.scales[0].center.y - 320) < 1e-9);
-assert.ok(ghostReady.scales[0].predictedCenter, "centered current camera must provide a predicted screen point");
-assert.ok(Math.abs(ghostReady.scales[0].predictedCenter.x - ghostReady.scales[0].center.x) < 1e-8);
-assert.ok(Math.abs(ghostReady.scales[0].predictedCenter.y - ghostReady.scales[0].center.y) < 1e-8);
-assert.ok(Math.abs(ghostReady.scales[0].predictedNormalized.x - 0.5) < 1e-8);
-assert.ok(Math.abs(ghostReady.scales[0].predictedNormalized.y - 0.5) < 1e-8);
-assert.ok(Math.abs(ghostReady.scales[0].observedLengthPx - observedHeight * overlayRect.height) < 1e-9);
-assert.ok(Math.abs(ghostReady.scales[0].predictedLengthPx - ghostReady.scales[0].observedLengthPx) < 1e-9);
-assert.ok(Math.abs(ghostReady.horizons[0].observedYPx - (overlayRect.y + horizonY * overlayRect.height)) < 1e-9);
-assert.ok(Math.abs(ghostReady.horizons[0].predictedYPx - ghostReady.horizons[0].observedYPx) < 1e-9);
-
 const badProjection = structuredClone(blocking);
 badProjection.spatialGuide.anchors[0].imageHeight += 0.1;
 const reviewProjection = workflow.validateReferenceSpaceBlocking(badProjection, { spatialCore: spatial });
 assert.equal(reviewProjection.status, "review");
 assert.ok(reviewProjection.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
-const ghostReview = workflow.buildReferenceGhostObservationModel(badProjection, { spatialCore: spatial, overlayRect });
-assert.equal(ghostReview.status, "review");
-assert.ok(Math.abs(ghostReview.scales[0].observedLengthPx - ghostReview.scales[0].predictedLengthPx) > 1);
-assert.ok(ghostReview.issues.some((issue) => issue.code === "scale-anchor-frame-mismatch"));
-
 const shiftedImageObservation = structuredClone(blocking);
 shiftedImageObservation.spatialGuide.anchors[0].imageX = 0.62;
 shiftedImageObservation.spatialGuide.anchors[0].imageY = 0.42;
@@ -135,15 +101,6 @@ assert.equal(unchangedValidation.screenPositionChecks.length, 1);
 const shiftedCheck = unchangedValidation.screenPositionChecks[0];
 assert.ok(Math.abs(shiftedCheck.residualX - 0.12) < 1e-8);
 assert.ok(Math.abs(shiftedCheck.residualY + 0.08) < 1e-8);
-const shiftedGhost = workflow.buildReferenceGhostObservationModel(shiftedImageObservation, { spatialCore: spatial, overlayRect });
-assert.equal(shiftedGhost.status, "ready");
-assert.ok(Math.abs(shiftedGhost.scales[0].center.x - shiftedGhost.scales[0].predictedCenter.x) > 100,
-  "Ghost must visibly separate a shifted observed X from the current camera projection");
-assert.ok(Math.abs(shiftedGhost.scales[0].center.y - shiftedGhost.scales[0].predictedCenter.y) > 40,
-  "Ghost must visibly separate a shifted observed Y from the current camera projection");
-assert.ok(Math.abs(shiftedGhost.scales[0].screenResidual.x - 0.12) < 1e-8);
-assert.ok(Math.abs(shiftedGhost.scales[0].screenResidual.y + 0.08) < 1e-8);
-
 const badPosition = structuredClone(blocking);
 badPosition.items[0].x += 0.05;
 const reviewPosition = workflow.validateReferenceSpaceBlocking(badPosition, { spatialCore: spatial });
@@ -161,11 +118,6 @@ assert.equal(nullValidation.projectionChecks.length, 1, "valid Scale fraction mu
 assert.equal(nullValidation.screenPositionChecks.length, 0, "null image X/Y must not be converted to a synthetic screen observation");
 assert.equal(nullValidation.horizonCheck, null, "null Horizon Y must remain absent");
 assert.ok(!nullValidation.issues.some((issue) => ["anchor-x-mismatch", "anchor-z-mismatch", "horizon-mismatch"].includes(issue.code)));
-const nullGhost = workflow.buildReferenceGhostObservationModel(nullObservations, { spatialCore: spatial, overlayRect });
-assert.equal(nullGhost.status, "ready");
-assert.equal(nullGhost.scales.length, 0, "Ghost must not invent a screen center for a Scale observation with missing X/Y");
-assert.equal(nullGhost.horizons.length, 0, "Ghost must not draw a null Horizon as frame edge zero");
-
 const emptyObservations = structuredClone(nullObservations);
 emptyObservations.spatialGuide.anchors[0].imageX = "";
 emptyObservations.spatialGuide.anchors[0].imageY = "";
@@ -176,10 +128,6 @@ const emptyValidation = workflow.validateReferenceSpaceBlocking(emptyObservation
 assert.equal(emptyValidation.status, "ready");
 assert.equal(emptyValidation.screenPositionChecks.length, 0);
 assert.equal(emptyValidation.horizonCheck, null);
-const emptyGhost = workflow.buildReferenceGhostObservationModel(emptyObservations, { spatialCore: spatial, overlayRect });
-assert.equal(emptyGhost.scales.length, 0);
-assert.equal(emptyGhost.horizons.length, 0);
-
 const explicitZeroObservation = structuredClone(blocking);
 explicitZeroObservation.spatialGuide.anchors[0].imageX = 0;
 explicitZeroObservation.spatialGuide.anchors[0].imageY = 0;
@@ -188,11 +136,5 @@ assert.equal(zeroValidation.status, "ready", "screen residual remains diagnostic
 assert.equal(zeroValidation.screenPositionChecks.length, 1);
 assert.equal(zeroValidation.screenPositionChecks[0].observedX, 0);
 assert.equal(zeroValidation.screenPositionChecks[0].observedY, 0);
-const zeroGhost = workflow.buildReferenceGhostObservationModel(explicitZeroObservation, { spatialCore: spatial, overlayRect });
-assert.equal(zeroGhost.scales.length, 1);
-assert.equal(zeroGhost.scales[0].observedNormalized.x, 0);
-assert.equal(zeroGhost.scales[0].observedNormalized.y, 0);
-assert.ok(Math.abs(zeroGhost.scales[0].center.x - overlayRect.x) < 1e-9);
-assert.ok(Math.abs(zeroGhost.scales[0].center.y - overlayRect.y) < 1e-9);
 
 console.log("reference-validation-ui: local screen diagnostics ignore missing/null observations, preserve explicit zero, and remain readiness-neutral");

@@ -5,7 +5,10 @@
   document.documentElement.dataset.frisframeCameraOperatorInputsUx = "1";
 
   const STORAGE_KEY = "frisframe.cameraOperator.inputMode";
-  const MODES = ["keyboard", "gamepad", "phone"];
+  const MODES = ["mouse", "gamepad", "phone"];
+  const PHONE_PREVIEW_INTERVAL_MS = 50;
+  const PHONE_PREVIEW_MAX_WIDTH = 640;
+  const PHONE_PREVIEW_JPEG_QUALITY = 0.62;
   const keyState = new Set();
   const phoneState = {
     moveX: 0,
@@ -14,23 +17,40 @@
     lookY: 0,
     height: 0,
     focal: 0,
+    motionActive: false,
+    sensorYaw: 0,
+    sensorPitch: 0,
+    sensorRoll: 0,
     receivedAt: 0,
     seq: 0,
   };
-  let selectedMode = MODES.includes(localStorage.getItem(STORAGE_KEY))
-    ? localStorage.getItem(STORAGE_KEY)
-    : "keyboard";
+  const storedMode = localStorage.getItem(STORAGE_KEY);
+  let selectedMode = storedMode === "keyboard"
+    ? "mouse"
+    : (MODES.includes(storedMode) ? storedMode : "mouse");
   let frame = 0;
   let lastFrameAt = performance.now();
   let lastGamepadButtons = [];
   let installed = false;
   let phoneConfig = null;
   let phoneStartPromise = null;
+  let phoneSensorAnchor = null;
+  let phoneMotionTrim = { panDeg: 0, tiltDeg: 0 };
+  let operatorAimTrim = { panDeg: 0, tiltDeg: 0 };
+  let phonePreviewTimer = 0;
+  let phonePreviewBusy = false;
+  let phonePreviewCanvas = null;
 
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, Number(value) || 0));
   const normalizeAngle = (value) => {
     const normalized = Number(value) % 360;
     return normalized < 0 ? normalized + 360 : normalized;
+  };
+  const shortestAngleDelta = (from, to) => {
+    let delta = normalizeAngle(to) - normalizeAngle(from);
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
   };
   const deadzone = (value, amount = 0.13) => {
     const numeric = clamp(value, -1, 1);
@@ -76,7 +96,7 @@
     };
   }
 
-  function applyPose(pose, targetState = state) {
+  function applyPose(pose, targetState = state, { maintainTarget = true } = {}) {
     const focal = focalRange();
     targetState.camera.x = Number(pose.x);
     targetState.camera.y = Number(pose.y);
@@ -84,7 +104,7 @@
     targetState.camera.panDeg = normalizeAngle(pose.panDeg);
     targetState.camera.tiltDeg = clamp(pose.tiltDeg, -89, 89);
     targetState.camera.focal = clamp(pose.focal, focal.minimum, focal.maximum);
-    maintainTracking(targetState, targetState?.motion?.playhead);
+    if (maintainTarget) maintainTracking(targetState, targetState?.motion?.playhead);
   }
 
   function renderExternalFrame() {
@@ -95,15 +115,66 @@
     }
     if (renderState !== state) {
       renderState.camera = { ...renderState.camera };
-      applyPose(live, renderState);
+      // The live state already contains the phone's tracking offset. Re-running
+      // tracking on the copied preview frame would erase that offset immediately.
+      applyPose(live, renderState, { maintainTarget: false });
+      renderState.camera.__preserveLiveCameraOrientation = true;
     }
     evaluatedViewState = renderState;
     if (typeof draw === "function") draw(renderState);
   }
 
+  function resetOperatorAimTrim() {
+    operatorAimTrim = { panDeg: 0, tiltDeg: 0 };
+  }
+
+  function capturePhonePreviewFrame() {
+    const source = document.getElementById("cameraFrameCanvas");
+    if (!(source instanceof HTMLCanvasElement) || !source.width || !source.height) return "";
+    const maximumWidth = PHONE_PREVIEW_MAX_WIDTH;
+    const scale = Math.min(1, maximumWidth / source.width);
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    if (!phonePreviewCanvas) phonePreviewCanvas = document.createElement("canvas");
+    if (phonePreviewCanvas.width !== width || phonePreviewCanvas.height !== height) {
+      phonePreviewCanvas.width = width;
+      phonePreviewCanvas.height = height;
+    }
+    const context = phonePreviewCanvas.getContext("2d");
+    if (!context) return "";
+    context.fillStyle = "#101820";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(source, 0, 0, width, height);
+    try { return phonePreviewCanvas.toDataURL("image/jpeg", PHONE_PREVIEW_JPEG_QUALITY); } catch { return ""; }
+  }
+
+  function sendPhonePreviewFrame() {
+    if (!phoneConfig || phonePreviewBusy || !window.frisframePhoneRemote?.setPreview) return;
+    const dataUrl = capturePhonePreviewFrame();
+    if (!dataUrl) return;
+    phonePreviewBusy = true;
+    Promise.resolve(window.frisframePhoneRemote.setPreview(dataUrl))
+      .catch(() => {})
+      .finally(() => { phonePreviewBusy = false; });
+  }
+
+  function startPhonePreviewStream() {
+    if (phonePreviewTimer) clearInterval(phonePreviewTimer);
+    phonePreviewTimer = 0;
+    sendPhonePreviewFrame();
+    phonePreviewTimer = window.setInterval(sendPhonePreviewFrame, PHONE_PREVIEW_INTERVAL_MS);
+  }
+
+  function stopPhonePreviewStream() {
+    if (phonePreviewTimer) clearInterval(phonePreviewTimer);
+    phonePreviewTimer = 0;
+  }
+
   function moveCamera(axes, dt) {
     const op = operator();
-    if (!op || op.mode !== "recording") return;
+    // Remote controls are live camera controls in idle/STBY as well. The
+    // Camera Operator runtime samples them into keys only while recording.
+    if (!op || !["idle", "armed", "recording"].includes(op.mode)) return;
     const trackingActive = Boolean(state.camera.trackingTargetId);
     const axisMagnitude = Math.max(
       Math.abs(Number(axes.moveX || 0)),
@@ -146,6 +217,8 @@
     );
 
     if (trackingActive) {
+      operatorAimTrim.panDeg += clamp(axes.lookX, -1, 1) * lookSpeed * dt;
+      operatorAimTrim.tiltDeg += clamp(axes.lookY, -1, 1) * lookSpeed * dt;
       maintainTracking(state, state.motion?.playhead);
     } else {
       state.camera.panDeg = normalizeAngle(Number(state.camera.panDeg || 0) + clamp(axes.lookX, -1, 1) * lookSpeed * dt);
@@ -153,18 +226,6 @@
     }
     if (!trackingActive && typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
     renderExternalFrame();
-  }
-
-  function keyboardAxes() {
-    const has = (...codes) => codes.some((code) => keyState.has(code));
-    return {
-      moveX: (has("KeyD") ? 1 : 0) - (has("KeyA") ? 1 : 0),
-      moveY: (has("KeyW") ? 1 : 0) - (has("KeyS") ? 1 : 0),
-      lookX: (has("ArrowRight") ? 1 : 0) - (has("ArrowLeft") ? 1 : 0),
-      lookY: (has("ArrowUp") ? 1 : 0) - (has("ArrowDown") ? 1 : 0),
-      height: (has("KeyE") ? 1 : 0) - (has("KeyQ") ? 1 : 0),
-      focal: (has("KeyX") ? 1 : 0) - (has("KeyZ") ? 1 : 0),
-    };
   }
 
   function firstGamepad() {
@@ -244,14 +305,70 @@
     };
   }
 
+  function phoneMotionPose() {
+    if (!phoneState.motionActive || Date.now() - phoneState.receivedAt > 900) return null;
+    if (!phoneSensorAnchor) {
+      const current = cameraPose();
+      phoneSensorAnchor = {
+        sensorYaw: Number(phoneState.sensorYaw || 0),
+        sensorPitch: Number(phoneState.sensorPitch || 0),
+        panDeg: current.panDeg,
+        tiltDeg: current.tiltDeg,
+      };
+      phoneMotionTrim = { panDeg: 0, tiltDeg: 0 };
+    }
+    const yawDelta = shortestAngleDelta(phoneSensorAnchor.sensorYaw, phoneState.sensorYaw);
+    const pitchDelta = Number(phoneState.sensorPitch || 0) - phoneSensorAnchor.sensorPitch;
+    return {
+      panDeg: normalizeAngle(phoneSensorAnchor.panDeg + yawDelta + phoneMotionTrim.panDeg),
+      tiltDeg: clamp(phoneSensorAnchor.tiltDeg - pitchDelta + phoneMotionTrim.tiltDeg, -89, 89),
+    };
+  }
+
+  function phoneAimOffset() {
+    if (!phoneState.motionActive || Date.now() - phoneState.receivedAt > 900 || !phoneSensorAnchor) return null;
+    return {
+      panDeg: shortestAngleDelta(phoneSensorAnchor.sensorYaw, phoneState.sensorYaw) + phoneMotionTrim.panDeg,
+      tiltDeg: -(Number(phoneState.sensorPitch || 0) - phoneSensorAnchor.sensorPitch) + phoneMotionTrim.tiltDeg,
+    };
+  }
+
+  function applyPhoneMotion(axes, dt) {
+    const op = operator();
+    // Phone orientation is a live camera control even before STBY. The Camera
+    // Operator session still owns movement sampling, so only REC commits keys.
+    if (!op || !["idle", "armed", "recording"].includes(op.mode)) return;
+    const pose = phoneMotionPose();
+    if (!pose) return;
+    // Tracking remains authoritative for the base aim. The live controller
+    // applies phoneAimOffset() after tracking so the phone can pan/tilt around
+    // a moving actor without releasing the tracking target.
+    if (state.camera.trackingTargetId) {
+      maintainTracking(state, state.motion?.playhead);
+      renderExternalFrame();
+      return;
+    }
+    const precision = keyState.has("ControlLeft") || keyState.has("ControlRight") || keyState.has("MetaLeft") || keyState.has("MetaRight") ? 0.35 : 1;
+    phoneMotionTrim.panDeg += clamp(axes.lookX, -1, 1) * 68 * precision * dt;
+    phoneMotionTrim.tiltDeg += clamp(axes.lookY, -1, 1) * 68 * precision * dt;
+    const adjustedPose = phoneMotionPose();
+    state.camera.panDeg = adjustedPose.panDeg;
+    state.camera.tiltDeg = adjustedPose.tiltDeg;
+    if (typeof syncCameraDerivedAim === "function") syncCameraDerivedAim(state.camera, state);
+    renderExternalFrame();
+  }
+
   function tick(now) {
     const dt = clamp((now - lastFrameAt) / 1000, 0, 0.05);
     lastFrameAt = now;
     const pad = firstGamepad();
     updateGamepadButtons(pad);
-    if (selectedMode === "keyboard") moveCamera(keyboardAxes(), dt);
-    else if (selectedMode === "gamepad") moveCamera(gamepadAxes(pad), dt);
-    else moveCamera(phoneAxes(), dt);
+    if (selectedMode === "gamepad") moveCamera(gamepadAxes(pad), dt);
+    else if (selectedMode === "phone") {
+      const axes = phoneAxes();
+      moveCamera(axes, dt);
+      applyPhoneMotion(axes, dt);
+    }
     updateStatus(pad);
     frame = requestAnimationFrame(tick);
   }
@@ -295,7 +412,7 @@
     if (urlElement) urlElement.textContent = firstUrl;
     const controlNote = document.createElement("div");
     controlNote.className = "frisframe-phone-control-note";
-    controlNote.textContent = "왼쪽 조이스틱: 거리 · 오른쪽 조이스틱: Pan·Tilt · L1/R1: 높이";
+    controlNote.textContent = "왼쪽 조이스틱: 좌우·전후 이동 · 오른쪽 조이스틱: 팬·틸트 · 높이: L1/R1 · 스마트폰 실물 움직임: Physical Camera 연결";
     phonePanel.querySelector(".frisframe-phone-pairing-copy")?.append(controlNote);
     phonePanel.querySelector("[data-copy-phone-url]")?.addEventListener("click", async () => {
       try {
@@ -320,10 +437,12 @@
       .then((config) => {
         phoneConfig = config || null;
         renderPhonePanel();
+        startPhonePreviewStream();
         return phoneConfig;
       })
       .catch((error) => {
         phoneConfig = null;
+        stopPhonePreviewStream();
         renderPhonePanel(`Phone Camera Remote를 열지 못했습니다: ${String(error?.message || error)}`);
         return null;
       })
@@ -332,6 +451,7 @@
   }
 
   async function stopPhoneBridge() {
+    stopPhonePreviewStream();
     phoneConfig = null;
     phoneStartPromise = null;
     if (window.frisframePhoneRemote?.stop) {
@@ -348,18 +468,19 @@
     modeButtons.forEach((button) => button.classList.toggle("is-active", button.dataset.mode === selectedMode));
     if (phonePanel) phonePanel.hidden = selectedMode !== "phone";
     const cameraFrame = document.getElementById("cameraFrame");
-    cameraFrame?.classList.toggle("frisframe-camera-operator-nonmouse", selectedMode !== "keyboard");
+    cameraFrame?.classList.toggle("frisframe-camera-operator-nonmouse", selectedMode !== "mouse");
     if (selectedMode === "phone") startPhoneBridge();
     else if (previousMode === "phone" || phoneConfig || phoneStartPromise) stopPhoneBridge();
+    if (selectedMode !== "phone") phoneSensorAnchor = null;
     updateStatus(firstGamepad());
   }
 
   function updateStatus(pad = firstGamepad()) {
     if (!statusLine) return;
-    if (selectedMode === "keyboard") {
+    if (selectedMode === "mouse") {
       statusLine.textContent = state.camera.trackingTargetId
-        ? "WASD 이동 · 방향키 무시(트래킹 방향 유지) · Q/E 높이 · Z/X 렌즈 · 마우스 드래그 이동/거리"
-        : "WASD 이동 · 방향키 Pan/Tilt · Q/E 높이 · Z/X 렌즈 · 기존 마우스 드래그/휠 사용";
+        ? "마우스 드래그 이동/거리 · 트래킹 방향 유지 · 휠 렌즈"
+        : "마우스 드래그 Pan/Tilt·이동/거리 · 휠 렌즈 · 직접 촬영";
       return;
     }
     if (selectedMode === "gamepad") {
@@ -373,8 +494,8 @@
     const connected = Date.now() - phoneState.receivedAt < 900;
     statusLine.textContent = connected
       ? (state.camera.trackingTargetId
-        ? "폰 연결됨 · 왼쪽 조이스틱 거리 · 트래킹 방향 유지 · L1/R1 높이 · 렌즈"
-        : "폰 연결됨 · 왼쪽 조이스틱 거리 · 오른쪽 조이스틱 Pan/Tilt · L1/R1 높이")
+        ? "폰 연결됨 · 조이스틱 무빙 · 모션 앵글 · 트래킹 방향 유지 · 높이/렌즈"
+        : "폰 연결됨 · 조이스틱 무빙 · 모션 앵글 또는 오른쪽 조이스틱 · 높이/렌즈")
       : (state.camera.trackingTargetId
         ? "트래킹 방향 유지 · 폰에서 아래 주소를 열어 연결하세요."
         : "폰에서 아래 주소를 열어 연결하세요. 같은 Wi‑Fi가 필요합니다.");
@@ -403,13 +524,14 @@
       .frisframe-phone-control-note { color:#ffca88; font-size:8px; line-height:1.35; }
       .frisframe-phone-code { color:#ffbe76; font-weight:900; letter-spacing:.08em; }
       #cameraFrame.frisframe-camera-operator-nonmouse { pointer-events:none !important; }
+      #cameraFrame.frisframe-camera-operator-nonmouse :is(#cameraFrameMoveHandle,#cameraFrameResizeHandle,#cameraFrameModeBtn) { pointer-events:auto !important; }
     `;
     document.head.append(style);
 
     const selector = document.createElement("div");
     selector.className = "frisframe-camera-input-mode";
     selector.innerHTML = `
-      <button type="button" data-mode="keyboard">⌨ 키보드</button>
+      <button type="button" data-mode="mouse">🖱 마우스</button>
       <button type="button" data-mode="gamepad">🎮 패드</button>
       <button type="button" data-mode="phone">📱 폰</button>
     `;
@@ -431,9 +553,6 @@
   document.addEventListener("keydown", (event) => {
     if (editableTarget(event.target)) return;
     keyState.add(event.code);
-    if (selectedMode === "keyboard" && ["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "KeyZ", "KeyX", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code) && operator()?.mode === "recording") {
-      event.preventDefault();
-    }
   }, true);
   document.addEventListener("keyup", (event) => keyState.delete(event.code), true);
   window.addEventListener("blur", () => keyState.clear());
@@ -446,15 +565,30 @@
       moveX: clamp(detail.moveX, -1, 1), moveY: clamp(detail.moveY, -1, 1),
       lookX: clamp(detail.lookX, -1, 1), lookY: clamp(detail.lookY, -1, 1),
       height: clamp(detail.height, -1, 1), focal: clamp(detail.focal, -1, 1),
+      motionActive: detail.motionActive === true,
+      sensorYaw: clamp(detail.sensorYaw, -180, 180),
+      sensorPitch: clamp(detail.sensorPitch, -180, 180),
+      sensorRoll: clamp(detail.sensorRoll, -180, 180),
       receivedAt: Number(detail.receivedAt || Date.now()), seq: Number(detail.seq || 0),
     });
+    if (!phoneState.motionActive || detail.command === "motion-zero") {
+      phoneSensorAnchor = null;
+      phoneMotionTrim = { panDeg: 0, tiltDeg: 0 };
+    }
+    if (phoneState.motionActive && !phoneSensorAnchor) phoneMotionPose();
     if (selectedMode !== "phone") return;
     if (detail.command === "toggle-record") toggleRecording();
     else if (detail.command === "stop" && operator()?.mode === "recording") operator().finish();
     else if (detail.command === "cancel" && operator()?.mode !== "idle") operator().cancel();
+    else if (detail.command === "motion-zero") {
+      phoneSensorAnchor = null;
+      phoneMotionTrim = { panDeg: 0, tiltDeg: 0 };
+      resetOperatorAimTrim();
+    }
     updateStatus(firstGamepad());
   });
   window.addEventListener("beforeunload", () => {
+    stopPhonePreviewStream();
     if (selectedMode === "phone" || phoneConfig) window.frisframePhoneRemote?.stop?.();
   });
 
@@ -468,6 +602,11 @@
         startRecording: syntheticStart,
         get gamepadConnected() { return Boolean(firstGamepad()); },
         get phoneConnected() { return Date.now() - phoneState.receivedAt < 900; },
+      get phoneMotionActive() { return phoneState.motionActive && Date.now() - phoneState.receivedAt < 900; },
+        get phoneMotionCalibrated() { return Boolean(phoneSensorAnchor); },
+        get phoneAimOffset() { return phoneAimOffset(); },
+        get operatorAimOffset() { return { ...operatorAimTrim }; },
+        resetAimOffset: resetOperatorAimTrim,
         get phoneRemoteOpen() { return Boolean(phoneConfig); },
         multiInput: true,
       };

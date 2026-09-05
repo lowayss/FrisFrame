@@ -743,6 +743,9 @@ input[type="range"] {
   border-radius: 2px;
   background: #050708;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+  /* The preview floats above the editor, but must not steal stage picks.
+     Camera rigs can sit underneath it after a reset or orbit change. */
+  pointer-events: none;
 }
 
 /* The live camera preview is shared by the 2D and 3D workspaces. */
@@ -767,6 +770,7 @@ input[type="range"] {
   cursor: move;
   opacity: 0.76;
   touch-action: none;
+  pointer-events: auto;
 }
 
 .camera-frame-move-handle:hover,
@@ -789,8 +793,8 @@ input[type="range"] {
   left: 5px;
   bottom: 5px;
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   padding: 0;
   border: 1px solid rgba(225, 245, 255, 0.44);
@@ -800,6 +804,7 @@ input[type="range"] {
   cursor: nesw-resize;
   opacity: 0.76;
   touch-action: none;
+  pointer-events: auto;
 }
 
 .camera-frame-resize-handle:hover,
@@ -812,8 +817,12 @@ input[type="range"] {
 }
 
 .camera-frame-resize-handle svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
+}
+
+.camera-frame-mode-btn {
+  pointer-events: auto;
 }
 
 .camera-frame-mode-btn {
@@ -962,6 +971,33 @@ input[type="range"] {
   margin-top: 8px;
 }
 
+.mount-status {
+  display: block;
+  color: #9bc7ff;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.mount-status[data-mounted="true"] {
+  color: #7ed9cf;
+}
+
+#actorMountHint {
+  color: #78858d;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.mount-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 2px;
+}
+
+.mount-actions .text-btn {
+  color: #ffca77;
+}
+
 .manual-group-summary {
   display: flex;
   align-items: center;
@@ -1006,6 +1042,7 @@ input[type="range"] {
   cursor: default;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
 #cameraFrameCanvas[data-multi-camera="true"] {
@@ -1153,25 +1190,25 @@ input[type="range"] {
 }
 
 .timeline-marker.is-active {
-  background: var(--accent);
-  border-color: #fff2ed;
-  box-shadow: 0 0 0 3px rgba(255, 107, 85, 0.2);
+  background: var(--marker-color, var(--accent-2));
+  border-color: #f2f7f5;
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.2);
 }
 
 .timeline-marker.is-camera {
-  background: #38bdf8 !important; /* Sky Blue */
+  background: var(--marker-color, #38bdf8) !important;
   color: #0b1320 !important;
 }
 
 .timeline-marker.is-camera.is-active {
-  background: #0ea5e9 !important; /* Rich Sky Blue */
-  border-color: #e0f2fe;
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.28);
+  background: var(--marker-color, #38bdf8) !important;
+  border-color: #f2f7f5;
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.22);
 }
 
 .timeline-marker.is-camera.is-selected:not(.is-active) {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.24);
+  border-color: #f2f7f5;
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.18);
 }
 
 .timeline-marker.is-cut-marker {
@@ -1179,7 +1216,7 @@ input[type="range"] {
   height: 14px;
   border-radius: 3px;
   border-color: #ffd7d7;
-  background: var(--danger);
+  background: var(--marker-color, var(--danger));
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
@@ -1194,13 +1231,13 @@ input[type="range"] {
 
 .timeline-marker.is-cut-marker.is-active {
   border-color: #fff;
-  box-shadow: 0 0 0 3px rgba(255, 98, 98, 0.24);
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.22);
 }
 
 .timeline-marker.is-dragging {
   z-index: 8;
   cursor: ew-resize;
-  box-shadow: 0 0 0 3px rgba(255, 107, 85, 0.3);
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.24);
 }
 
 .timeline-marker.is-dragging::after {
@@ -2149,7 +2186,7 @@ select {
 }
 
 .timeline-marker.is-active {
-  box-shadow: 0 0 0 2px rgba(255, 107, 85, 0.24);
+  box-shadow: 0 0 0 2px rgba(242, 247, 245, 0.22);
 }
 
 .timeline-hint,
@@ -6053,7 +6090,7 @@ input[type="checkbox"] {
 
 .timeline-marker.is-active {
   border-color: #f2f7f5;
-  box-shadow: 0 0 0 3px rgba(85, 200, 187, 0.22);
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.22);
 }
 
 .timeline-hint,
@@ -6172,13 +6209,13 @@ input[type="checkbox"] {
 }
 
 .timeline-marker.is-selected:not(.is-active) {
-  border-color: #83ddd3;
-  box-shadow: 0 0 0 3px rgba(85, 200, 187, 0.18);
+  border-color: #f2f7f5;
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.18);
 }
 
 .timeline-marker.is-cut-marker.is-selected:not(.is-active) {
-  border-color: #83ddd3;
-  box-shadow: 0 0 0 3px rgba(85, 200, 187, 0.2);
+  border-color: #f2f7f5;
+  box-shadow: 0 0 0 3px rgba(242, 247, 245, 0.2);
 }
 
 .source-lane-track {
@@ -8507,7 +8544,7 @@ input[type="checkbox"] {
   }
 
   .camera-frame {
-    width: min(35%, 380px);
+    width: min(var(--camera-frame-width, 35%), 760px);
     min-width: 220px;
   }
 

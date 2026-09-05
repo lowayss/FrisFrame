@@ -200,6 +200,11 @@
     parts.base.position.set(camPos.x, 0.055, camPos.z);
     parts.label.position.set(camPos.x, camPos.y + 0.72, camPos.z);
     if (parts.selectionRing) parts.selectionRing.position.set(camPos.x, 0.07, camPos.z);
+    // The pick pass uses a lightweight screen-space anchor on the cached rig.
+    // Keep it in sync with the visible base when a reset, keyframe evaluation,
+    // or any other transform-only update reuses the rig. Otherwise the camera
+    // can look movable while its old anchor remains at the pre-reset position.
+    group.userData.cameraPickPosition = new THREE.Vector3(camPos.x, 0.08, camPos.z);
 
     const aimDirection = new THREE.Vector3(
       aimPos.x - camPos.x,

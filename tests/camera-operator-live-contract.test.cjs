@@ -16,9 +16,10 @@ assert.match(controller, /originalSurface\.cloneNode\(true\)/, "live controller 
 assert.match(controller, /state\.motion\.playhead = time;/, "REC must advance the authored timeline playhead in real time");
 assert.match(controller, /updatePlayheadDisplay\(time\)/, "REC must visibly move the timeline playhead every frame");
 assert.match(controller, /interpolateStateAtTime\(time\)/, "REC must evaluate actor and prop motion at the live timeline time");
-assert.match(controller, /applyCameraPose\(livePose, renderState\)/, "live operator camera must override only the evaluated camera pose");
-assert.match(controller, /surface\.hidden = false;/, "the preview surface must remain draggable before STBY");
-assert.match(controller, /if \(mode === "idle" && event\.button === 0\) \{[\s\S]*armOperator\(\);[\s\S]*beginRecording\(event\);/, "a direct left-drag on the camera preview must start a take without a separate STBY click");
+assert.match(controller, /applyCameraPose\(livePose, renderState(?:, \{ maintainTarget: false \})?\)/, "live operator camera must override only the evaluated camera pose");
+assert.match(controller, /surface\.hidden = mode === "idle";/, "the preview surface must stay hidden until direct shooting enters STBY");
+assert.match(controller, /const beginPointerControl = \(event\) => \{\n    if \(mode === "idle"\) return;/, "an idle preview drag must not silently make direct shooting the default");
+assert.match(controller, /button\.addEventListener\("click", \(\) => \{[\s\S]*if \(mode === "idle"\) armOperator\(\);[\s\S]*else if \(mode === "armed"\) cancelOperator\(\);/, "direct shooting must require an explicit button action before STBY");
 assert.match(controller, /const pointerToken = \(event\) => event\?\.pointerId == null \? "mouse" : event\.pointerId;/, "mouse input without an explicit pointer id must still be trackable");
 assert.match(controller, /const isActivePointer = \(event\) => \([\s\S]*pointerId === "mouse"/, "live drag must accept the active mouse pointer consistently");
 assert.match(controller, /if \(event && !isActivePointer\(event\)\) return;/, "runtime reset must release the pointer even when no event is supplied");
@@ -110,6 +111,10 @@ assert.deepEqual(stopped, { x: 0, y: 0 }, "an intentional operator hold must sti
 const injection = main.indexOf('"camera-operator-live-ux.js"');
 const interaction = main.indexOf('"interaction-ux.js"');
 assert.ok(interaction >= 0 && injection > interaction, "live Camera Operator controller must inject after interaction-ux.js");
+assert.match(main, /webContents\.on\("did-finish-load", async \(\) => \{/,
+  "desktop UX extensions must be injected sequentially so the Camera Operator shell exists before its runtime binds");
+assert.match(main, /await window\.webContents\.executeJavaScript\(source, true\)/,
+  "desktop UX extension injection must await each dependency before loading the next one");
 assert.ok(pkg.build.files.includes("electron/camera-operator-live-ux.js"), "desktop package must include the live Camera Operator controller");
 
 console.log("Camera Operator live timeline/vector spline contract passed");

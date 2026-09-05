@@ -116,8 +116,8 @@
     ]);
   }
 
-  function actorPoseTransformSignature(renderItem) {
-    return JSON.stringify(actorBodyPoseForRender(renderItem));
+  function actorPoseTransformSignature(renderItem, renderState = state) {
+    return JSON.stringify(actorBodyPoseForRender(renderItem, renderState));
   }
 
   function actorScaleSignature(dimensions) {
@@ -215,7 +215,7 @@
     const renderItem = resolvedItemPose(item, renderState);
     const dimensions = actorPhysicalDimensions(renderItem);
     const rigScale = dimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M;
-    const pose = actorBodyPoseForRender(renderItem);
+    const pose = actorBodyPoseForRender(renderItem, renderState);
     const poseSignature = JSON.stringify(pose);
     const scaleSignature = actorScaleSignature(dimensions);
     const runtime = actorRigRuntime.get(group) || {};

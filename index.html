@@ -444,7 +444,7 @@
             <canvas id="cameraFrameCanvas" aria-label="카메라 프레임 미리보기"></canvas>
             <div id="cameraFrameLabels" class="camera-frame-labels" aria-hidden="true"></div>
             <button id="cameraFrameMoveHandle" class="camera-frame-move-handle" type="button" aria-label="프리뷰 창 위치 이동" title="드래그하여 프리뷰 창 위치 이동"><i data-lucide="move" aria-hidden="true"></i></button>
-            <button id="cameraFrameResizeHandle" class="camera-frame-resize-handle" type="button" aria-label="프리뷰 창 크기 조절" title="드래그하여 프리뷰 창 크기 조절"><i data-lucide="maximize-2" aria-hidden="true"></i></button>
+            <button id="cameraFrameResizeHandle" class="camera-frame-resize-handle" type="button" aria-label="프리뷰 창 크기 조절" title="드래그하여 프리뷰 창 크기 조절 (왼쪽으로 드래그하면 확대)"><i data-lucide="maximize-2" aria-hidden="true"></i></button>
             <button id="cameraFrameModeBtn" type="button" class="camera-frame-mode-btn" title="멀티캠 보기 전환"><i data-lucide="layout-grid" aria-hidden="true"></i><span>멀티캠</span></button>
           </div>
           <canvas id="annotationOverlay" aria-label="화면 그리기용 오버레이"></canvas>
@@ -523,14 +523,9 @@
               <span>경로</span>
               <select id="keyPathSelect" title="새 키 또는 선택한 키로 들어오는 공간 경로">
                 <option value="straight">정확한 직선</option>
-                <option value="horizontal">수평 직선</option>
-                <option value="vertical">수직 직선</option>
                 <option value="arc-left">원호 왼쪽</option>
                 <option value="arc-right">원호 오른쪽</option>
                 <option value="free-curve">자유 곡선</option>
-                <option value="drone">드론 비행</option>
-                <option value="jib-up">지미집 상승</option>
-                <option value="jib-down">지미집 하강</option>
               </select>
             </label>
             <label class="compact-field instruction-field" style="display: none;">
@@ -656,22 +651,26 @@
             </div>
 
             <div id="actorPlacementFields" class="property-subgroup" hidden>
+              <div class="stack-field">
+                <span>행동 연결</span>
+                <strong id="actorMountStatus" class="mount-status" aria-live="polite">연결 안 함</strong>
+                <small id="actorMountHint">가까이 놓아도 자동으로 행동하지 않습니다. 대상·행동·위치를 직접 선택한 뒤 적용하세요.</small>
+              </div>
               <label class="stack-field">
-                <span>탑승 방식</span>
-                <select id="actorPlacementMode">
-                  <option value="manual">수동 탑승</option>
-                  <option value="auto">자동 탑승</option>
-                </select>
+                <span>행동 대상</span>
+                <select id="actorMountSelect"></select>
               </label>
-              <div id="autoMountFields" class="auto-mount-fields" hidden>
-                <label class="stack-field">
-                  <span>차량</span>
-                  <select id="actorMountSelect"></select>
-                </label>
-                <label id="actorSeatRow" class="stack-field" hidden>
-                  <span>좌석</span>
-                  <select id="actorSeatSelect"></select>
-                </label>
+              <label class="stack-field">
+                <span>행동</span>
+                <select id="actorInteractionSelect"></select>
+              </label>
+              <label class="stack-field">
+                <span>위치</span>
+                <select id="actorSeatSelect"></select>
+              </label>
+              <div class="mount-actions">
+                <button id="actorMountApplyBtn" type="button" class="primary-btn">행동 적용</button>
+                <button id="actorDetachMountBtn" type="button" class="text-btn" hidden>연결 해제</button>
               </div>
             </div>
 
@@ -829,7 +828,7 @@
             <button type="button" data-manual-nav="timeline"><i data-lucide="git-branch" aria-hidden="true"></i><span>키프레임</span></button>
             <button type="button" data-manual-nav="three"><i data-lucide="box" aria-hidden="true"></i><span>3D 프리비즈</span></button>
             <button type="button" data-manual-nav="export"><i data-lucide="file-output" aria-hidden="true"></i><span>내보내기</span></button>
-            <button type="button" data-manual-nav="mounting"><i data-lucide="car-front" aria-hidden="true"></i><span>탑승·묶음</span></button>
+            <button type="button" data-manual-nav="mounting"><i data-lucide="accessibility" aria-hidden="true"></i><span>행동 연결·묶음</span></button>
             <button type="button" data-manual-nav="shortcuts"><i data-lucide="keyboard" aria-hidden="true"></i><span>단축키·문제 해결</span></button>
           </nav>
 
@@ -937,10 +936,10 @@
               <div class="manual-detail-grid">
                 <section><h4>대상 편집</h4><ul><li><b>G 이동</b>: 배우, 소품과 카메라를 바닥면에서 이동합니다.</li><li><b>R 회전</b>: 선택 대상을 회전하고 카메라는 팬 방향을 바꿉니다.</li><li><b>P 포즈</b>: 배우 관절 구체나 팔·다리·머리 등 **신체 부위를 직접 드래그**하여 관절인형처럼 직관적으로 자세를 만듭니다. 관절을 선택하면 나타나는 **3차원 회전 기즈모 고리(빨강: X축 앞뒤, 초록: Y축 회전, 파랑: Z축 기울기)**를 잡고 드래그하면 단축키 없이 편리하게 해당 축으로만 정밀 포징이 가능합니다.</li></ul></section>
                 <section><h4>간편 포즈 시스템</h4><ul><li><b>25개 프리셋</b>: 기본, 앉기/눕기, 액션, 제스처 4개 카테고리 탭 제공.</li><li><b>복사 & 붙여넣기</b>: 현재 배우의 포즈를 복사해 다른 배우에게 그대로 붙여넣습니다.</li><li><b>내 포즈</b>: 마음에 드는 커스텀 포즈에 이름을 붙여 보관하고 필요할 때 재활용합니다.</li><li><b>랜덤</b>: 클릭 시 관절 각도를 난수화해 다양하고 러프한 자세를 빠르게 잡아줍니다.</li></ul></section>
-                <section><h4>동선 재생</h4><ul><li>배우는 키프레임에 기록한 위치와 방향을 따라 이동합니다.</li><li>포즈 키가 있으면 두 포즈 사이를 자연스럽게 보간합니다.</li><li>자동 탑승 배우는 차량 좌석 포즈를 유지합니다.</li></ul></section>
+                <section><h4>동선 재생</h4><ul><li>배우는 키프레임에 기록한 위치와 방향을 따라 이동합니다.</li><li>포즈 키가 있으면 두 포즈 사이를 자연스럽게 보간합니다.</li><li>좌석에 매치된 배우는 자동차·의자·소파의 좌석 포즈를 유지합니다.</li></ul></section>
                 <section><h4>화면 읽기</h4><ul><li>배우, 소품, 카메라와 동선은 서로 다른 색으로 구분됩니다.</li><li>마네킹의 눈·코·입과 머리 방향으로 정면과 시선을 확인합니다.</li><li>오른쪽 아래 카메라 프레임은 표시값 없이 최종 구도만 보여줍니다.</li></ul></section>
                 <section><h4>항상 가능한 시점 조작</h4><ul><li><b>좌클릭</b>: 대상 위에서는 선택·편집하고, 무대 바닥이나 빈 공간에서는 오빗합니다.</li><li><b>가운데 버튼</b>도 오빗으로 동작합니다.</li><li><b>우클릭 드래그</b> 또는 <b>Shift + 가운데 버튼</b>으로 무대 전체를 화면의 좌우·위아래로 이동합니다.</li><li><b>휠</b>로 확대·축소하며, <b>Ctrl + 가운데 버튼</b>으로도 줌할 수 있습니다.</li></ul></section>
-                <section><h4>확인할 것</h4><ul><li>배우가 차량이나 소품과 실제로 겹치지 않는지 확인합니다.</li><li>카메라 높이 변화와 지미집·드론 경로는 측면 각도에서도 확인합니다.</li></ul></section>
+                <section><h4>확인할 것</h4><ul><li>배우가 차량이나 소품과 실제로 겹치지 않는지 확인합니다.</li><li>카메라 높이 변화와 피사체 추적이 측면 각도에서도 자연스러운지 확인합니다.</li></ul></section>
               </div>
               <div class="manual-actions"><button type="button" data-manual-action="blocking-3d"><i data-lucide="box" aria-hidden="true"></i><span>3D 프리비즈 열기</span></button></div>
             </article>
@@ -963,11 +962,11 @@
               <div class="manual-actions"><button type="button" data-manual-action="camera"><i data-lucide="camera" aria-hidden="true"></i><span>카메라 설정 보기</span></button></div>
             </article>
 
-            <article id="manual-timeline" class="manual-section" data-manual-section="timeline" data-manual-keywords="키프레임 타임라인 시간 듀레이션 fps 통합 대상별 다중 선택 범위 복사 붙여넣기 리타이밍 구간 맞춤 스냅 드래그 이동 경로 도착 부드럽게 일정 속도 직전 유지 즉시 전환 원호 드론 지미집">
+            <article id="manual-timeline" class="manual-section" data-manual-section="timeline" data-manual-keywords="키프레임 타임라인 시간 듀레이션 fps 통합 대상별 다중 선택 범위 복사 붙여넣기 리타이밍 구간 맞춤 스냅 드래그 이동 경로 도착 부드럽게 일정 속도 직전 유지 즉시 전환 원호 자유 곡선">
               <header><i data-lucide="git-branch" aria-hidden="true"></i><div><span>07</span><h3>키프레임과 타임라인</h3><p>대상별 위치·방향과 카메라 값을 시간에 따라 기록합니다.</p></div></header>
               <div class="manual-key-example" aria-label="키프레임 점을 드래그해 시간을 변경하는 예시">
                 <div class="manual-key-example-track"><span class="manual-key-span"></span><i style="--x: 0%"><b>1</b><small>0초</small></i><i style="--x: 42%"><b>2</b><small>3초</small></i><i style="--x: 100%"><b>3</b><small>7초</small></i></div>
-                <div class="manual-key-example-note"><i data-lucide="move-horizontal" aria-hidden="true"></i><span>점을 좌우로 끌면 키의 시간이 바뀝니다. 점을 선택하면 아래의 도착 방식과 경로가 그 키에 적용됩니다.</span></div>
+                <div class="manual-key-example-note"><i data-lucide="move-horizontal" aria-hidden="true"></i><span>점을 좌우로 끌면 키의 시간이 바뀝니다. 점을 선택한 뒤 도착 방식이나 경로를 바꾸면 해당 키로 들어오는 구간에 즉시 적용됩니다. 첫 키의 경로 선택은 다음 키 추가에 사용됩니다.</span></div>
               </div>
               <div class="manual-detail-grid">
                 <section><h4>키 만들기</h4><ul><li>`대상`에서 카메라, 배우, 소품 또는 전체를 선택합니다.</li><li>`현재 시간`을 정하고 `키프레임 추가`를 누르면 현재 배치가 새 키로 저장됩니다.</li><li>`선택 키 갱신`은 선택 키를 현재 배치와 시간으로 바꿉니다.</li><li>키가 없는 대상은 전체 시간 동안 현재 위치에 고정됩니다.</li></ul></section>
@@ -975,7 +974,7 @@
                 <section><h4>복사와 구간 맞춤</h4><ul><li>선택 키를 복사한 뒤 현재 시간에 붙여넣을 수 있습니다.</li><li>두 개 이상 선택하면 `선택 구간`에 원하는 길이를 입력하고 `구간 맞춤`으로 전체 타이밍을 늘이거나 줄입니다.</li><li>`스냅`에서 프레임, 0.1초, 0.5초, 1초 또는 끄기를 선택합니다.</li></ul></section>
                 <section><h4>재생 제어</h4><ul><li><b>재생</b>: 현재 타임라인 위치부터 이어서 재생합니다.</li><li><b>일시정지</b>: 현재 프레임과 시간을 그대로 유지합니다.</li><li><b>정지</b>: 재생을 끝내고 0초의 시작 프레임으로 돌아갑니다.</li><li>`Space`는 재생과 일시정지를 전환합니다.</li></ul></section>
                 <section><h4>도착 방식</h4><ul><li><b>부드럽게</b>: 출발·도착 속도를 완화합니다.</li><li><b>일정 속도</b>: 구간을 같은 속도로 이동합니다.</li><li><b>직전 유지</b>: 도착 순간까지 이전 값을 유지합니다.</li><li><b>즉시 전환</b>: 해당 시간에 위치와 값을 바로 바꿉니다.</li></ul></section>
-                <section><h4>공간 경로</h4><ul><li>직선, 수평·수직 직선, 좌우 원호와 자유 곡선을 선택할 수 있습니다.</li><li>카메라는 드론 비행과 지미집 상승·하강 경로도 사용할 수 있습니다.</li><li>자유 곡선은 2D 캔버스의 곡선 손잡이로 모양을 조정합니다.</li></ul></section>
+                <section><h4>공간 경로</h4><ul><li>정확한 직선, 좌우 원호와 자유 곡선을 선택할 수 있습니다.</li><li>정확한 직선은 두 키의 위치를 그대로 연결하고, 원호와 자유 곡선은 선택한 곡률을 적용합니다.</li><li>자유 곡선은 선택한 도착 키의 곡선 손잡이를 2D 또는 3D 무대에서 드래그해 모양을 조정합니다. 첫 키에는 진입 경로가 없으므로 두 번째 키부터 선택하세요.</li></ul></section>
                 <section><h4>화면 지문</h4><ul><li>키를 선택하고 `지문`에 `웃으며 오른쪽으로 두 걸음`처럼 짧은 행동 설명을 적습니다.</li><li>지문은 해당 키로 이동하는 구간의 화살표 옆에 표시됩니다.</li><li>비워 두면 위치 변화에 맞는 기본 지문을 자동으로 만듭니다.</li></ul></section>
               </div>
               <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>트랙 숨기기</strong> 대상별 타임라인의 `×`는 표시만 감추는 것이 아니라 해당 대상의 키를 삭제하고 고정 상태로 바꿉니다. 잠긴 대상에서는 실행할 수 없습니다.</p></div>
@@ -984,17 +983,17 @@
               <div class="manual-actions"><button type="button" data-manual-action="timeline"><i data-lucide="git-branch" aria-hidden="true"></i><span>타임라인 보기</span></button></div>
             </article>
 
-            <article id="manual-mounting" class="manual-section" data-manual-section="mounting" data-manual-keywords="차량 탑승 자동 수동 좌석 운전석 묶음 그룹 연동 자동차 버스 오토바이 편집 잠금">
-              <header><i data-lucide="car-front" aria-hidden="true"></i><div><span>08</span><h3>차량 탑승과 대상 묶음</h3><p>배우와 차량·소품을 함께 움직이도록 관계를 설정합니다.</p></div></header>
+            <article id="manual-mounting" class="manual-section" data-manual-section="mounting" data-manual-keywords="행동 연결 앉기 눕기 탑승 좌석 운전석 침대 소파 변기 묶음 그룹 연동 자동차 버스 오토바이 자전거 의자 기차 좌석 편집 잠금">
+              <header><i data-lucide="accessibility" aria-hidden="true"></i><div><span>08</span><h3>소품별 행동 연결과 대상 묶음</h3><p>침대·소파·의자·탈것처럼 행동 위치가 있는 소품을 고르고, 배우가 취할 행동과 위치를 직접 지정합니다.</p></div></header>
               <div class="manual-detail-grid">
-                <section><h4>자동 탑승</h4><ul><li>배우를 선택하고 `탑승 방식 → 자동 탑승`을 선택합니다.</li><li>차량과 빈 좌석을 정하면 배우 위치와 방향이 차량 좌석에 자동으로 맞춰집니다.</li><li>차량 키프레임을 움직이면 탑승 배우도 함께 이동합니다.</li></ul></section>
-                <section><h4>수동 탑승</h4><ul><li>`수동 탑승`에서는 배우를 차량 위에 직접 배치하고 방향을 맞춥니다.</li><li>`겹친 대상 묶기`를 사용하면 차량과 배우를 하나의 변환 묶음으로 움직일 수 있습니다.</li><li>`해제`하면 현재 보이는 위치를 유지한 채 각 대상을 다시 분리합니다.</li></ul></section>
-                <section><h4>좌석 규칙</h4><ul><li>자동차·버스·오토바이 등 차량 유형에 정의된 좌석만 선택할 수 있습니다.</li><li>이미 사용 중인 좌석은 다른 배우에게 선택되지 않습니다.</li><li>차량을 일반 소품으로 바꾸거나 삭제하면 자동 탑승 관계가 해제됩니다.</li></ul></section>
-                <section><h4>묶음과 잠금</h4><ul><li>묶음 구성원이나 자동 탑승 배우 중 하나가 잠기면 연결된 변환 전체가 보호됩니다.</li><li>`대상 편집 잠금`을 해제하면 연결된 대상도 함께 편집 가능 상태로 바뀝니다.</li></ul></section>
+                <section><h4>행동 연결 지정</h4><ul><li>배우 속성에서 행동 대상을 고르고, 해당 소품이 제공하는 행동과 위치를 차례로 선택합니다.</li><li>침대는 `눕기`·`엎드리기`, 소파는 `앉기`·`기대앉기`, 의자·변기·기차 좌석·책상·TV는 앉기 계열 행동을 제공합니다.</li><li>자동차·버스·오토바이·자전거는 좌석별 `탑승`, 욕조는 `눕기`를 제공합니다. 행동 적용을 눌러야만 지정 위치와 자세가 적용됩니다.</li><li>문·창문·칠판·세면대·수납장·냉장고·레인지·세탁기도 `열기`·`보기`·`쓰기`·`세면`·`조리` 같은 전용 행동을 선택할 수 있습니다. 배우를 가까이 놓는 것만으로는 연결되지 않습니다.</li></ul></section>
+                <section><h4>연결 후 조작</h4><ul><li>연결된 소품을 움직이거나 키프레임으로 이동하면 배우도 선택한 위치를 따라갑니다.</li><li>연결 해제를 누르면 현재 보이는 위치와 방향을 유지한 채 배우만 분리됩니다.</li><li>연결된 배우를 무대에서 직접 드래그하면 연결이 풀리고, 이후에는 일반 배우처럼 따로 조작합니다.</li></ul></section>
+                <section><h4>일반 대상 묶음</h4><ul><li>테이블·책상·배경처럼 행동 위치가 없는 소품은 자유롭게 배치합니다.</li><li>겹친 대상이 함께 움직여야 할 때만 `겹친 대상 묶기`를 사용합니다.</li><li>`해제`하면 현재 보이는 위치를 유지한 채 각 대상을 다시 분리합니다.</li></ul></section>
+                <section><h4>행동 위치 규칙</h4><ul><li>행동 위치가 정의된 소품만 행동 대상 목록에 표시됩니다.</li><li>같은 소품의 같은 위치는 다른 배우가 동시에 사용할 수 없습니다.</li><li>행동 대상 소품을 다른 유형으로 바꾸거나 삭제하면 배우는 현재 위치에 남고 연결만 해제됩니다.</li></ul></section>
+                <section><h4>묶음과 잠금</h4><ul><li>묶음 구성원이나 행동 연결 배우 중 하나가 잠기면 연결된 변환 전체가 보호됩니다.</li><li>`대상 편집 잠금`을 해제하면 연결된 대상도 함께 편집 가능 상태로 바뀝니다.</li></ul></section>
               </div>
-              <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>탑승 방식 전환</strong> 자동 탑승과 수동 탑승을 바꾸면 해당 배우의 기존 독립 키프레임이 삭제됩니다.</p></div>
               <div class="manual-callout warning"><i data-lucide="triangle-alert" aria-hidden="true"></i><p><strong>대상 묶기</strong> 묶음을 만들면 리더가 아닌 구성원의 기존 독립 키가 삭제됩니다. 묶음을 해제해도 삭제된 키는 자동 복원되지 않습니다.</p></div>
-              <div class="manual-actions"><button type="button" data-manual-action="mounting"><i data-lucide="car-front" aria-hidden="true"></i><span>탑승 설정 보기</span></button></div>
+              <div class="manual-actions"><button type="button" data-manual-action="mounting"><i data-lucide="accessibility" aria-hidden="true"></i><span>행동 연결 설정 보기</span></button></div>
             </article>
 
             <article id="manual-export" class="manual-section" data-manual-section="export" data-manual-keywords="내보내기 프리뷰 저장 다운로드 png zip mp4 h264 멀티카메라 멀티캠 개별 컷 이미지 복사 붙여넣기 현재 프레임 시작 끝 촬영 자료 제작팩 csv blender 연속성 자동 저장 금지">

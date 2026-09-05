@@ -44,9 +44,10 @@ assert.equal(workflow.includes("installReferencePromptGuideUi(root)"), false,
 assert.equal(runtime.includes("exportReferenceVideoBatch"), false,
   "runtime adapter must not own reference batch export anymore");
 
-// Camera reference motion is deliberately more constrained than actor motion.
-assert.ok(motion.includes('sourceType === "camera" && options.constantSpeed !== false'),
-  "free-curve arc-length remapping must stay camera-only");
+// Every moving source receives arc-length remapping for free curves so the
+// timeline does not accelerate near a control point.
+assert.ok(motion.includes('options.constantSpeed !== false'),
+  "free-curve arc-length remapping must be available to every moving source");
 assert.ok(motion.includes("cameraReferenceProgress"),
   "camera smooth timing must remain an explicit reference-video rule");
 assert.ok(motion.includes("hasSmoothBefore") && motion.includes("hasSmoothAfter"),
@@ -74,8 +75,10 @@ assert.ok(motion.includes("function composeEvaluatedFrameBase"),
   "motion-core must own base frame assembly");
 assert.ok(app.includes("referenceProgress: plan.referenceProgress"),
   "camera render-state interpolation must pass the motion-core smooth-run reference progress into the guarded evaluator");
-assert.ok(app.includes('fallbackPose?.type === "actor"') && app.includes("? plan.referenceProgress"),
-  "authored actor root motion must consume smooth-run timing without adding secondary motion");
+assert.match(app, /const interpolationProgress = plan\.progress;/,
+  "all moving sources must consume the authored linear motion progress");
+assert.ok(app.includes("movementProgress: plan.progress"),
+  "camera movement must stay linear even when reference semantics retain a separate fraction");
 assert.ok(motion.includes("smoothRunReferenceProgress"),
   "motion-core must own smooth-run timing shared by camera and authored actor root motion");
 assert.match(app, /interpolatePoseFor\([\s\S]*?interpolationProgress,[\s\S]*?plan\.end,[\s\S]*?evaluationOptions/,
@@ -88,6 +91,12 @@ assert.ok(app.includes("window.FrisFrameMotionCore?.composeBaseInterpolatedPose"
   "the app evaluator must delegate base pose composition to motion-core");
 assert.ok(motion.includes("function composeBaseInterpolatedPose"),
   "motion-core must own base pose composition");
+assert.ok(app.includes("function drawThreeFreeCurveHandle("),
+  "3D view must expose the selected free-curve control handle");
+assert.ok(app.includes('kind: "freeCurveHandle"') && app.includes('kind: "freeCurve"'),
+  "3D free-curve handles must have a dedicated drag interaction");
+assert.ok(app.includes("function updateThreeFreeCurveDrag("),
+  "3D free-curve dragging must update the authored control point");
 
 // Keep exact-frame timeline storage precise enough for 24/60 FPS workflows.
 assert.match(timeline, /const TIME_PRECISION = 6;/,

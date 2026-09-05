@@ -58,10 +58,12 @@
     from = {},
     to = {},
     progress = 0,
+    discreteProgress = progress,
     spatial = {},
     transformed = null,
   } = {}) {
     const t = clamp(progress, 0, 1);
+    const discreteT = clamp(discreteProgress, 0, 1);
     const lerpValue = (start, end) => finiteNumber(start, 0) + (finiteNumber(end, finiteNumber(start, 0)) - finiteNumber(start, 0)) * t;
     const lerpAngleDegrees = (start, end) => {
       const fromAngle = finiteNumber(start, 0);
@@ -86,7 +88,7 @@
 
     const resolvedTransform = transformed || from;
     const keyedBodyPose = from.type === "actor"
-      ? (t >= 0.999 ? to.bodyPose : from.bodyPose)
+      ? (discreteT >= 0.999 ? to.bodyPose : from.bodyPose)
       : null;
     return {
       ...from,
@@ -104,10 +106,11 @@
       color: to.color,
       shape: to.shape,
       assetType: to.assetType,
-      mountId: t < 0.5 ? from.mountId : to.mountId,
-      seatIndex: t < 0.5 ? from.seatIndex : to.seatIndex,
+      mountId: discreteT < 0.5 ? from.mountId : to.mountId,
+      mountAction: discreteT < 0.5 ? from.mountAction : to.mountAction,
+      seatIndex: discreteT < 0.5 ? from.seatIndex : to.seatIndex,
       name: to.name,
-      visible: t < 0.5 ? from.visible !== false : to.visible !== false,
+      visible: discreteT < 0.5 ? from.visible !== false : to.visible !== false,
     };
   }
 
@@ -165,11 +168,17 @@
       evaluationOptions = null,
     ) {
       const inputProgress = clamp(progress, 0, 1);
+      const authoredProgressOverride = Number(evaluationOptions?.authoredProgress);
+      const authoredProgress = Number.isFinite(authoredProgressOverride)
+        ? clamp(authoredProgressOverride, 0, 1)
+        : inputProgress;
       const referenceProgressOverride = Number(evaluationOptions?.referenceProgress);
+      const movementProgressOverride = Number(evaluationOptions?.movementProgress);
+      const movementProgress = Number.isFinite(movementProgressOverride)
+        ? clamp(movementProgressOverride, 0, 1)
+        : inputProgress;
       const evaluatedProgress = sourceId === "camera"
-        ? (Number.isFinite(referenceProgressOverride)
-          ? clamp(referenceProgressOverride, 0, 1)
-          : cameraReferenceProgress(inputProgress, endKeyframe?.transition || "smooth"))
+        ? movementProgress
         : inputProgress;
       const result = original.call(
         this,
@@ -191,7 +200,11 @@
       const to = mergePose(endPose);
 
       if (sourceId === "camera") {
-        result.focal = interpolateFocalLength(from.focal, to.focal, evaluatedProgress);
+        result.focal = interpolateFocalLength(
+          from.focal,
+          to.focal,
+          Number.isFinite(referenceProgressOverride) ? clamp(referenceProgressOverride, 0, 1) : movementProgress,
+        );
         const trackingTargetId = discreteAtDestination(
           from.trackingTargetId || "",
           to.trackingTargetId || "",
@@ -204,8 +217,11 @@
       }
 
       const itemType = from.type || to.type || result.type;
+      ["mountId", "mountAction", "seatIndex", "visible"].forEach((field) => {
+        if (field in from || field in to) result[field] = authoredProgress < 0.5 ? from[field] : to[field];
+      });
       if (itemType === "actor") {
-        result.bodyPose = heldActorBodyPose(from.bodyPose, to.bodyPose, inputProgress);
+        result.bodyPose = heldActorBodyPose(from.bodyPose, to.bodyPose, authoredProgress);
       }
       return result;
     };
@@ -334,7 +350,7 @@
       endPose = translateCameraPose(startPose, stage.width, stage.depth, dx * stage.width, dy * stage.depth, { translateAim: true });
       startPose.trackingTargetId = actorId;
       endPose.trackingTargetId = actorId;
-      pathMode = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"].includes(followPathMode)
+      pathMode = ["straight", "arc-left", "arc-right", "free-curve"].includes(followPathMode)
         ? followPathMode
         : "straight";
     }
@@ -733,7 +749,11 @@
   }
 
   function sourceKeyframeEvaluationPlan(keyframes = [], time = 0) {
-    const keys = Array.isArray(keyframes) ? keyframes : [];
+    const keys = (Array.isArray(keyframes) ? keyframes : [])
+      .filter((keyframe) => keyframe && Number.isFinite(Number(keyframe.time)))
+      .map((keyframe, index) => ({ keyframe, index }))
+      .sort((a, b) => Number(a.keyframe.time) - Number(b.keyframe.time) || a.index - b.index)
+      .map(({ keyframe }) => keyframe);
     if (!keys.length) return { kind: "fallback" };
     const currentTime = finiteNumber(time, 0);
     const first = keys[0];
@@ -766,10 +786,10 @@
     const endTime = finiteNumber(end?.time, startTime);
     const easedProgress = transitionProgress(currentTime, startTime, endTime, transition);
     const rawProgress = clamp((currentTime - startTime) / Math.max(0.000001, endTime - startTime), 0, 1);
-    // Spatial blocking crosses ordinary keys without braking. Reference
-    // smooth-run timing is planned separately so camera movement and authored
-    // actor root motion can ease at run boundaries without stopping at every
-    // interior marker.
+    // Spatial blocking crosses ordinary keys without braking. Keep the
+    // authored timeline fraction linear for every moving source; arrival
+    // easing is retained separately for discrete/reference semantics so a
+    // multi-key run does not stop and restart at each interior marker.
     const progress = transition === "smooth" || transition === "linear" ? rawProgress : easedProgress;
     const hasSmoothBefore = transition === "smooth"
       && segmentIndex > 0
@@ -870,34 +890,18 @@
     }));
   }
 
-  const pathModes = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve", "drone", "jib-up", "jib-down"];
+  const pathModes = ["straight", "arc-left", "arc-right", "free-curve"];
 
   function normalizePathMode(value, sourceType = "actor") {
-    const mode = pathModes.includes(value) ? value : "straight";
-    if (sourceType !== "camera" && ["drone", "jib-up", "jib-down"].includes(mode)) return "straight";
-    return mode;
+    // Removed path types remain readable as straight-line legacy data.
+    const legacyRemovedModes = ["horizontal", "vertical", "drone", "jib-up", "jib-down"];
+    if (legacyRemovedModes.includes(value)) return "straight";
+    return pathModes.includes(value) ? value : "straight";
   }
 
   function constrainPathEndpoint(start = {}, end = {}, mode = "straight", sourceType = "actor") {
-    const normalized = normalizePathMode(mode, sourceType);
-    const next = { ...end };
-    if (normalized === "horizontal") {
-      const startY = finiteNumber(start.y, finiteNumber(next.y, 0.5));
-      const delta = startY - finiteNumber(next.y, startY);
-      next.y = startY;
-      if (sourceType === "camera" && next.moveAimWithCamera !== false && Number.isFinite(Number(next.aimY))) {
-        next.aimY = finiteNumber(next.aimY) + delta;
-      }
-    }
-    if (normalized === "vertical") {
-      const startX = finiteNumber(start.x, finiteNumber(next.x, 0.5));
-      const delta = startX - finiteNumber(next.x, startX);
-      next.x = startX;
-      if (sourceType === "camera" && next.moveAimWithCamera !== false && Number.isFinite(Number(next.aimX))) {
-        next.aimX = finiteNumber(next.aimX) + delta;
-      }
-    }
-    return next;
+    normalizePathMode(mode, sourceType);
+    return { ...end };
   }
 
   function circularArcPoint(start = {}, end = {}, progress = 0, side = 1, bulge = 0.32) {
@@ -999,22 +1003,10 @@
         x: (finiteNumber(start.x, 0) + finiteNumber(end.x, 0)) / 2,
         y: (finiteNumber(start.y, 0) + finiteNumber(end.y, 0)) / 2,
       };
-      if (sourceType === "camera" && options.constantSpeed !== false) {
+      if (options.constantSpeed !== false) {
         return quadraticBezierArcLengthPoint(start, control, end, t, options.arcLengthSamples);
       }
       return quadraticBezierPoint(start, control, end, t);
-    }
-    if (normalized === "horizontal") {
-      return {
-        x: finiteNumber(start.x, 0) + (finiteNumber(end.x, 0) - finiteNumber(start.x, 0)) * t,
-        y: finiteNumber(start.y, 0),
-      };
-    }
-    if (normalized === "vertical") {
-      return {
-        x: finiteNumber(start.x, 0),
-        y: finiteNumber(start.y, 0) + (finiteNumber(end.y, 0) - finiteNumber(start.y, 0)) * t,
-      };
     }
     return {
       x: finiteNumber(start.x, 0) + (finiteNumber(end.x, 0) - finiteNumber(start.x, 0)) * t,

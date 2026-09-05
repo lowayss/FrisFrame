@@ -20,7 +20,7 @@
     let current = object;
     while (current && current !== stopAt) {
       const data = current.userData || {};
-      if (data.editor || data.poseJoint || data.gizmoAxis || data.isMoveHandle) return true;
+      if (data.editor || data.poseJoint || data.gizmoAxis || data.isMoveHandle || data.cameraFovGuide || data.freeCurveHandle) return true;
       current = current.parent;
     }
     return false;
@@ -49,6 +49,7 @@
     let changed = false;
     root.traverse((object) => {
       if (object === root) return;
+      if (hasInteractiveMetadata(object, root.parent)) return;
       changed = disableRaycast(object) || changed;
     });
     if (changed) stats.prunedGroups += 1;

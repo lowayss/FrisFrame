@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
+const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
@@ -27,7 +28,7 @@ const REQUIRED_WORKFLOW_SELECTORS = [
   ".frisframe-camera-operator",
   ".frisframe-camera-operator-surface",
   ".frisframe-camera-input-mode",
-  ".frisframe-camera-input-mode [data-mode='keyboard']",
+  ".frisframe-camera-input-mode [data-mode='mouse']",
   ".frisframe-camera-input-mode [data-mode='gamepad']",
   ".frisframe-camera-input-mode [data-mode='phone']",
 ];
@@ -47,6 +48,9 @@ const RETIRED_IDS = [
   "spatialReferenceImageInput",
   "spatialReferencePreview",
   "clearSpatialReferenceBtn",
+  "referenceGhostPanel",
+  "referenceGhostLayer",
+  "referenceGhostObservationLayer",
 ];
 
 function delay(ms) {
@@ -211,7 +215,7 @@ async function waitForHealthyRenderer(socket, child, timeoutMs = 30000) {
           state.cameraOperatorReady === true &&
           state.cameraOperatorLiveTimeline === true &&
           state.cameraOperatorMultiInput === true &&
-          Array.isArray(state.inputLabels) && state.inputLabels.join("|") === "⌨ 키보드|🎮 패드|📱 폰" &&
+          Array.isArray(state.inputLabels) && state.inputLabels.join("|") === "🖱 마우스|🎮 패드|📱 폰" &&
           state.debugConsoleVisible === false &&
           Array.isArray(state.requiredMissing) && state.requiredMissing.length === 0 &&
           Array.isArray(state.workflowMissing) && state.workflowMissing.length === 0 &&
@@ -251,8 +255,10 @@ async function main() {
   const executable = packagedExecutable();
   if (!fs.existsSync(executable)) throw new Error(`FrisFrame 실행 파일이 없습니다: ${executable}`);
   const port = await reserveLoopbackPort();
+  const smokeUserData = fs.mkdtempSync(path.join(os.tmpdir(), "frisframe-package-smoke-"));
   const output = [];
   const child = spawn(executable, [
+    `--user-data-dir=${smokeUserData}`,
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     "--no-first-run",
@@ -280,7 +286,7 @@ async function main() {
     const code = await waitForExit(child);
     if (code !== 0) throw new Error(`FrisFrame가 GUI smoke 종료 중 오류 코드를 반환했습니다: ${code}`);
     console.log(`FrisFrame 패키지 GUI smoke 통과: ${state.url}`);
-    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 · Camera Operator live timeline + 키보드/패드/폰 입력 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
+    console.log(`필수 UI ${REQUIRED_IDS.length}개 · 작업 화면 UI ${REQUIRED_WORKFLOW_SELECTORS.length}개 · Camera Operator live timeline + 마우스/패드/폰 입력 확인 · 폐기 UI ${RETIRED_IDS.length}개 부재 확인`);
   } catch (error) {
     try { socket?.close(); } catch { /* ignored */ }
     if (child.exitCode === null) child.kill();
@@ -288,6 +294,7 @@ async function main() {
     throw new Error(`${error.message}${diagnostics ? `\n앱 출력:\n${diagnostics.slice(-5000)}` : ""}`);
   } finally {
     try { socket?.close(); } catch { /* ignored */ }
+    if (fs.existsSync(smokeUserData)) fs.rmSync(smokeUserData, { recursive: true, force: true });
   }
 }
 

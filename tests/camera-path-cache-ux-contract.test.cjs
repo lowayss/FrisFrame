@@ -38,6 +38,8 @@ assert.match(source, /setLinePoints\(parts\.supportLines\[0\]/,
   "tripod support lines must be updated in place");
 assert.match(source, /parts\.body\.position\.copy\(camPos\)/,
   "camera body transform must follow the evaluated camera pose");
+assert.match(source, /group\.userData\.cameraPickPosition = new THREE\.Vector3\(camPos\.x, 0\.08, camPos\.z\)/,
+  "cached camera pick anchor must follow the visible camera after reset or transform-only updates");
 assert.match(source, /parts\.aimArrow\.setDirection\(aimDirection\)/,
   "camera aim helper must follow live orientation");
 assert.match(source, /stats\.cameraRigReuses \+= 1/,

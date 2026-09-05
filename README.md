@@ -167,7 +167,7 @@ Windows Defender SmartScreen에서 **Windows의 PC 보호** 경고가 표시될 
 - Pedestal Up / Down
 - Arc Left / Right
 - Follow Actor
-- 거의 일정한 이동 속도를 유지하는 Free-curve 카메라 경로
+- 카메라·배우·소품의 Free-curve 경로에서 거의 일정한 이동 속도 유지
 - 연속적인 초점거리(focal length) 보간
 - 목적지 키 경계에서만 Tracking 대상 전환
 - 연속 Smooth 카메라 키 사이에서 불필요하게 멈추지 않는 움직임
@@ -178,7 +178,8 @@ Windows Defender SmartScreen에서 **Windows의 PC 보호** 경고가 표시될 
 
 - Root 위치, 높이, 바라보는 방향, 이동 타이밍
 - 사용자가 직접 작성한 Pose 상태
-- Smooth / Linear root-motion 타이밍
+- 키프레임 사이 일정한 Root Motion 속도와 자유 곡선 길이 보정
+- `Hold` / `Cut`을 선택한 경우에만 의도적인 정지·즉시 전환
 - 목적지 키에 도달하기 전까지 Pose 유지
 
 FrisFrame은 배우의 보조 움직임을 임의로 만들어내지 않습니다. Seedance가 불필요한 움직임까지 레퍼런스에서 강하게 따라가면 결과가 딱딱하거나 로봇처럼 보일 수 있기 때문입니다.

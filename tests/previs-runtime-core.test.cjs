@@ -123,14 +123,14 @@ near(cameraQuarter.focal, 35.5);
 assert.equal(cameraQuarter.trackingTargetId, "actor-a");
 
 const smoothCameraQuarter = fakeWindow.interpolatePoseFor({}, "camera", cameraFrom, cameraTo, 0.25, cameraFallback, smoothKey);
-near(smoothCameraQuarter.evaluatedProgress, 0.125);
-near(smoothCameraQuarter.focal, 29.75);
+near(smoothCameraQuarter.evaluatedProgress, 0.25);
+near(smoothCameraQuarter.focal, 35.5);
 assert.equal(smoothCameraQuarter.trackingTargetId, "actor-a");
 
 const smoothCameraLate = fakeWindow.interpolatePoseFor({}, "camera", cameraFrom, cameraTo, 0.75, cameraFallback, smoothKey);
-near(smoothCameraLate.evaluatedProgress, 0.875);
+near(smoothCameraLate.evaluatedProgress, 0.75);
 assert.equal(smoothCameraLate.trackingTargetId, "actor-a",
-  "camera easing must not cause a discrete tracking target to switch before destination arrival");
+  "linear camera travel must not cause a discrete tracking target to switch before destination arrival");
 
 const cameraAlmost = fakeWindow.interpolatePoseFor({}, "camera", cameraFrom, cameraTo, 0.999999, cameraFallback, linearKey);
 assert.equal(cameraAlmost.trackingTargetId, "actor-a", "patched runtime must prevent the old halfway tracking switch");
@@ -183,9 +183,9 @@ near(browserCamera.evaluatedProgress, 0.25);
 near(browserCamera.focal, 35.5);
 assert.equal(browserCamera.trackingTargetId, "actor-a", "DOMContentLoaded installation must patch the real global evaluator binding");
 const browserSmoothCamera = browserContext.interpolatePoseFor({}, "camera", cameraFrom, cameraTo, 0.25, cameraFallback, smoothKey);
-near(browserSmoothCamera.evaluatedProgress, 0.125);
+near(browserSmoothCamera.evaluatedProgress, 0.25);
 const browserActor = browserContext.interpolatePoseFor({}, "actor-1", actorFrom, actorTo, 0.9995, { type: "actor" }, smoothKey);
 near(browserActor.evaluatedProgress, 0.9995);
 assert.deepEqual(JSON.parse(JSON.stringify(browserActor.bodyPose)), neutralPose);
 
-console.log("previs-runtime-core: motion-owned evaluator, load order, camera easing, and reference-frame semantics passed");
+console.log("previs-runtime-core: motion-owned evaluator, load order, constant-speed movement, and reference-frame semantics passed");

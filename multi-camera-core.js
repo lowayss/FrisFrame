@@ -3,7 +3,9 @@
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.FrisFrameMultiCameraCore = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function createMultiCameraCore() {
-  const DEFAULT_COLORS = ["#ff5f57", "#4fc3ff", "#ffd24a", "#66e08f", "#c38bff", "#ff9f43"];
+  // Camera profiles stay in a dedicated cool-color family. Actor, prop, and
+  // background palettes live in app.js and intentionally share no values.
+  const DEFAULT_COLORS = ["#38bdf8", "#60a5fa", "#22d3ee", "#2563eb"];
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));

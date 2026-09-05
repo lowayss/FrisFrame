@@ -5,20 +5,15 @@ const stageViewport = document.querySelector("#stageViewport");
 const stageCanvasHolder = document.querySelector("#stageCanvasHolder");
 const stageZoomControls = document.querySelector("#stageZoomControls");
 
-const colors = [
-  "#ff6262",
-  "#ffac48",
-  "#ffd95a",
-  "#ff6b55",
-  "#65d66f",
-  "#36d6b0",
-  "#55c7bb",
-  "#5a8dff",
-  "#7a63ff",
-  "#bf68ff",
-  "#ff6fc8",
-  "#ff74a1",
-];
+// Source colors are grouped by production role so a camera can never be
+// mistaken for an actor, prop, or background element in either stage view or
+// the timeline. Variants within a role keep multiple sources distinguishable.
+const SOURCE_COLOR_PALETTES = Object.freeze({
+  camera: Object.freeze(["#38bdf8", "#60a5fa", "#22d3ee", "#2563eb"]),
+  actor: Object.freeze(["#ff3b30", "#ff9500", "#34c759", "#00c7be", "#0a84ff", "#af52de"]),
+  prop: Object.freeze(["#f6c453", "#84cc5b", "#2dd4a8", "#f59e0b", "#65d66f", "#36d6b0"]),
+  background: Object.freeze(["#a78bfa", "#9b8ad8", "#c084fc", "#8b7aa8", "#b79ad6", "#8d7fb6"]),
+});
 
 const shapes = [
   ["circle", "●"],
@@ -50,6 +45,7 @@ const propCatalog = {
   "classic-salon": { label: "고전 응접실 세트", category: "세트", kind: "architecture", height: 5.1, footprint: 10.5 },
   car: {
     label: "자동차", category: "탈것", kind: "vehicle", height: 1.45, footprint: 2.15,
+    interaction: { id: "ride", label: "탑승", posePreset: "sit" },
     seats: [
       { label: "운전석", x: 0.62, y: 0.62, z: -0.42 },
       { label: "조수석", x: 0.62, y: 0.62, z: 0.42 },
@@ -59,6 +55,7 @@ const propCatalog = {
   },
   bus: {
     label: "버스", category: "탈것", kind: "vehicle", height: 2.75, footprint: 3.25,
+    interaction: { id: "ride", label: "탑승", posePreset: "sit" },
     seats: [
       { label: "운전석", x: 2.35, y: 0.72, z: -0.58 },
       { label: "앞좌석", x: 1.35, y: 0.72, z: 0.58 },
@@ -68,10 +65,12 @@ const propCatalog = {
   },
   motorcycle: {
     label: "오토바이", category: "탈것", kind: "vehicle", height: 1.2, footprint: 1.25,
+    interaction: { id: "ride", label: "탑승", posePreset: "sit" },
     seats: [{ label: "운전석", x: -0.05, y: 0.78, z: 0 }],
   },
   bicycle: {
     label: "자전거", category: "탈것", kind: "vehicle", height: 1.15, footprint: 1.2,
+    interaction: { id: "ride", label: "탑승", posePreset: "sit" },
     seats: [{ label: "안장", x: -0.12, y: 0.86, z: 0 }],
   },
   tree: { label: "나무", category: "자연", kind: "nature", height: 3.4, footprint: 1.25 },
@@ -80,30 +79,180 @@ const propCatalog = {
   wall_i: { label: "ㅡ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
   wall_l: { label: "ㄱ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
   wall_u: { label: "ㄷ자 벽체", category: "공간", kind: "architecture", height: 2.8, footprint: 3.8 },
-  desk: { label: "사무용 책상", category: "가구", kind: "furniture", height: 0.78, footprint: 1.1 },
-  blackboard: { label: "칠판", category: "가구", kind: "furniture", height: 1.8, footprint: 2.0 },
+  desk: {
+    label: "사무용 책상", category: "가구", kind: "furniture", height: 0.78, footprint: 1.1,
+    interactions: [
+      {
+        id: "sit",
+        label: "앉기",
+        posePreset: "sit",
+        anchors: [{ label: "책상 앞", x: 0, y: 0.48, z: 0.56, facing: 270 }],
+      },
+      {
+        id: "work",
+        label: "작업하기",
+        posePreset: "sit",
+        anchors: [{ label: "책상 앞", x: 0, y: 0.48, z: 0.56, facing: 270 }],
+      },
+    ],
+  },
+  blackboard: {
+    label: "칠판", category: "가구", kind: "furniture", height: 1.8, footprint: 2.0,
+    interactions: [{
+      id: "write",
+      label: "칠판에 쓰기",
+      posePreset: "neutral",
+      anchors: [{ label: "칠판 앞", x: 0, y: 0, z: 0.42, facing: 270 }],
+    }],
+  },
   partition: { label: "파티션", category: "공간", kind: "architecture", height: 1.6, footprint: 1.0 },
   wall: { label: "가벽 (3m)", category: "공간", kind: "architecture", height: 3.0, footprint: 3.0 },
   "corridor-wall": { label: "복도 벽", category: "공간", kind: "architecture", height: 1.78, footprint: 3.0 },
   "train-wall": { label: "기차 차벽", category: "공간", kind: "architecture", height: 1.78, footprint: 3.0 },
   elevator: { label: "엘리베이터", category: "공간", kind: "architecture", height: 2.8, footprint: 1.6 },
-  door: { label: "문", category: "공간", kind: "architecture", height: 2.2, footprint: 1.0 },
-  window: { label: "창문", category: "공간", kind: "architecture", height: 1.0, footprint: 1.2 },
-  sink: { label: "세면대", category: "가전", kind: "appliance", height: 0.88, footprint: 0.6 },
-  toilet: { label: "변기", category: "가전", kind: "appliance", height: 0.8, footprint: 0.65 },
-  bathtub: { label: "욕조", category: "가전", kind: "appliance", height: 0.65, footprint: 1.5 },
-  "train-seat": { label: "기차 좌석", category: "가구", kind: "furniture", height: 1.1, footprint: 0.85 },
+  door: {
+    label: "문", category: "공간", kind: "architecture", height: 2.2, footprint: 1.0,
+    interactions: [{
+      id: "open",
+      label: "문 열기",
+      posePreset: "neutral",
+      anchors: [{ label: "문 앞", x: 0, y: 0, z: 0.62, facing: 270 }],
+    }],
+  },
+  window: {
+    label: "창문", category: "공간", kind: "architecture", height: 1.0, footprint: 1.2,
+    interactions: [{
+      id: "look",
+      label: "창밖 보기",
+      posePreset: "neutral",
+      anchors: [{ label: "창문 앞", x: 0, y: 0, z: 0.38, facing: 270 }],
+    }],
+  },
+  sink: {
+    label: "세면대", category: "가전", kind: "appliance", height: 0.88, footprint: 0.6,
+    interactions: [{
+      id: "wash",
+      label: "세면하기",
+      posePreset: "neutral",
+      anchors: [{ label: "세면대 앞", x: 0, y: 0, z: 0.42, facing: 270 }],
+    }],
+  },
+  toilet: {
+    label: "변기", category: "가전", kind: "appliance", height: 0.8, footprint: 0.65,
+    interactions: [{
+      id: "sit",
+      label: "앉기",
+      posePreset: "sit",
+      anchors: [{ label: "변기 좌석", x: 0, y: 0.44, z: 0.14, facing: 90 }],
+    }],
+  },
+  bathtub: {
+    label: "욕조", category: "가전", kind: "appliance", height: 0.65, footprint: 1.5,
+    interactions: [{
+      id: "lie",
+      label: "눕기",
+      posePreset: "lieDown",
+      anchors: [{ label: "욕조 중앙", x: 0, y: 0.48, z: 0, facing: 0 }],
+    }],
+  },
+  "train-seat": {
+    label: "기차 좌석", category: "가구", kind: "furniture", height: 1.1, footprint: 0.85,
+    interaction: { id: "sit", label: "앉기", posePreset: "sit" },
+    seats: [{ label: "좌석", x: 0, y: 0.55, z: 0, facing: 90 }],
+  },
   stairs: { label: "계단", category: "공간", kind: "architecture", height: 1.2, footprint: 1.8 },
   slope: { label: "경사", category: "공간", kind: "architecture", height: 1.0, footprint: 3.0 },
-  sofa: { label: "소파", category: "가구", kind: "furniture", height: 0.9, footprint: 1.45 },
+  sofa: {
+    label: "소파", category: "가구", kind: "furniture", height: 0.9, footprint: 1.45,
+    interactions: [
+      {
+        id: "sit",
+        label: "앉기",
+        posePreset: "sit",
+        anchors: [
+          { label: "왼쪽 자리", x: 0, y: 0.48, z: -0.42, facing: 90 },
+          { label: "오른쪽 자리", x: 0, y: 0.48, z: 0.42, facing: 90 },
+        ],
+      },
+      {
+        id: "leanSit",
+        label: "기대앉기",
+        posePreset: "leanSit",
+        anchors: [
+          { label: "왼쪽 자리", x: 0, y: 0.48, z: -0.42, facing: 90 },
+          { label: "오른쪽 자리", x: 0, y: 0.48, z: 0.42, facing: 90 },
+        ],
+      },
+    ],
+  },
   "dining-table": { label: "테이블", category: "가구", kind: "furniture", height: 0.82, footprint: 1.2 },
-  chair: { label: "의자", category: "가구", kind: "furniture", height: 1.0, footprint: 0.65 },
-  bed: { label: "침대", category: "가구", kind: "furniture", height: 0.75, footprint: 1.5 },
-  cabinet: { label: "수납장", category: "가구", kind: "furniture", height: 1.45, footprint: 0.9 },
-  refrigerator: { label: "냉장고", category: "가전", kind: "appliance", height: 1.9, footprint: 0.72 },
-  television: { label: "TV", category: "가전", kind: "appliance", height: 1.25, footprint: 0.78 },
-  stove: { label: "레인지", category: "가전", kind: "appliance", height: 0.92, footprint: 0.72 },
-  "washing-machine": { label: "세탁기", category: "가전", kind: "appliance", height: 0.92, footprint: 0.72 },
+  chair: {
+    label: "의자", category: "가구", kind: "furniture", height: 1.0, footprint: 0.65,
+    interaction: { id: "sit", label: "앉기", posePreset: "sit" },
+    seats: [{ label: "좌석", x: 0, y: 0.48, z: 0, facing: 90 }],
+  },
+  bed: {
+    label: "침대", category: "가구", kind: "furniture", height: 0.75, footprint: 1.5,
+    interactions: [
+      {
+        id: "lie",
+        label: "눕기",
+        posePreset: "lieDown",
+        anchors: [{ label: "침대 중앙", x: 0, y: 0.58, z: 0, facing: 0 }],
+      },
+      {
+        id: "faceDown",
+        label: "엎드리기",
+        posePreset: "faceDown",
+        anchors: [{ label: "침대 중앙", x: 0, y: 0.58, z: 0, facing: 0 }],
+      },
+    ],
+  },
+  cabinet: {
+    label: "수납장", category: "가구", kind: "furniture", height: 1.45, footprint: 0.9,
+    interactions: [{
+      id: "open",
+      label: "수납장 열기",
+      posePreset: "neutral",
+      anchors: [{ label: "수납장 앞", x: 0, y: 0, z: 0.42, facing: 270 }],
+    }],
+  },
+  refrigerator: {
+    label: "냉장고", category: "가전", kind: "appliance", height: 1.9, footprint: 0.72,
+    interactions: [{
+      id: "open",
+      label: "냉장고 열기",
+      posePreset: "neutral",
+      anchors: [{ label: "냉장고 앞", x: 0, y: 0, z: 0.52, facing: 270 }],
+    }],
+  },
+  television: {
+    label: "TV", category: "가전", kind: "appliance", height: 1.25, footprint: 0.78,
+    interactions: [{
+      id: "watch",
+      label: "시청하기",
+      posePreset: "sit",
+      anchors: [{ label: "TV 앞", x: 0, y: 0.48, z: 0.58, facing: 270 }],
+    }],
+  },
+  stove: {
+    label: "레인지", category: "가전", kind: "appliance", height: 0.92, footprint: 0.72,
+    interactions: [{
+      id: "cook",
+      label: "조리하기",
+      posePreset: "neutral",
+      anchors: [{ label: "레인지 앞", x: 0, y: 0, z: 0.5, facing: 270 }],
+    }],
+  },
+  "washing-machine": {
+    label: "세탁기", category: "가전", kind: "appliance", height: 0.92, footprint: 0.72,
+    interactions: [{
+      id: "use",
+      label: "세탁기 사용",
+      posePreset: "crouch",
+      anchors: [{ label: "세탁기 앞", x: 0, y: 0, z: 0.5, facing: 270 }],
+    }],
+  },
 };
 
 const propCatalogGroups = ["탈것", "자연", "공간", "가구", "가전", "세트", "기본"];
@@ -360,18 +509,13 @@ const keyTransitionLabels = {
 
 const pathModeLabels = {
   straight: "정확한 직선",
-  horizontal: "수평 직선",
-  vertical: "수직 직선",
   "arc-left": "원호 왼쪽",
   "arc-right": "원호 오른쪽",
   "free-curve": "자유 곡선",
-  drone: "드론 비행",
-  "jib-up": "지미집 상승",
-  "jib-down": "지미집 하강",
 };
 
-const actorPathModes = ["straight", "horizontal", "vertical", "arc-left", "arc-right", "free-curve"];
-const cameraPathModes = [...actorPathModes, "drone", "jib-up", "jib-down"];
+const actorPathModes = ["straight", "arc-left", "arc-right", "free-curve"];
+const cameraPathModes = [...actorPathModes];
 const cameraSensorFormats = {
   "full-frame": { label: "풀프레임", widthMm: 36 },
   "super-35": { label: "Super 35", widthMm: 24.89 },
@@ -529,7 +673,7 @@ function sanitizeSpatialGuide(value) {
 const defaultState = () => {
   const actorId = uid();
   return ({
-  version: 4,
+  version: 12,
   sceneTitle: "새 블로킹",
   sceneIntent:
     "이 프리비즈는 카메라, 배우, 소품의 관계와 움직임을 설계합니다. 최종 결과는 다이어그램이 아니라 영화적인 실사 장면이어야 합니다.",
@@ -580,12 +724,13 @@ const defaultState = () => {
       x: 0.32,
       y: 0.46,
       size: 1,
-      color: "#ff6262",
+      color: "#ff3b30",
       shape: "circle",
       facing: 0,
       bodyPose: defaultBodyPose(),
       placementMode: "manual",
       mountId: "",
+      mountAction: "",
       seatIndex: 0,
       editLocked: false,
     },
@@ -685,6 +830,7 @@ let cameraFrameResizeRenderQueued = false;
 let threeView = null;
 let threeDrag = null;
 let threeEditMode = "move";
+let focusThreeViewOnNextRender = false;
 let selectedPoseActorId = state.items[0].id;
 let selectedPoseJoint = "chest";
 let selectedPoseCategory = "";
@@ -1448,6 +1594,7 @@ function snapshot() {
 }
 
 function commit({ preserveSourceIds = [], transaction = null } = {}) {
+  sanitizeAutoMountRelationships(state);
   evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
   preserveLiveSourcePreview(evaluatedViewState, preserveSourceIds);
   applyActiveCameraTracking(evaluatedViewState, state);
@@ -1541,7 +1688,7 @@ function applyResponsivePanelDefaults() {
 
 function sanitizeState() {
   const previousStateVersion = Math.max(0, finiteNumber(state.version, 0));
-  state.version = 10;
+  state.version = 12;
   state.spacePresetId = environmentPresets[state.spacePresetId] ? state.spacePresetId : "";
   state.previs = state.previs || {};
   state.previs.mode = previsModes[state.previs.mode] ? state.previs.mode : "full-scene";
@@ -1561,15 +1708,17 @@ function sanitizeState() {
       if (item.type === "prop" && item.presetInstanceId) item.motionEnabled = true;
     });
   }
-  sanitizeAutoMountRelationships(state);
-  state.groups = sanitizeManualGroups(state.groups, state);
   migrateLegacyMountsToGroups(state);
+  if (previousStateVersion < 12) migrateLegacyAutomaticSeatMounts(state);
+  sanitizeAutoMountRelationships(state);
   state.groups = sanitizeManualGroups(state.groups, state);
   const legacyCameraKeyframes = Array.isArray(state.motion?.keyframes)
     ? state.motion.keyframes.filter((keyframe) => keyframe?.source === "camera")
     : [];
   state.cameras = multiCameraCore.normalizeProfiles(state.cameras, state.camera, legacyCameraKeyframes, state.cameraSetup);
   state.cameras = state.cameras.slice(0, 4);
+  if (previousStateVersion < 11) migrateDistinctSourceColors(state);
+  else enforceCameraSourceColors(state);
   if (previousStateVersion < 7) {
     state.cameras.forEach((profile) => {
       profile.keyframes = removeLegacyImplicitInitialKeys(profile.keyframes);
@@ -1713,7 +1862,12 @@ function cameraPreviewDocument(renderState = state, profileId = null) {
       renderState.motion?.keyframes?.filter((keyframe) => keyframe?.source === "camera") || [],
     );
   }
-  return applyCameraTracking(previewState);
+  // Camera Operator's live preview has already composed tracking plus the
+  // phone's relative angle offset. Reapplying tracking here would silently
+  // snap the phone view back to the actor's center every frame.
+  return renderState?.camera?.__preserveLiveCameraOrientation
+    ? previewState
+    : applyCameraTracking(previewState);
 }
 
 function syncActiveCameraProfile(renderState = state) {
@@ -1874,7 +2028,10 @@ function affectedTransformItems(itemId, renderState = state) {
   const ids = new Set([item.id]);
   const group = groupForItem(item.id, renderState);
   group?.members?.forEach((member) => ids.add(member.itemId));
-  if (isVehicleProp(item)) {
+  if (item.type === "actor" && item.placementMode === "auto" && item.mountId) {
+    ids.add(item.mountId);
+  }
+  if (isSeatProp(item)) {
     renderState.items
       .filter((entry) => entry.type === "actor" && entry.placementMode === "auto" && entry.mountId === item.id)
       .forEach((entry) => ids.add(entry.id));
@@ -1966,7 +2123,7 @@ function selectedPoseActor() {
 function sourceDefinitions(renderState = state) {
   const cameraProfile = activeCameraProfile(renderState);
   return [
-    { id: "camera", type: "camera", name: cameraProfile?.name || "카메라", color: cameraProfile?.color || "#71b8ff" },
+    { id: "camera", type: "camera", name: cameraProfile?.name || "카메라", color: cameraProfile?.color || SOURCE_COLOR_PALETTES.camera[0] },
     ...renderState.items.map((item) => ({
       id: item.id,
       type: item.type,
@@ -2312,30 +2469,15 @@ function motionSegmentForPathMode(value, sourceId = "camera") {
     elevation: { kind: "linear" },
     rig: "generic",
   };
-  if (mode === "horizontal") base.plan.kind = "axis-x";
-  if (mode === "vertical") base.plan.kind = "axis-y";
   if (mode === "arc-left" || mode === "arc-right") {
     base.plan = { kind: "arc", bulge: mode === "arc-left" ? 0.32 : -0.32 };
   }
   if (mode === "free-curve") base.plan = { kind: "bezier", control: null };
-  if (mode === "drone") {
-    base.rig = "drone";
-  }
-  if (mode === "jib-up" || mode === "jib-down") {
-    base.elevation = { kind: "jib-arc", bulge: mode === "jib-up" ? 0.32 : -0.32 };
-    base.rig = "jib";
-  }
   return base;
 }
 
 function pathModeForSegment(segment, sourceId = "camera") {
   if (typeof segment === "string") return normalizePathMode(segment, sourceId === "camera" ? "camera" : "actor");
-  if (segment?.rig === "drone" || segment?.elevation?.kind === "drone") return "drone";
-  if (segment?.rig === "jib" || segment?.elevation?.kind === "jib-arc") {
-    return Number(segment?.elevation?.bulge ?? 0.32) < 0 ? "jib-down" : "jib-up";
-  }
-  if (segment?.plan?.kind === "axis-x") return "horizontal";
-  if (segment?.plan?.kind === "axis-y") return "vertical";
   if (segment?.plan?.kind === "arc") return Number(segment.plan.bulge ?? 0.32) < 0 ? "arc-right" : "arc-left";
   if (segment?.plan?.kind === "bezier") return "free-curve";
   return "straight";
@@ -2352,10 +2494,6 @@ function sanitizeMotionSegment(segment, sourceId = "camera") {
     normalized.plan.control = Number.isFinite(Number(control?.x)) && Number.isFinite(Number(control?.y))
       ? { x: clamp(Number(control.x), -0.5, 1.5), y: clamp(Number(control.y), -0.5, 1.5) }
       : null;
-  }
-  if (normalized.elevation.kind === "jib-arc") {
-    const fallback = normalized.elevation.bulge;
-    normalized.elevation.bulge = clamp(finiteNumber(segment?.elevation?.bulge, fallback), -0.49, 0.49) || fallback;
   }
   return normalized;
 }
@@ -2376,9 +2514,19 @@ function preserveItemStructure(pose, definition) {
     type: definition.type,
     name: definition.name,
     assetType: definition.assetType,
+    // These are inspector/display properties, not animated transform fields.
+    // A keyframe captured before an inspector edit must not resurrect the old
+    // color, shape, or actor dummy while the playhead is on that keyframe.
+    color: definition.color ?? pose.color,
+    shape: definition.shape ?? pose.shape,
+    dummyType: definition.type === "actor"
+      ? (definition.dummyType || pose.dummyType)
+      : pose.dummyType,
     placementMode: definition.placementMode || "manual",
     mountId: definition.mountId || "",
+    mountAction: definition.mountAction || "",
     seatIndex: Number(definition.seatIndex || 0),
+    seatMatchBlocked: definition.seatMatchBlocked === true,
     motionEnabled: definition.motionEnabled !== false,
     editLocked: definition.editLocked === true,
   };
@@ -2413,7 +2561,7 @@ function trackingOrientation(item, camera = state.camera, renderState = state) {
   const dz = (item.y - camera.y) * size.depth;
   const horizontalDistance = Math.max(0.05, Math.hypot(dx, dz));
   const subjectHeight = item.type === "actor"
-    ? actorFocusHeight(item)
+    ? actorFocusHeight(item, renderState)
     : Number(item.mountedHeight || 0) + propPhysicalDimensions(item).height * 0.55;
   const aspect = aspectMap[renderState.aspect] || 16 / 9;
   const verticalFov = degToRad(horizontalFovToVerticalFov(focalToFov(camera.focal, cameraSensorWidth(renderState)), aspect));
@@ -2427,13 +2575,50 @@ function trackingOrientation(item, camera = state.camera, renderState = state) {
   };
 }
 
-function actorFocusHeight(item) {
-  const base = Number(item?.verticalOffset || 0) + Number(item?.mountedHeight || 0);
-  const pitchAmount = clamp(Math.abs(Number(item?.pitch || 0)) / 90, 0, 1);
-  const height = actorPhysicalDimensions(item).height;
-  const scale = Number(item?.size || 1)
-    * Number(item?.scaleY || 1)
-    * Number(actorDummyProfile(item).scaleY || 1);
+function actorFocusHeight(item, renderState = state) {
+  // Tracking can be requested with either a raw actor item or the evaluated
+  // pose. Normalize both paths to the visible mounted pose before measuring
+  // the focus point, so a seat interaction can never fall back to standing
+  // height just because the caller did not resolve the actor first.
+  const trackingItem = item?.type === "actor"
+    ? (resolvedLegacyMountedPose(item, renderState) || item)
+    : item;
+  const base = Number(trackingItem?.verticalOffset || 0) + Number(trackingItem?.mountedHeight || 0);
+  const pitchAmount = clamp(Math.abs(Number(trackingItem?.pitch || 0)) / 90, 0, 1);
+  const height = actorPhysicalDimensions(trackingItem).height;
+  const scale = Number(trackingItem?.size || 1)
+    * Number(trackingItem?.scaleY || 1)
+    * Number(actorDummyProfile(trackingItem).scaleY || 1);
+
+  // The old tracking target was always the standing actor height. That is
+  // visibly wrong for a mounted sit/lie pose because the rig is rendered with
+  // a lowered local root, while the camera still aims at the old standing
+  // point. Use the same rig coordinates as the renderer for interaction poses
+  // so the camera follows the visible head position instead.
+  const interactionPosePreset = actorInteractionPosePreset(trackingItem, renderState);
+  const bodyPose = actorBodyPoseForRender(trackingItem, renderState);
+  const foldedLegs = Math.abs(Number(bodyPose?.upperLegL?.x || 0)) >= 55
+    && Math.abs(Number(bodyPose?.upperLegR?.x || 0)) >= 55;
+  const interactionPose = ["sit", "crossLegs", "leanSit", "lieDown", "faceDown"].includes(interactionPosePreset)
+    || foldedLegs
+    || Math.abs(Number(trackingItem?.pitch || 0)) >= 60;
+  if (interactionPose) {
+    const rigScale = height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M;
+    const chestPitch = degToRad(Number(bodyPose?.chest?.x || 0));
+    const headPitch = degToRad(Number(bodyPose?.head?.x || 0));
+    const bodyPitch = degToRad(Number(trackingItem?.pitch || 0));
+    const localHeadHeight = 0.84
+      + 0.86 * Math.cos(chestPitch)
+      + 0.11 * Math.cos(chestPitch + headPitch);
+    const mountedRootOffset = trackingItem?.autoMounted ? -0.79 * rigScale : 0;
+    const verticalPitchScale = Math.max(0, Math.cos(bodyPitch));
+    const poseFocusHeight = base
+      + mountedRootOffset
+      + localHeadHeight * rigScale * verticalPitchScale;
+    const lowerBound = base + (trackingItem?.autoMounted ? -0.85 * rigScale : 0);
+    return clamp(poseFocusHeight, lowerBound, base + height);
+  }
+
   return base + lerp(height, 0.45 * scale, pitchAmount);
 }
 
@@ -2552,6 +2737,9 @@ function sanitizeItemPose(item) {
   const type = item.type === "prop" ? "prop" : "actor";
   const assetType = type === "prop" && propCatalog[item.assetType] ? item.assetType : "generic";
   const normalizedTransform = sceneBlockingCore.normalizeSceneObject(item);
+  const colorRole = sourceColorRoleForItem({ ...item, type, assetType });
+  const colorPalette = SOURCE_COLOR_PALETTES[colorRole];
+  const requestedColor = String(item.color || "").toLowerCase();
   return {
     id: item.id || uid(),
     continuityId: String(item.continuityId || ""),
@@ -2560,7 +2748,7 @@ function sanitizeItemPose(item) {
     x: normalizedTransform.x,
     y: normalizedTransform.y,
     size: normalizedTransform.size,
-    color: item.color || colors[0],
+    color: colorPalette.includes(requestedColor) ? requestedColor : colorPalette[0],
     shape: item.shape || "circle",
     dummyType: type === "actor"
       ? (actorDummyCatalog[item.dummyType] ? item.dummyType : "human")
@@ -2576,7 +2764,9 @@ function sanitizeItemPose(item) {
     mountedHeight: type === "prop" ? clamp(finiteNumber(item.mountedHeight, 0), -1, 5) : 0,
     placementMode: type === "actor" && (item.placementMode === "auto" || item.mountId) ? "auto" : "manual",
     mountId: type === "actor" ? String(item.mountId || "") : "",
+    mountAction: type === "actor" ? String(item.mountAction || "") : "",
     seatIndex: type === "actor" ? Math.max(0, Math.round(finiteNumber(item.seatIndex, 0))) : 0,
+    seatMatchBlocked: type === "actor" && item.seatMatchBlocked === true,
     motionEnabled: item.motionEnabled !== false,
     editLocked: item.editLocked === true,
     presetInstanceId: String(item.presetInstanceId || ""),
@@ -2590,6 +2780,49 @@ function propDefinition(assetType) {
   return propCatalog[assetType] || propCatalog.generic;
 }
 
+function sourceColorRoleForItem(item) {
+  if (item?.type === "actor") return "actor";
+  const definition = propDefinition(item?.assetType || item?.dummyType || "generic");
+  if (definition.kind === "architecture" || definition.kind === "nature" || ["공간", "세트"].includes(definition.category)) {
+    return "background";
+  }
+  return "prop";
+}
+
+function sourceColorPaletteForItem(item) {
+  return SOURCE_COLOR_PALETTES[sourceColorRoleForItem(item)];
+}
+
+function nextItemSourceColor(type, assetType = "generic", items = state.items) {
+  const probe = { type, assetType, dummyType: assetType };
+  const role = sourceColorRoleForItem(probe);
+  const palette = SOURCE_COLOR_PALETTES[role];
+  const roleCount = (items || []).filter((item) => sourceColorRoleForItem(item) === role).length;
+  return palette[roleCount % palette.length];
+}
+
+function enforceCameraSourceColors(renderState = state) {
+  (renderState.cameras || []).forEach((profile, index) => {
+    const requested = String(profile.color || "").toLowerCase();
+    profile.color = SOURCE_COLOR_PALETTES.camera.includes(requested)
+      ? requested
+      : SOURCE_COLOR_PALETTES.camera[index % SOURCE_COLOR_PALETTES.camera.length];
+  });
+}
+
+function migrateDistinctSourceColors(renderState = state) {
+  const roleCounts = { actor: 0, prop: 0, background: 0 };
+  (renderState.items || []).forEach((item) => {
+    const role = sourceColorRoleForItem(item);
+    const palette = SOURCE_COLOR_PALETTES[role];
+    item.color = palette[roleCounts[role] % palette.length];
+    roleCounts[role] += 1;
+  });
+  (renderState.cameras || []).forEach((profile, index) => {
+    profile.color = SOURCE_COLOR_PALETTES.camera[index % SOURCE_COLOR_PALETTES.camera.length];
+  });
+}
+
 function isVehicleProp(item) {
   return Boolean(item?.type === "prop" && propDefinition(item.assetType).kind === "vehicle");
 }
@@ -2598,70 +2831,242 @@ function vehicleProps(renderState = state) {
   return (renderState.items || []).filter(isVehicleProp);
 }
 
+function propInteractionDefinitions(assetType) {
+  const definition = propDefinition(assetType);
+  if (Array.isArray(definition.interactions)) return definition.interactions;
+  if (!Array.isArray(definition.seats) || !definition.seats.length) return [];
+  const interaction = definition.interaction || {};
+  return [{
+    id: interaction.id || (definition.kind === "vehicle" ? "ride" : "sit"),
+    label: interaction.label || (definition.kind === "vehicle" ? "탑승" : "앉기"),
+    posePreset: interaction.posePreset || "sit",
+    anchors: definition.seats,
+  }];
+}
+
+function propInteractionForProp(prop, interactionId = "") {
+  const interactions = propInteractionDefinitions(prop?.assetType);
+  return interactions.find((interaction) => !interactionId || interaction.id === interactionId) || interactions[0] || null;
+}
+
+function isInteractiveAsset(assetType) {
+  return propInteractionDefinitions(assetType).length > 0;
+}
+
+function isInteractiveProp(item) {
+  return Boolean(item?.type === "prop" && isInteractiveAsset(item.assetType));
+}
+
+function interactiveProps(renderState = state) {
+  return (renderState.items || []).filter(isInteractiveProp);
+}
+
+function isSeatAsset(assetType) {
+  return isInteractiveAsset(assetType);
+}
+
+function isSeatProp(item) {
+  return isInteractiveProp(item);
+}
+
+function isAutoMountedActor(item) {
+  return Boolean(item?.type === "actor" && item.placementMode === "auto" && item.mountId);
+}
+
+function seatProps(renderState = state) {
+  return interactiveProps(renderState);
+}
+
+function interactionWorldPoseForProp(prop, interaction, anchor, renderState = state) {
+  const size = stageWorldSize(renderState);
+  const angle = degToRad(prop.facing || 0);
+  const propSize = Number(prop.size || 1);
+  const forward = Number(anchor.x || 0) * propSize * Number(prop.scaleX || 1);
+  const lateral = Number(anchor.z || 0) * propSize * Number(prop.scaleZ || 1);
+  const worldX = (prop.x - 0.5) * size.width
+    + Math.cos(angle) * forward - Math.sin(angle) * lateral;
+  const worldZ = (prop.y - 0.5) * size.depth
+    + Math.sin(angle) * forward + Math.cos(angle) * lateral;
+  return {
+    x: clamp(worldX / size.width + 0.5, 0.02, 0.98),
+    y: clamp(worldZ / size.depth + 0.5, 0.02, 0.98),
+    facing: (Number(prop.facing || 0) + Number(anchor.facing || 0) + 360) % 360,
+    mountedHeight: Number(anchor.y || 0.7) * propSize * Number(prop.scaleY || 1),
+    interactionId: interaction?.id || "",
+    posePreset: interaction?.posePreset || "sit",
+  };
+}
+
+function seatWorldPoseForProp(prop, seat, renderState = state) {
+  return interactionWorldPoseForProp(prop, { id: "sit", posePreset: "sit" }, seat, renderState);
+}
+
+function interactionAnchorForActor(actor, renderState = state) {
+  if (!actor?.mountId) return null;
+  const target = renderState.items?.find((item) => item.id === actor.mountId && isInteractiveProp(item));
+  if (!target) return null;
+  const interaction = propInteractionForProp(target, actor.mountAction || "");
+  if (!interaction) return null;
+  const anchors = Array.isArray(interaction.anchors) ? interaction.anchors : [];
+  const anchorIndex = clamp(Math.round(Number(actor.seatIndex || 0)), 0, Math.max(0, anchors.length - 1));
+  const anchor = anchors[anchorIndex];
+  return anchor ? { target, interaction, anchor, anchorIndex } : null;
+}
+
+function attachActorToInteraction(actorId, targetObjectId, interactionId, anchorIndex = 0) {
+  const actor = state.items.find((item) => item.id === actorId && item.type === "actor");
+  const targetObject = state.items.find((item) => item.id === targetObjectId && isInteractiveProp(item));
+  if (!actor || !targetObject) return { ok: false, message: "배우와 행동 대상 소품을 확인하세요." };
+  const interaction = propInteractionForProp(targetObject, interactionId);
+  const anchors = Array.isArray(interaction?.anchors) ? interaction.anchors : [];
+  const safeAnchorIndex = clamp(Math.round(Number(anchorIndex || 0)), 0, Math.max(0, anchors.length - 1));
+  const anchor = anchors[safeAnchorIndex];
+  if (!interaction || !anchor) return { ok: false, message: "선택한 소품에 지정 가능한 행동 위치가 없습니다." };
+  const occupied = state.items.find((item) => isAutoMountedActor(item)
+    && item.mountId === targetObject.id
+    && (item.mountAction || propInteractionForProp(targetObject)?.id || "") === interaction.id
+    && Number(item.seatIndex || 0) === safeAnchorIndex
+    && item.id !== actor.id);
+  if (occupied) return { ok: false, message: `${targetObject.name}의 ${anchor.label}은(는) 이미 ${occupied.name}이(가) 사용 중입니다.` };
+
+  const visibleState = currentInteractionFrame();
+  const visibleTargetObject = visibleState.items?.find((item) => item.id === targetObject.id) || targetObject;
+  const target = interactionWorldPoseForProp(visibleTargetObject, interaction, anchor, visibleState);
+  materializeEvaluatedViewForEditing(actor.id);
+  const current = state.items.find((item) => item.id === actor.id && item.type === "actor");
+  if (!current) return { ok: false, message: "배우를 찾을 수 없습니다." };
+  current.x = target.x;
+  current.y = target.y;
+  current.facing = target.facing;
+  current.placementMode = "auto";
+  current.mountId = targetObject.id;
+  current.mountAction = interaction.id;
+  current.seatIndex = safeAnchorIndex;
+  current.seatMatchBlocked = false;
+  state.motion.keyframes = (state.motion.keyframes || []).filter((keyframe) => keyframe.source !== actor.id);
+  return { ok: true, actor: current, targetObject, interaction, anchor, anchorIndex: safeAnchorIndex };
+}
+
+function mountActorToSeat(actorId, seatObjectId, seatIndex = 0) {
+  const targetObject = state.items.find((item) => item.id === seatObjectId && isInteractiveProp(item));
+  const interaction = propInteractionForProp(targetObject, "sit") || propInteractionForProp(targetObject);
+  return attachActorToInteraction(actorId, seatObjectId, interaction?.id || "", seatIndex);
+}
+
 function sanitizeAutoMountRelationships(renderState = state) {
-  const vehicles = new Map(vehicleProps(renderState).map((item) => [item.id, item]));
-  const occupiedByVehicle = new Map();
-  renderState.items.forEach((item) => {
+  const interactiveObjects = new Map(interactiveProps(renderState).map((item) => [item.id, item]));
+  const occupiedByTarget = new Map();
+  (renderState.items || []).forEach((item) => {
     if (item.type !== "actor") return;
     if (item.placementMode !== "auto") {
       item.mountId = "";
+      item.mountAction = "";
       item.seatIndex = 0;
       return;
     }
-    const vehicle = vehicles.get(item.mountId);
-    if (!vehicle) {
+    const targetObject = interactiveObjects.get(item.mountId);
+    const interaction = targetObject ? propInteractionForProp(targetObject, item.mountAction || "") : null;
+    const anchors = Array.isArray(interaction?.anchors) ? interaction.anchors : [];
+    if (!targetObject || !interaction || !anchors.length) {
+      const pose = resolvedLegacyMountedPose(item, renderState);
+      item.x = pose.x;
+      item.y = pose.y;
+      item.facing = pose.facing;
+      item.placementMode = "manual";
       item.mountId = "";
+      item.mountAction = "";
       item.seatIndex = 0;
+      item.seatMatchBlocked = true;
       return;
     }
-    const seats = propDefinition(vehicle.assetType).seats || [];
-    const occupied = occupiedByVehicle.get(vehicle.id) || new Set();
-    let seatIndex = clamp(Math.round(Number(item.seatIndex || 0)), 0, Math.max(0, seats.length - 1));
-    if (occupied.has(seatIndex)) seatIndex = seats.findIndex((seat, index) => !occupied.has(index));
-    if (!seats.length || seatIndex < 0) {
+    item.mountAction = interaction.id;
+    const occupiedKey = `${targetObject.id}:${interaction.id}`;
+    const occupied = occupiedByTarget.get(occupiedKey) || new Set();
+    let anchorIndex = clamp(Math.round(Number(item.seatIndex || 0)), 0, Math.max(0, anchors.length - 1));
+    if (occupied.has(anchorIndex)) anchorIndex = anchors.findIndex((anchor, index) => !occupied.has(index));
+    if (anchorIndex < 0) {
+      const pose = resolvedLegacyMountedPose(item, renderState);
+      item.x = pose.x;
+      item.y = pose.y;
+      item.facing = pose.facing;
+      item.placementMode = "manual";
       item.mountId = "";
+      item.mountAction = "";
       item.seatIndex = 0;
+      item.seatMatchBlocked = true;
       return;
     }
-    item.seatIndex = seatIndex;
-    occupied.add(seatIndex);
-    occupiedByVehicle.set(vehicle.id, occupied);
+    item.seatIndex = anchorIndex;
+    item.seatMatchBlocked = false;
+    occupied.add(anchorIndex);
+    occupiedByTarget.set(occupiedKey, occupied);
   });
 }
 
-function detachAutoMountedActors(vehicleId, renderState = state) {
+function detachAutoMountedActors(seatObjectId, renderState = state) {
   renderState.items
-    .filter((item) => item.type === "actor" && item.placementMode === "auto" && item.mountId === vehicleId)
+    .filter((item) => item.type === "actor" && item.placementMode === "auto" && item.mountId === seatObjectId)
     .forEach((actor) => {
       const pose = resolvedLegacyMountedPose(actor, renderState);
       actor.x = pose.x;
       actor.y = pose.y;
       actor.facing = pose.facing;
+      actor.placementMode = "manual";
       actor.mountId = "";
+      actor.mountAction = "";
       actor.seatIndex = 0;
+      actor.seatMatchBlocked = true;
     });
+}
+
+function detachAutoMountedActor(actorId, renderState = state, visibleState = null) {
+  const actor = renderState.items?.find((item) => item.id === actorId && item.type === "actor");
+  if (!isAutoMountedActor(actor)) return false;
+  const frame = visibleState || (renderState === state ? currentInteractionFrame() : renderState);
+  const frameActor = frame?.items?.find((item) => item.id === actorId && item.type === "actor");
+  const pose = frameActor ? resolvedItemPose(frameActor, frame) : resolvedLegacyMountedPose(actor, renderState);
+  if (renderState === state) materializeEvaluatedViewForEditing(actorId);
+  const current = renderState.items?.find((item) => item.id === actorId && item.type === "actor");
+  if (!current) return false;
+  current.x = pose.x;
+  current.y = pose.y;
+  current.facing = pose.facing;
+  current.placementMode = "manual";
+  current.mountId = "";
+  current.mountAction = "";
+  current.seatIndex = 0;
+  current.seatMatchBlocked = true;
+  return true;
+}
+
+function prepareActorForDirectManipulation(actorId) {
+  const actor = state.items.find((item) => item.id === actorId && item.type === "actor");
+  if (!actor) return false;
+  const mounted = isAutoMountedActor(actor);
+  const wasBlocked = actor.seatMatchBlocked === true;
+  if (mounted) detachAutoMountedActor(actorId, state, currentInteractionFrame());
+  else if (wasBlocked) materializeEvaluatedViewForEditing(actorId);
+  if (mounted || wasBlocked) {
+    const current = state.items.find((item) => item.id === actorId && item.type === "actor");
+    if (current) current.seatMatchBlocked = false;
+  }
+  return mounted || wasBlocked;
 }
 
 function resolvedLegacyMountedPose(item, renderState = state) {
   if (item?.type !== "actor" || !item.mountId) return item;
-  const vehicle = renderState.items.find((entry) => entry.id === item.mountId && isVehicleProp(entry));
-  if (!vehicle) return item;
-  const definition = propDefinition(vehicle.assetType);
-  const seat = definition.seats?.[clamp(Math.round(Number(item.seatIndex || 0)), 0, Math.max(0, (definition.seats?.length || 1) - 1))];
-  if (!seat) return item;
-  const size = stageWorldSize(renderState);
-  const angle = degToRad(vehicle.facing || 0);
-  const forward = Number(seat.x || 0) * Number(vehicle.size || 1) * Number(vehicle.scaleX || 1);
-  const lateral = Number(seat.z || 0) * Number(vehicle.size || 1) * Number(vehicle.scaleZ || 1);
-  const worldX = (vehicle.x - 0.5) * size.width + Math.cos(angle) * forward - Math.sin(angle) * lateral;
-  const worldZ = (vehicle.y - 0.5) * size.depth + Math.sin(angle) * forward + Math.cos(angle) * lateral;
+  const mounted = interactionAnchorForActor(item, renderState);
+  if (!mounted) return item;
+  const target = interactionWorldPoseForProp(mounted.target, mounted.interaction, mounted.anchor, renderState);
   return {
     ...item,
-    x: clamp(worldX / size.width + 0.5, 0.02, 0.98),
-    y: clamp(worldZ / size.depth + 0.5, 0.02, 0.98),
-    facing: (Number(vehicle.facing || 0) + Number(seat.facing || 0) + 360) % 360,
+    x: target.x,
+    y: target.y,
+    facing: target.facing,
     autoMounted: true,
-    mountedHeight: Number(seat.y || 0.7) * Number(vehicle.size || 1) * Number(vehicle.scaleY || 1),
+    mountedHeight: target.mountedHeight,
+    mountAction: mounted.interaction.id,
+    interactionPosePreset: mounted.interaction.posePreset || "sit",
   };
 }
 
@@ -2754,14 +3159,21 @@ function resolvedItemPose(item, renderState = state) {
 function migrateLegacyMountsToGroups(renderState = state) {
   const legacyActors = renderState.items.filter((item) => item.type === "actor" && item.mountId && item.placementMode !== "auto");
   legacyActors.forEach((actor) => {
+    const seatObject = renderState.items.find((item) => item.id === actor.mountId && isSeatProp(item));
+    if (seatObject) {
+      actor.placementMode = "auto";
+      return;
+    }
     const vehicle = renderState.items.find((item) => item.id === actor.mountId && isVehicleProp(item));
     const pose = resolvedLegacyMountedPose(actor, renderState);
     actor.x = pose.x;
     actor.y = pose.y;
     actor.facing = pose.facing;
     actor.mountId = "";
+    actor.mountAction = "";
     actor.seatIndex = 0;
     if (!vehicle) return;
+    renderState.groups = Array.isArray(renderState.groups) ? renderState.groups : [];
     let group = (renderState.groups || []).find((entry) => entry.leaderId === vehicle.id);
     if (!group) {
       group = {
@@ -2778,6 +3190,22 @@ function migrateLegacyMountsToGroups(renderState = state) {
       renderState.motion.keyframes = renderState.motion.keyframes.filter((keyframe) => keyframe.source !== actor.id);
     }
   });
+}
+
+function migrateLegacyAutomaticSeatMounts(renderState = state) {
+  renderState.items
+    .filter((item) => isAutoMountedActor(item))
+    .forEach((actor) => {
+      const pose = resolvedLegacyMountedPose(actor, renderState);
+      actor.x = pose.x;
+      actor.y = pose.y;
+      actor.facing = pose.facing;
+      actor.placementMode = "manual";
+      actor.mountId = "";
+      actor.mountAction = "";
+      actor.seatIndex = 0;
+      actor.seatMatchBlocked = false;
+    });
 }
 
 function dissolveManualGroup(groupId, renderState = state) {
@@ -3313,6 +3741,7 @@ function setupCameraFrameResize() {
   const moveHandle = $("#cameraFrameMoveHandle");
   if (!handle || handle.dataset.ready === "true") return;
   handle.dataset.ready = "true";
+  const ownerDocument = handle.ownerDocument || document;
   handle.setAttribute("role", "slider");
   handle.setAttribute("aria-orientation", "horizontal");
   if (cameraFrameWidth != null) {
@@ -3389,6 +3818,27 @@ function setupCameraFrameResize() {
     );
   });
 
+  // Keep resizing alive even when the platform does not deliver pointer
+  // capture events back to this small overlay button during a fast drag.
+  const resizeMoveFallback = (event) => {
+    if (!cameraFrameResizeDrag || event.pointerId !== cameraFrameResizeDrag.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setCameraFrameWidth(
+      cameraFrameResizeDrag.startWidth - (event.clientX - cameraFrameResizeDrag.startX),
+    );
+  };
+  const resizeFinishFallback = (event) => {
+    if (!cameraFrameResizeDrag || event.pointerId !== cameraFrameResizeDrag.pointerId) return;
+    handle.releasePointerCapture?.(event.pointerId);
+    cameraFrameResizeDrag = null;
+    handle.classList.remove("is-dragging");
+    updateCameraFrameResizeHandle();
+  };
+  ownerDocument.addEventListener("pointermove", resizeMoveFallback, true);
+  ownerDocument.addEventListener("pointerup", resizeFinishFallback, true);
+  ownerDocument.addEventListener("pointercancel", resizeFinishFallback, true);
+
   const finishResize = (event) => {
     if (!cameraFrameResizeDrag || event.pointerId !== cameraFrameResizeDrag.pointerId) return;
     handle.releasePointerCapture?.(event.pointerId);
@@ -3427,7 +3877,8 @@ function initThreeView() {
   scene.fog = new THREE.Fog("#111820", 120, 300);
 
   const previewScene = new THREE.Scene();
-  previewScene.background = new THREE.Color("#111820");
+  // Keep the camera preview transparent so it stays free of the editor stage shell.
+  previewScene.background = null;
   previewScene.fog = null;
   const previewWorld = new THREE.Group();
   previewScene.add(previewWorld);
@@ -3448,12 +3899,12 @@ function initThreeView() {
   const frameRenderer = new THREE.WebGLRenderer({
     canvas: frameCanvas,
     antialias: true,
-    alpha: false,
+    alpha: true,
     preserveDrawingBuffer: true,
   });
   frameRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   frameRenderer.outputColorSpace = THREE.SRGBColorSpace;
-  frameRenderer.setClearColor("#111820", 1);
+  frameRenderer.setClearColor(0x000000, 0);
   frameRenderer.shadowMap.enabled = true;
   frameRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -3590,6 +4041,10 @@ function renderThreeView(renderState = state, force = false, frameOptions = {}) 
   if (viewMode !== "3d" && !force) return;
   if (!initThreeView()) return;
   const THREE = window.THREE;
+  if (focusThreeViewOnNextRender) {
+    focusThreeViewOnCamera(renderState);
+    focusThreeViewOnNextRender = false;
+  }
   threeView.lastState = renderState;
   clearThreeWorld();
 
@@ -3746,7 +4201,7 @@ function makeThreeItem(item, renderState) {
 
   let body;
   if (item.type === "actor") {
-    body = makeThreeActorModel(1, color, actorBodyPoseForRender(renderItem), {
+    body = makeThreeActorModel(1, color, actorBodyPoseForRender(renderItem, renderState), {
       showPoseHandles: threeEditMode === "pose" && selected?.kind === "item" && selected.id === item.id,
       selectedJoint: selectedPoseActorId === item.id ? selectedPoseJoint : "",
     });
@@ -3758,7 +4213,14 @@ function makeThreeItem(item, renderState) {
     actorRigScale = actorDimensions.height / spatialScaleCore.ACTOR_RIG_MODEL_HEIGHT_M;
     body.updateMatrixWorld(true);
     const actorBounds = new THREE.Box3().setFromObject(body);
-    body.position.y = renderItem.autoMounted ? -0.79 * actorRigScale : Math.max(0, -actorBounds.min.y);
+    const interactionPosePreset = renderItem.interactionPosePreset || "";
+    const needsElevatedInteractionOffset = ["sit", "crossLegs", "leanSit", "lieDown", "faceDown"].includes(interactionPosePreset);
+    // Sitting/lying connections use the seat or mattress height as their
+    // local origin. Standing actions (wash, cook, open, write, etc.) stay
+    // grounded like an ordinary actor instead of sinking below the floor.
+    body.position.y = renderItem.autoMounted && needsElevatedInteractionOffset
+      ? -0.79 * actorRigScale
+      : Math.max(0, -actorBounds.min.y);
   } else {
     body = makeThreePropModel(renderItem, color);
     fitThreeBodyToPhysicalBounds(body, propDimensions);
@@ -3774,7 +4236,7 @@ function makeThreeItem(item, renderState) {
     }
   });
 
-  const roleColor = item.type === "actor" ? "#58d7ca" : "#f2bd62";
+  const roleColor = item.color;
   const definition = propDefinition(item.assetType);
   const baseRadius = item.type === "actor"
     ? Math.max(actorDimensions.width, actorDimensions.depth) * 0.66
@@ -4475,14 +4937,20 @@ function makeThreeSeatedActorModel(scale, color) {
   return group;
 }
 
-function actorBodyPoseForRender(actor) {
+function actorInteractionPosePreset(actor, renderState = state) {
+  const interaction = interactionAnchorForActor(actor, renderState)?.interaction;
+  return String(actor?.interactionPosePreset || interaction?.posePreset || (actor?.autoMounted ? "sit" : ""));
+}
+
+function actorBodyPoseForRender(actor, renderState = state) {
   const pose = sanitizeBodyPose(actor?.bodyPose);
   if (!actor?.autoMounted) return pose;
-  const seated = presetBodyPose("sit");
+  const presetId = actorInteractionPosePreset(actor, renderState) || "sit";
+  const attached = presetBodyPose(presetId);
   ["chest", "head", "upperArmL", "lowerArmL", "upperArmR", "lowerArmR"].forEach((jointId) => {
-    seated[jointId] = pose[jointId];
+    attached[jointId] = pose[jointId];
   });
-  return sanitizeBodyPose(seated);
+  return sanitizeBodyPose(attached);
 }
 
 function makeThreeActorModel(scale, color, bodyPose = defaultBodyPose(), options = {}) {
@@ -4676,10 +5144,24 @@ function makeThreeCamera(camera, renderState, profile = null, active = false, fi
   group.userData.previewHidden = true;
   group.userData.cameraProfileId = profile?.id || renderState.activeCameraId || "camera-1";
   group.userData.fieldOffset = clone(fieldOffset);
-  const profileColor = profile?.color || "#69c9ff";
+  // Treat the complete visible camera rig as one draggable editor target.
+  // Previously only the housing group carried editor metadata, so clicking the
+  // floor ring, support, or selection ring fell through to viewport orbiting.
+  const cameraEditor = {
+    kind: "camera",
+    profileId: group.userData.cameraProfileId,
+    fieldOffset: { x: 0, y: 0 },
+  };
+  group.userData.editor = cameraEditor;
+  group.userData.isMoveHandle = true;
+  const profileColor = profile?.color || SOURCE_COLOR_PALETTES.camera[0];
   const displayCamera = cameraWithFieldOffset(camera, fieldOffset);
   const cameraHeight = resolvedCameraRenderHeight(displayCamera);
   const camPos = mapToWorld(displayCamera, renderState, cameraHeight);
+  // Keep a stable screen-space pick anchor for the visible camera rig. The
+  // 3D motion-path markers can overlap the rig and win the raycast even though
+  // they are not editable, so pickThreeEditor also checks this anchor.
+  group.userData.cameraPickPosition = new THREE.Vector3(camPos.x, 0.08, camPos.z);
   const aimPos = cameraLookTarget(displayCamera, renderState, 10);
   const groundCam = mapToWorld(displayCamera, renderState, 0.04);
   const angle = degToRad(displayCamera.panDeg);
@@ -4688,11 +5170,8 @@ function makeThreeCamera(camera, renderState, profile = null, active = false, fi
 
   const body = new THREE.Group();
   body.name = "camera";
-  body.userData.editor = {
-    kind: "camera",
-    profileId: group.userData.cameraProfileId,
-    fieldOffset: { x: 0, y: 0 },
-  };
+  body.userData.editor = cameraEditor;
+  body.userData.isMoveHandle = true;
   body.position.copy(camPos);
   body.lookAt(aimPos);
   // The camera prop is modeled with its lens on the opposite local-facing
@@ -4736,6 +5215,8 @@ function makeThreeCamera(camera, renderState, profile = null, active = false, fi
   });
   const cameraBase = makeThreeRoleRing(0.46, profileColor);
   cameraBase.position.set(camPos.x, 0.055, camPos.z);
+  cameraBase.userData.editor = cameraEditor;
+  cameraBase.userData.isMoveHandle = true;
   group.add(cameraBase);
   const cameraLabel = makeThreeWorldLabel(profile?.name || "카메라", profileColor);
   cameraLabel.position.set(camPos.x, camPos.y + 0.72, camPos.z);
@@ -4743,6 +5224,8 @@ function makeThreeCamera(camera, renderState, profile = null, active = false, fi
   if (active || (selected?.kind === "camera" && selected.profileId === group.userData.cameraProfileId)) {
     const selection = makeThreeSelectionRing(0.62, profileColor, 0.04);
     selection.position.set(camPos.x, 0.07, camPos.z);
+    selection.userData.editor = cameraEditor;
+    selection.userData.isMoveHandle = true;
     group.add(selection);
   }
 
@@ -4829,6 +5312,14 @@ function makeCameraConeMesh(origin, angle, fov, length) {
   const THREE = window.THREE;
   const group = new THREE.Group();
   group.userData.previewHidden = true;
+  // The floor FOV overlay is a visual guide, not a camera handle. It remains
+  // raycastable only so beginThreeDrag can consume its pointer gesture; the
+  // marker prevents the hit from bubbling to the parent camera editor.
+  const markGuide = (object) => {
+    if (!object) return;
+    object.userData = object.userData || {};
+    object.userData.cameraFovGuide = true;
+  };
   const p1 = new THREE.Vector3(origin.x + Math.cos(angle - fov / 2) * length, 0.035, origin.z + Math.sin(angle - fov / 2) * length);
   const p2 = new THREE.Vector3(origin.x + Math.cos(angle + fov / 2) * length, 0.035, origin.z + Math.sin(angle + fov / 2) * length);
   const geometry = new THREE.BufferGeometry().setFromPoints([origin, p1, p2]);
@@ -4848,6 +5339,7 @@ function makeCameraConeMesh(origin, angle, fov, length) {
   const centerLine = lineFromPoints([origin, center], new THREE.LineDashedMaterial({ color: "#a6ddff", dashSize: 0.1, gapSize: 0.16, transparent: true, opacity: 0.5 }));
   centerLine.computeLineDistances();
   group.add(centerLine);
+  group.traverse(markGuide);
   return group;
 }
 
@@ -4879,22 +5371,13 @@ function renderCameraFramePreview(renderState = state, options = {}) {
   }
   const canvasWidth = Math.max(1, threeView.frameCanvas.width);
   const canvasHeight = Math.max(1, threeView.frameCanvas.height);
-
   // Keep the camera frame independent from editor guides, handles, and the viewport camera.
   clearThreePreviewWorld();
-  const previewSize = stageWorldSize(renderState);
-  const previewFloor = new window.THREE.Mesh(
-    new window.THREE.PlaneGeometry(previewSize.width, previewSize.depth),
-    new window.THREE.MeshStandardMaterial({
-      color: "#1a2229",
-      roughness: 0.88,
-      metalness: 0.02,
-      side: window.THREE.DoubleSide,
-    }),
-  );
-  previewFloor.rotation.x = -Math.PI / 2;
-  previewFloor.receiveShadow = true;
-  threeView.previewWorld.add(previewFloor);
+  // The camera frame is a compositing preview, not a second stage viewport.
+  // Keep its WebGL layer transparent and draw authored 3D subjects/props over
+  // a neutral floor. The stage grid, border, labels, and motion paths belong
+  // to the editable 3D view, not this camera frame.
+  threeView.previewWorld.add(makeCameraPreviewFloor(renderState));
   renderState.items
     .filter((item) => item.visible !== false)
     .forEach((item) => {
@@ -4908,8 +5391,12 @@ function renderCameraFramePreview(renderState = state, options = {}) {
   threeView.previewWorld.updateMatrixWorld(true);
   threeView.previewScene.updateMatrixWorld(true);
   const layout = multi ? cameraPreviewGridLayout(visibleProfiles.length) : { columns: 1, rows: 1 };
+  // Explicitly clear the transparent renderer on every refresh so stale pixels
+  // from a previous camera frame cannot remain in the color buffer.
+  threeView.frameRenderer.setScissorTest(false);
+  threeView.frameRenderer.setViewport(0, 0, canvasWidth, canvasHeight);
+  threeView.frameRenderer.clear(true, true, true);
   threeView.frameRenderer.setScissorTest(multi);
-  if (multi) threeView.frameRenderer.clear(true, true, true);
   visibleProfiles.forEach((profile, index) => {
     const profileState = cameraPreviewDocument(renderState, profile.id);
     const camera = profileState.camera;
@@ -4945,6 +5432,25 @@ function cameraPreviewGridLayout(count) {
   if (count <= 1) return { columns: 1, rows: 1 };
   if (count === 2) return { columns: 2, rows: 1 };
   return { columns: 2, rows: 2 };
+}
+
+function makeCameraPreviewFloor(renderState = state) {
+  const THREE = window.THREE;
+  const size = stageWorldSize(renderState);
+  const span = Math.max(size.width, size.depth) * 3;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(span, span),
+    new THREE.MeshStandardMaterial({
+      color: "#202a31",
+      roughness: 0.94,
+      metalness: 0.01,
+      side: THREE.DoubleSide,
+    }),
+  );
+  floor.name = "frisframe:camera-preview-floor";
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  return floor;
 }
 
 function renderCameraFrameLabels(profiles, multi, layout) {
@@ -5005,32 +5511,25 @@ function drawThreeMotionPaths(renderState, world) {
     const keys = keyframes.filter((keyframe) => keyframe.source === source.id);
     if (!keys.length) return;
     if (keys.length > 1) {
-      const rail = source.id === "camera" && renderState.motion?.cameraRail?.enabled
-        ? sceneBlockingCore.buildCameraRail(keys)
-        : null;
-      const poses = rail?.length > 1
-        ? rail.map((point) => ({ x: point.x, y: point.y, height: point.height }))
-        : sampleMotionPathPoses(renderState, source.id, keys);
+      // The authored segment sampler is the source of truth. A Catmull-Rom
+      // pass here used to bend straight/axis paths and could overshoot an arc
+      // or an authored height change, so the 3D guide did not match playback/export.
+      const poses = sampleMotionPathPoses(renderState, source.id, keys);
       const points = poses.map((pose) => mapToWorld(
         pose,
         renderState,
         source.id === "camera" ? Number(pose.height ?? renderState.camera.height ?? 1.6) : 0.08,
       ));
-      const curveType = source.id === "camera"
-        ? (renderState.motion?.cameraRail?.smoothing || "centripetal")
-        : "centripetal";
-      const curve = new THREE.CatmullRomCurve3(points, false, curveType, 0.5);
-      const path = new THREE.Mesh(
-        new THREE.TubeGeometry(curve, Math.max(18, points.length - 1), 0.035, 7, false),
-        new THREE.MeshBasicMaterial({ color: source.color, transparent: true, opacity: 0.84 }),
-      );
-      path.userData.previewHidden = true;
-      world.add(path);
-      [0.28, 0.56, 0.82].forEach((progress) => {
-        const marker = makeThreePathDirectionMarker(curve, progress, source.color);
-        marker.userData.previewHidden = true;
-        world.add(marker);
-      });
+      const exactPath = makeThreeExactPath(points, source.color);
+      if (exactPath) {
+        exactPath.path.userData.previewHidden = true;
+        world.add(exactPath.path);
+        [0.28, 0.56, 0.82].forEach((progress) => {
+          const marker = makeThreePathDirectionMarker(exactPath.curve, progress, source.color);
+          marker.userData.previewHidden = true;
+          world.add(marker);
+        });
+      }
     }
     keys.forEach((keyframe, index) => {
       const markerHeight = source.id === "camera"
@@ -5053,6 +5552,97 @@ function drawThreeMotionPaths(renderState, world) {
       world.add(label);
     });
   });
+  drawThreeFreeCurveHandle(renderState, world);
+}
+
+function drawThreeFreeCurveHandle(renderState, world) {
+  const THREE = window.THREE;
+  const keyframes = sortKeyframes(renderState.motion?.keyframes || []);
+  const segment = selectedFreeCurveSegment(renderState, keyframes);
+  if (!segment?.control) return;
+  const source = sourceDefinition(segment.keyframe.source, renderState);
+  if (!source) return;
+
+  const start = mapToWorld(segment.previous.pose, renderState, 0.08);
+  const control = mapToWorld(segment.control, renderState, 0.22);
+  const end = mapToWorld(segment.keyframe.pose, renderState, 0.08);
+  const guide = lineFromPoints(
+    [start, control, end],
+    new THREE.LineBasicMaterial({
+      color: source.color,
+      transparent: true,
+      opacity: 0.78,
+      depthTest: false,
+    }),
+  );
+  guide.userData.previewHidden = true;
+  guide.renderOrder = 24;
+  world.add(guide);
+
+  const handle = new THREE.Group();
+  handle.name = `freeCurveHandle:${segment.keyframe.id}`;
+  handle.userData.previewHidden = true;
+  handle.userData.freeCurveHandle = { keyframeId: segment.keyframe.id };
+  const outer = new THREE.Mesh(
+    new THREE.TorusGeometry(0.34, 0.045, 10, 32),
+    new THREE.MeshBasicMaterial({ color: "#f5ffff", transparent: true, opacity: 0.98, depthTest: false }),
+  );
+  outer.userData.previewHidden = true;
+  outer.userData.freeCurveHandle = { keyframeId: segment.keyframe.id };
+  outer.rotation.x = Math.PI / 2;
+  outer.renderOrder = 26;
+  const point = new THREE.Mesh(
+    new THREE.SphereGeometry(0.19, 20, 14),
+    new THREE.MeshBasicMaterial({ color: source.color, transparent: true, opacity: 1, depthTest: false }),
+  );
+  point.userData.previewHidden = true;
+  point.userData.freeCurveHandle = { keyframeId: segment.keyframe.id };
+  point.renderOrder = 27;
+  handle.position.copy(control);
+  handle.add(outer, point);
+  world.add(handle);
+}
+
+function makeThreeExactPath(points, color) {
+  const THREE = window.THREE;
+  const safePoints = (Array.isArray(points) ? points : []).filter((point) => (
+    point && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z)
+  ));
+  if (safePoints.length < 2) return null;
+  const segments = [];
+  let total = 0;
+  for (let index = 1; index < safePoints.length; index += 1) {
+    const start = safePoints[index - 1];
+    const end = safePoints[index];
+    const length = start.distanceTo(end);
+    if (length < 0.000001) continue;
+    segments.push({ start, end, length, from: total });
+    total += length;
+  }
+  if (!segments.length || total < 0.000001) return null;
+  const pointAt = (progress) => {
+    const target = clamp(Number(progress), 0, 1) * total;
+    const segment = segments.find((entry) => target <= entry.from + entry.length) || segments.at(-1);
+    const local = clamp((target - segment.from) / segment.length, 0, 1);
+    return new THREE.Vector3(
+      segment.start.x + (segment.end.x - segment.start.x) * local,
+      segment.start.y + (segment.end.y - segment.start.y) * local,
+      segment.start.z + (segment.end.z - segment.start.z) * local,
+    );
+  };
+  const tangentAt = (progress) => {
+    const target = clamp(Number(progress), 0, 1) * total;
+    const segment = segments.find((entry) => target <= entry.from + entry.length) || segments.at(-1);
+    return new THREE.Vector3(
+      segment.end.x - segment.start.x,
+      segment.end.y - segment.start.y,
+      segment.end.z - segment.start.z,
+    ).normalize();
+  };
+  return {
+    path: lineFromPoints(safePoints, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.92 })),
+    curve: { getPointAt: pointAt, getTangentAt: tangentAt },
+  };
 }
 
 function guideKeysForSource(renderState, sourceId) {
@@ -5076,7 +5666,7 @@ function analyzeBlockingGuide(renderState = state) {
   const time = clamp(Number(renderState.motion?.playhead || 0), 0, renderState.motion?.duration || 0);
   const sources = visibleSourceDefinitions(renderState);
   const cameraEntry = guideMotionEntry(renderState, sources.find((source) => source.id === "camera") || {
-    id: "camera", type: "camera", name: "카메라", color: "#69c9ff",
+    id: "camera", type: "camera", name: "카메라", color: SOURCE_COLOR_PALETTES.camera[0],
   }, time);
   const itemEntries = sources
     .filter((source) => source.id !== "camera")
@@ -5287,7 +5877,7 @@ function makeThreeKeyOrderBadge(number, color, active = false) {
   const context = labelCanvas.getContext("2d");
   context.beginPath();
   context.arc(48, 48, 35, 0, Math.PI * 2);
-  context.fillStyle = active ? "#ff6b55" : color;
+  context.fillStyle = color;
   context.fill();
   context.lineWidth = 8;
   context.strokeStyle = active ? "#fff2ed" : "#11131a";
@@ -5318,6 +5908,18 @@ function updateThreeCamera(renderState = state) {
   threeView.camera.lookAt(target.x, target.y, target.z);
 }
 
+function focusThreeViewOnCamera(renderState = state) {
+  if (!threeView?.ready || !renderState?.camera) return;
+  const cameraGround = mapToWorld(renderState.camera, renderState, 0);
+  const cameraHeight = clamp(Number(renderState.camera.height || 1.6), 0.4, 35);
+  const target = threeView.orbit.target || new window.THREE.Vector3();
+  target.set(cameraGround.x, Math.max(0.7, Math.min(1.3, cameraHeight * 0.5)), cameraGround.z);
+  threeView.orbit.target = target;
+  threeView.orbit.theta = -0.62;
+  threeView.orbit.phi = 0.5;
+  threeView.orbit.radius = clamp(24, THREE_ORBIT_RADIUS_MIN, THREE_ORBIT_RADIUS_MAX);
+}
+
 function beginThreeDrag(event) {
   if (!threeView?.ready) return;
   delete threeView.canvas.dataset.navMode;
@@ -5334,6 +5936,47 @@ function beginThreeDrag(event) {
   }
 
   let editor = forceNav ? null : pickThreeEditor(event);
+  if (editor?.kind === "cameraFovGuide") {
+    // Clicking or dragging the floor FOV guide must not orbit the 3D editor
+    // and must not alter the authored camera. Only the camera body/base is a
+    // direct manipulation target.
+    event.preventDefault();
+    return;
+  }
+  if (editor?.kind === "freeCurveHandle") {
+    const keyframe = state.motion.keyframes.find((entry) => entry.id === editor.keyframeId);
+    if (!keyframe || pathModeForSegment(keyframe.segment, keyframe.source) !== "free-curve") return;
+    if (sourceSpatialLocked(keyframe.source)) {
+      notifyEditLocked(sourceLabel(keyframe.source));
+      return;
+    }
+    const visibleState = currentInteractionFrame();
+    const previous = keysForSource(keyframe.source)
+      .find((entry) => entry.time < keyframe.time - 0.001);
+    const control = freeCurveControlForSegment(keyframe.segment, previous?.pose, keyframe.pose, visibleState);
+    if (!control) return;
+    keyframe.segment.plan.control = clone(control);
+    setActiveSource(keyframe.source);
+    selectSourceOnStage(keyframe.source);
+    setTimelineSelection([keyframe.id], keyframe.id);
+    evaluatedViewState = visibleState;
+    const point = projectThreePointerToPlane(event, 0) || mapToWorld(control, visibleState, 0);
+    const pointerStage = worldToStage(point, visibleState);
+    threeDrag = {
+      kind: "freeCurve",
+      pointerId: event.pointerId,
+      keyframeId: keyframe.id,
+      startState: clone(state),
+      pending: false,
+      changed: false,
+      grabOffset: { x: control.x - pointerStage.x, y: control.y - pointerStage.y },
+    };
+    event.preventDefault();
+    threeView.canvas.setPointerCapture(event.pointerId);
+    syncUi(false);
+    renderThreeView(visibleState, true);
+    return;
+  }
   if (editor) {
     if (editor.kind === "camera" && editor.profileId && editor.profileId !== state.activeCameraId) {
       switchActiveCamera(editor.profileId);
@@ -5394,7 +6037,16 @@ function beginThreeDrag(event) {
     // evaluated playhead frame between keys.
     const visibleState = currentInteractionFrame();
     evaluatedViewState = visibleState;
-    const editItemId = editor.kind === "item" ? transformLeaderIdForItem(editor.id, state) : null;
+    const editorItem = editor.kind === "item"
+      ? state.items.find((item) => item.id === editor.id)
+      : null;
+    const detachableActorId = editorItem?.type === "actor"
+      && (isAutoMountedActor(editorItem) || editorItem.seatMatchBlocked === true)
+      ? editorItem.id
+      : null;
+    const editItemId = editor.kind === "item"
+      ? (detachableActorId || transformLeaderIdForItem(editor.id, state))
+      : null;
     const locked = editor.kind === "camera"
       ? cameraFieldLocked(threeEditMode === "rotate" ? "orientation" : "position")
       : sourceEditLocked(editItemId);
@@ -5406,13 +6058,20 @@ function beginThreeDrag(event) {
     }
     const editStartState = clone(state);
     const pose = editor.kind === "item"
-      ? visibleState.items.find((item) => item.id === editItemId)
-        || state.items.find((item) => item.id === editItemId)
+      ? resolvedItemPose(
+        visibleState.items.find((item) => item.id === editItemId)
+          || state.items.find((item) => item.id === editItemId),
+        visibleState,
+      )
       : visibleState.camera || state.camera;
     if (!pose) return;
-    const planeHeight = editor.kind === "camera" ? pose.height : 0;
-    const point = projectThreePointerToPlane(event, planeHeight);
-    const pointerStage = point ? worldToStage(point) : { x: pose.x, y: pose.y };
+    // Camera x/y are stage-ground coordinates. The visible rig is elevated,
+    // but projecting the pointer onto camera.height makes a grab on the floor
+    // ring miss or calculate an unusable offset after a reset.
+    const planeHeight = 0;
+    const point = projectThreePointerToPlane(event, planeHeight)
+      || mapToWorld(pose, visibleState, 0);
+    const pointerStage = worldToStage(point, visibleState);
     const cameraOffset = editor.kind === "camera"
       ? editor.fieldOffset || { x: 0, y: 0 }
       : { x: 0, y: 0 };
@@ -5425,6 +6084,7 @@ function beginThreeDrag(event) {
       pointerId: event.pointerId,
       editor,
       editItemId,
+      detachableActorId,
       startState: editStartState,
       pending: true,
       startClientX: event.clientX,
@@ -5458,14 +6118,39 @@ function beginThreeDrag(event) {
   threeView.canvas.setPointerCapture(event.pointerId);
 }
 
+function updateThreeFreeCurveDrag(event) {
+  const keyframe = state.motion.keyframes.find((entry) => entry.id === threeDrag?.keyframeId);
+  if (!keyframe || pathModeForSegment(keyframe.segment, keyframe.source) !== "free-curve") return;
+  const visibleState = threeDrag.renderState || currentInteractionFrame();
+  const point = projectThreePointerToPlane(event, 0);
+  if (!point) return;
+  const pointerStage = worldToStage(point, visibleState);
+  keyframe.segment.plan.control = {
+    x: clamp(pointerStage.x + finiteNumber(threeDrag.grabOffset?.x, 0), 0.02, 0.98),
+    y: clamp(pointerStage.y + finiteNumber(threeDrag.grabOffset?.y, 0), 0.02, 0.98),
+  };
+  threeDrag.changed = true;
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  syncUi(false);
+  renderThreeView(evaluatedViewState, true);
+}
+
 function updateThreeDrag(event) {
   if (!threeDrag || event.pointerId !== threeDrag.pointerId || !threeView?.ready) return;
+  if (threeDrag.kind === "freeCurve") {
+    updateThreeFreeCurveDrag(event);
+    return;
+  }
   if (threeDrag.kind === "edit") {
     if (threeDrag.pending) {
       const moved = Math.hypot(event.clientX - threeDrag.startClientX, event.clientY - threeDrag.startClientY);
       if (moved < DIRECT_MANIPULATION_THRESHOLD_PX) return;
       if (threeDrag.editor.kind === "camera") prepareCameraDragPreview(threeDrag);
-      else materializeEvaluatedViewForEditing(threeDrag.editItemId);
+      else if (threeDrag.detachableActorId) {
+        prepareActorForDirectManipulation(threeDrag.detachableActorId);
+        setActiveSource(threeDrag.detachableActorId);
+        selectKeyForSource(threeDrag.detachableActorId);
+      } else materializeEvaluatedViewForEditing(threeDrag.editItemId);
       threeDrag.pending = false;
     }
     updateThreeEditorDrag(event);
@@ -5505,7 +6190,7 @@ function updateThreeDrag(event) {
 
 function endThreeDrag(event) {
   if (!threeDrag || event.pointerId !== threeDrag.pointerId) return;
-  const didEdit = ["edit", "pose"].includes(threeDrag.kind) && threeDrag.changed;
+  const didEdit = ["edit", "pose", "freeCurve"].includes(threeDrag.kind) && threeDrag.changed;
   threeView?.canvas.releasePointerCapture?.(event.pointerId);
   if (threeView?.canvas) delete threeView.canvas.dataset.navMode;
 
@@ -5529,7 +6214,7 @@ function cancelThreeDrag(event) {
   threeView?.canvas.releasePointerCapture?.(event.pointerId);
   if (threeView?.canvas) delete threeView.canvas.dataset.navMode;
   threeDrag = null;
-  if (["edit", "pose"].includes(cancelled.kind) && cancelled.startState && !cancelled.pending) {
+  if (["edit", "pose", "freeCurve"].includes(cancelled.kind) && cancelled.startState && !cancelled.pending) {
     restoreUncommittedState(cancelled.startState);
     renderThreeView(state, true);
   }
@@ -5545,8 +6230,70 @@ function zoomThreeView(event) {
 function pickThreeEditor(event) {
   const pointer = threePointer(event);
   if (!pointer || !threeView?.raycaster) return null;
+  const rect = threeView.canvas.getBoundingClientRect();
   threeView.raycaster.setFromCamera(pointer, threeView.camera);
   const hits = threeView.raycaster.intersectObjects(threeView.world.children, true);
+  // Free-curve handles have priority over the camera FOV guide. The guide is
+  // deliberately broad and can overlap the authored control point in screen
+  // space; checking it first made a visible handle feel impossible to grab.
+  for (const hit of hits) {
+    let object = hit.object;
+    while (object && object !== threeView.world) {
+      if (object.userData?.freeCurveHandle?.keyframeId) {
+        return {
+          kind: "freeCurveHandle",
+          keyframeId: object.userData.freeCurveHandle.keyframeId,
+        };
+      }
+      object = object.parent;
+    }
+  }
+  // Keep the handle draggable when its small mesh is clipped by the canvas
+  // edge or covered by a transparent preview overlay. The selected segment's
+  // projected control point is a narrow, explicit fallback hit area; it does
+  // not broaden ordinary object selection.
+  const renderState = threeView.lastState || evaluatedViewState || state;
+  const selectedSegment = selectedFreeCurveSegment(renderState, sortKeyframes(renderState.motion?.keyframes || []));
+  if (selectedSegment?.control) {
+    const controlWorld = mapToWorld(selectedSegment.control, renderState, 0.22);
+    const projected = controlWorld.clone().project(threeView.camera);
+    const screenX = rect.left + (projected.x * 0.5 + 0.5) * rect.width;
+    const screenY = rect.top + (-projected.y * 0.5 + 0.5) * rect.height;
+    if (projected.z >= -1 && projected.z <= 1 && Math.hypot(event.clientX - screenX, event.clientY - screenY) <= 54) {
+      return {
+        kind: "freeCurveHandle",
+        keyframeId: selectedSegment.keyframe.id,
+      };
+    }
+  }
+  const firstHit = hits[0]?.object;
+  let guideObject = firstHit;
+  while (guideObject && guideObject !== threeView.world) {
+    if (guideObject.userData?.cameraFovGuide) return { kind: "cameraFovGuide" };
+    guideObject = guideObject.parent;
+  }
+  // Camera rigs are resolved from the screen anchor below, then from the
+  // normal raycast so other 3D editors remain selectable.
+  const cameraScreenHits = threeView.world.children
+    .filter((entry) => entry.userData?.editor?.kind === "camera" && entry.userData?.cameraPickPosition)
+    .map((entry) => {
+      const projected = entry.userData.cameraPickPosition.clone().project(threeView.camera);
+      const screenX = rect.left + (projected.x * 0.5 + 0.5) * rect.width;
+      const screenY = rect.top + (-projected.y * 0.5 + 0.5) * rect.height;
+      return {
+        entry,
+        distance: Math.hypot(event.clientX - screenX, event.clientY - screenY),
+      };
+    })
+    // Include the body, support, base and selection ring as one forgiving
+    // target. Their projected centers differ vertically because the body is
+    // elevated above the ground anchor.
+    .filter((hit) => hit.distance <= 88)
+    .sort((a, b) => a.distance - b.distance || Number(b.entry === threeView.cameraRigHelper) - Number(a.entry === threeView.cameraRigHelper));
+  if (cameraScreenHits.length) {
+    const hit = cameraScreenHits[0].entry;
+    return { ...clone(hit.userData.editor), forceMode: "move" };
+  }
   for (const hit of hits) {
     let object = hit.object;
 
@@ -5674,7 +6421,9 @@ function projectThreePointerToPlane(event, height = 0) {
 
 function updateThreeEditorDrag(event) {
   const editor = threeDrag.editor;
-  const planeHeight = editor.kind === "camera" ? state.camera.height : 0;
+  // Camera x/y are authored on the stage floor; height only controls the rig's
+  // vertical display position and must not be used as the drag plane.
+  const planeHeight = 0;
   const point = projectThreePointerToPlane(event, planeHeight);
   if (!point) return;
   const pointerStage = worldToStage(point);
@@ -5825,9 +6574,10 @@ function drawMotionPaths(renderState, rect) {
 }
 
 function blockingGuideColor(source) {
-  if (source?.id === "camera" || source?.type === "camera") return "#69c9ff";
-  if (source?.type === "prop") return "#ffc66d";
-  return "#56dfd0";
+  if (/^#[0-9a-f]{6}$/i.test(String(source?.color || ""))) return source.color;
+  if (source?.id === "camera" || source?.type === "camera") return SOURCE_COLOR_PALETTES.camera[0];
+  if (source?.type === "prop") return SOURCE_COLOR_PALETTES.prop[0];
+  return SOURCE_COLOR_PALETTES.actor[0];
 }
 
 function pointAlongPlanPath(points, progress) {
@@ -6038,7 +6788,7 @@ function drawPathOrderBadge(point, number, color, active, rect) {
   ctx.moveTo(point.x, point.y);
   ctx.lineTo(center.x, center.y);
   ctx.stroke();
-  ctx.fillStyle = active ? "#ff6b55" : color;
+  ctx.fillStyle = color;
   ctx.strokeStyle = active ? "#fff2ed" : "#11131a";
   ctx.lineWidth = active ? 3 : 2;
   ctx.beginPath();
@@ -6067,16 +6817,30 @@ function selectedFreeCurveSegment(renderState = state, keyframes = renderState.m
   const keys = sortKeyframes(keyframes.filter((keyframe) => keyframe.source === current.source));
   const index = keys.findIndex((keyframe) => keyframe.id === current.id);
   if (index <= 0) return null;
-  return { keyframe: current, previous: keys[index - 1], control: current.segment?.plan?.control };
+  return {
+    keyframe: current,
+    previous: keys[index - 1],
+    control: freeCurveControlForSegment(current.segment, keys[index - 1].pose, current.pose, renderState),
+  };
+}
+
+function freeCurveControlForSegment(segment, startPose, endPose, renderState = state) {
+  const control = segment?.plan?.control;
+  if (Number.isFinite(Number(control?.x)) && Number.isFinite(Number(control?.y))) {
+    return { x: Number(control.x), y: Number(control.y) };
+  }
+  if (!startPose || !endPose) return null;
+  return defaultFreeCurveControl(startPose, endPose, renderState);
 }
 
 function drawSelectedFreeCurveHandle(renderState, keyframes, rect) {
   const segment = selectedFreeCurveSegment(renderState, keyframes);
   if (!segment?.control) return;
+  const color = sourceColor(segment.keyframe.source, renderState);
   const start = toCanvas(segment.previous.pose, rect);
   const end = toCanvas(segment.keyframe.pose, rect);
   const control = toCanvas(segment.control, rect);
-  ctx.strokeStyle = "rgba(255, 107, 85, 0.48)";
+  ctx.strokeStyle = hexToRgba(color, 0.48);
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
@@ -6085,7 +6849,7 @@ function drawSelectedFreeCurveHandle(renderState, keyframes, rect) {
   ctx.lineTo(end.x, end.y);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "#ff6b55";
+  ctx.fillStyle = color;
   ctx.strokeStyle = "#121217";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -6161,10 +6925,10 @@ function drawGrid(rect, renderState = state) {
 }
 
 function spatialGuideColor(kind) {
-  if (kind === "actor" || kind === "person") return "#58d7ca";
-  if (kind === "prop" || kind === "object") return "#f2bd62";
-  if (kind === "camera") return "#71b8ff";
-  return "#d6a95c";
+  if (kind === "actor" || kind === "person") return SOURCE_COLOR_PALETTES.actor[0];
+  if (kind === "prop" || kind === "object") return SOURCE_COLOR_PALETTES.prop[0];
+  if (kind === "camera") return SOURCE_COLOR_PALETTES.camera[0];
+  return SOURCE_COLOR_PALETTES.background[0];
 }
 
 function drawSpatialGuideAnchors(renderState = state, rect = stageRect) {
@@ -6205,7 +6969,7 @@ function drawSpatialGuideAnchors(renderState = state, rect = stageRect) {
   });
 }
 
-function drawCameraCone(camera, rect, clean = false, renderState = state, color = "#6ba9f4", active = false) {
+function drawCameraCone(camera, rect, clean = false, renderState = state, color = SOURCE_COLOR_PALETTES.camera[0], active = false) {
   const cam = toCanvas({ x: camera.x, y: camera.y }, rect);
   const angle = degToRad(camera.panDeg);
   const fov = degToRad(focalToFov(camera.focal, cameraSensorWidth(renderState)));
@@ -6242,7 +7006,7 @@ function drawCameraCone(camera, rect, clean = false, renderState = state, color 
   ctx.restore();
 }
 
-function drawCamera(camera, rect, clean = false, color = "#71b8ff", active = false, label = "카메라") {
+function drawCamera(camera, rect, clean = false, color = SOURCE_COLOR_PALETTES.camera[0], active = false, label = "카메라") {
   const cam = toCanvas({ x: camera.x, y: camera.y }, rect);
   const angle = degToRad(camera.panDeg);
 
@@ -6276,7 +7040,7 @@ function drawCameraRotationIndicator(
   active,
   clean = false,
   rect = stageRect,
-  color = "#71b8ff",
+  color = SOURCE_COLOR_PALETTES.camera[0],
   label = "카메라",
 ) {
   const radius = active ? 30 : 27;
@@ -7100,7 +7864,11 @@ function updateCurveHandleDrag(point) {
   const target = fromCanvas(point);
   keyframe.segment.plan.control = target;
   curveHandleDrag.changed = true;
-  draw();
+  // The visible frame can be an evaluated snapshot between authored keys.
+  // Rebuild it from the edited document so the curve and its handle respond
+  // during the drag instead of appearing frozen until pointer-up.
+  evaluatedViewState = interpolateStateAtTime(state.motion.playhead);
+  draw(evaluatedViewState);
 }
 
 function beginStagePan(event) {
@@ -7205,14 +7973,25 @@ canvas.addEventListener("pointerdown", (event) => {
       setActiveSource(sourceId);
       selectKeyForSource(sourceId);
     }
-    const editItemId = hit.kind === "item" ? transformLeaderIdForItem(hit.id, state) : null;
+    const hitItem = hit.kind === "item" || hit.kind === "facing"
+      ? state.items.find((entry) => entry.id === hit.id)
+      : null;
+    const detachableActorId = hitItem?.type === "actor"
+      && (isAutoMountedActor(hitItem) || hitItem.seatMatchBlocked === true)
+      ? hitItem.id
+      : null;
+    const editItemId = hit.kind === "item"
+      ? (detachableActorId || transformLeaderIdForItem(hit.id, state))
+      : null;
+    const lockTargetId = detachableActorId || editItemId || hit.id;
     const locked = hit.kind === "camera"
       ? cameraFieldLocked("position")
-      : sourceEditLocked(editItemId);
+      : sourceEditLocked(lockTargetId);
     const editStartState = clone(state);
     drag = locked ? null : {
       selection: clone(hit),
       editItemId,
+      detachableActorId,
       startState: editStartState,
       pointerId: event.pointerId,
       pending: true,
@@ -7220,13 +7999,13 @@ canvas.addEventListener("pointerdown", (event) => {
       startClientY: event.clientY,
       transaction: sceneBlockingCore.createTargetTransaction({
         owner: hit.kind === "camera" ? "camera-drag" : "object-drag",
-        targetIds: [hit.kind === "camera" ? "camera" : editItemId || hit.id],
+        targetIds: [hit.kind === "camera" ? "camera" : lockTargetId],
         before: editStartState,
         clone,
       }),
     };
     if (drag) canvas.setPointerCapture(event.pointerId);
-    else notifyEditLocked(hit.kind === "camera" ? "카메라 위치" : sourceLabel(editItemId));
+    else notifyEditLocked(hit.kind === "camera" ? "카메라 위치" : sourceLabel(lockTargetId));
   } else {
     selected = { kind: "camera" };
   }
@@ -7250,7 +8029,11 @@ canvas.addEventListener("pointermove", (event) => {
     const moved = Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY);
     if (moved < DIRECT_MANIPULATION_THRESHOLD_PX) return;
     if (drag.selection.kind === "camera") prepareCameraDragPreview(drag);
-    else materializeEvaluatedViewForEditing(drag.editItemId);
+    else if (drag.detachableActorId) {
+      prepareActorForDirectManipulation(drag.detachableActorId);
+      setActiveSource(drag.detachableActorId);
+      selectKeyForSource(drag.detachableActorId);
+    } else materializeEvaluatedViewForEditing(drag.editItemId);
     drag.pending = false;
   }
   const normalized = fromCanvas(point);
@@ -8224,7 +9007,7 @@ function runManualAction(action) {
       setViewMode("2d");
       const actor = state.items.find((item) => item.type === "actor");
       if (!actor) {
-        notifyApp("배우를 추가한 뒤 탑승 설정을 열 수 있습니다.");
+        notifyApp("배우를 추가한 뒤 행동 연결 설정을 열 수 있습니다.");
         return;
       }
       selected = { kind: "item", id: actor.id };
@@ -9382,7 +10165,7 @@ function renderObjectList(selector, type) {
         <span class="dot" style="background:${item.color}; opacity: ${isVisible ? 1.0 : 0.35}"></span>
         <span class="object-row-name" style="opacity: ${isVisible ? 1.0 : 0.35}">
           <span>${index + 1}. @ ${escapeHtml(item.name)}</span>
-          ${item.type === "prop" ? `<small>${escapeHtml(propDefinition(item.assetType).label)}${item.motionEnabled === false ? " · 고정" : ""}${item.editLocked ? " · 잠김" : ""}${groupForItem(item.id) ? " · 묶음" : ""}</small>` : item.placementMode === "auto" && item.mountId ? `<small>자동 탑승${item.editLocked ? " · 잠김" : ""}</small>` : groupForItem(item.id) ? `<small>수동 묶음${item.editLocked ? " · 잠김" : ""}</small>` : item.editLocked ? `<small>편집 잠김</small>` : ""}
+          ${item.type === "prop" ? `<small>${escapeHtml(propDefinition(item.assetType).label)}${item.motionEnabled === false ? " · 고정" : ""}${item.editLocked ? " · 잠김" : ""}${groupForItem(item.id) ? " · 묶음" : ""}</small>` : item.placementMode === "auto" && item.mountId ? `<small>행동 연결${item.editLocked ? " · 잠김" : ""}</small>` : groupForItem(item.id) ? `<small>대상 묶음${item.editLocked ? " · 잠김" : ""}</small>` : item.editLocked ? `<small>편집 잠김</small>` : ""}
         </span>
         <button type="button" class="visibility-toggle-btn" aria-label="${escapeHtml(item.name)} ${isVisible ? "감추기" : "보이기"}" title="${isVisible ? "감추기" : "보이기"}" style="display: inline-flex; align-items: center; justify-content: center; opacity: ${isVisible ? 1.0 : 0.55}">
           <i data-lucide="${isVisible ? "eye" : "eye-off"}" aria-hidden="true" style="width: 14px; height: 14px;"></i>
@@ -9450,10 +10233,11 @@ function renderProperties(updateInputs) {
   ["#selectedName", "#sizeSlider", "#sizeValue", "#selectedPropAsset", "#selectedActorDummy", "#propMotionToggle",
     "#propScaleX", "#propScaleXValue", "#propScaleY", "#propScaleYValue", "#propScaleZ", "#propScaleZValue",
     "#propElevationSlider", "#propElevationValue",
-    "#actorPlacementMode", "#actorMountSelect", "#actorSeatSelect", "#actorElevationSlider", "#actorElevationValue",
+    "#actorElevationSlider", "#actorElevationValue",
     "#actorPitchSlider", "#actorPitchValue",
     "#facingSlider", "#facingValue",
-    "#groupOverlapBtn", "#ungroupBtn", "#duplicateBtn", "#deleteBtn"].forEach((selector) => {
+    "#groupOverlapBtn", "#ungroupBtn", "#actorMountSelect", "#actorInteractionSelect", "#actorSeatSelect", "#actorMountApplyBtn",
+    "#actorDetachMountBtn", "#duplicateBtn", "#deleteBtn"].forEach((selector) => {
     const control = $(selector);
     if (control) control.disabled = locked;
   });
@@ -9488,8 +10272,7 @@ function renderProperties(updateInputs) {
     $("#propElevationSlider").value = elev;
     $("#propElevationValue").value = elev.toFixed(2);
   } else {
-    $("#actorPlacementMode").value = item.placementMode || "manual";
-    renderAutoMountControls(item, updateInputs);
+    renderActorMountStatus(item, locked);
     renderActorPoseControls(item, locked, updateInputs);
   }
   $("#manualGroupFields").hidden = item.type === "actor" && item.placementMode === "auto";
@@ -9501,7 +10284,7 @@ function renderProperties(updateInputs) {
 
   const swatches = $("#colorSwatches");
   swatches.innerHTML = "";
-  colors.forEach((color) => {
+  sourceColorPaletteForItem(item).forEach((color) => {
     const button = document.createElement("button");
     button.className = "swatch";
     button.style.background = color;
@@ -9576,29 +10359,98 @@ function renderManualGroupControls(item) {
   $("#ungroupBtn").disabled = !group;
 }
 
-function renderAutoMountControls(actor, updateInputs = true) {
-  const root = $("#autoMountFields");
-  const mountSelect = $("#actorMountSelect");
+function renderActorInteractionOptions(mountId = "", selectedInteractionId = "", selectedAnchorIndex = 0, locked = false) {
+  const interactionSelect = $("#actorInteractionSelect");
   const seatSelect = $("#actorSeatSelect");
-  const seatRow = $("#actorSeatRow");
-  const isAuto = actor.placementMode === "auto";
-  root.hidden = !isAuto;
-  if (!isAuto) return;
-  const vehicles = vehicleProps();
-  mountSelect.innerHTML = [
-    `<option value="">차량 선택</option>`,
-    ...vehicles.map((vehicle) => `<option value="${vehicle.id}">${escapeHtml(propDefinition(vehicle.assetType).label)} · @${escapeHtml(vehicle.name)}</option>`),
-  ].join("");
-  if (updateInputs || document.activeElement !== mountSelect) mountSelect.value = actor.mountId || "";
-  const vehicle = vehicles.find((entry) => entry.id === actor.mountId);
-  const seats = vehicle ? propDefinition(vehicle.assetType).seats || [] : [];
-  const occupiedSeats = new Set(state.items
-    .filter((item) => item.type === "actor" && item.id !== actor.id && item.placementMode === "auto" && item.mountId === actor.mountId)
-    .map((item) => Number(item.seatIndex || 0)));
-  seatRow.hidden = !vehicle || !seats.length;
-  seatSelect.innerHTML = seats.map((seat, index) => `<option value="${index}" ${occupiedSeats.has(index) ? "disabled" : ""}>${escapeHtml(seat.label)}${occupiedSeats.has(index) ? " · 사용 중" : ""}</option>`).join("");
-  if (seats.length && (updateInputs || document.activeElement !== seatSelect)) {
-    seatSelect.value = String(clamp(Number(actor.seatIndex || 0), 0, seats.length - 1));
+  if (!interactionSelect || !seatSelect) return;
+  const targetObject = state.items.find((entry) => entry.id === mountId && isInteractiveProp(entry));
+  const interactions = targetObject ? propInteractionDefinitions(targetObject.assetType) : [];
+  interactionSelect.innerHTML = "";
+  if (!interactions.length) {
+    const noInteraction = document.createElement("option");
+    noInteraction.value = "";
+    noInteraction.textContent = "행동을 선택하세요";
+    interactionSelect.append(noInteraction);
+    interactionSelect.disabled = true;
+  } else {
+    interactions.forEach((interaction) => {
+      const option = document.createElement("option");
+      option.value = interaction.id;
+      option.textContent = interaction.label;
+      interactionSelect.append(option);
+    });
+    interactionSelect.value = interactions.some((interaction) => interaction.id === selectedInteractionId)
+      ? selectedInteractionId
+      : interactions[0].id;
+    interactionSelect.disabled = locked;
+  }
+  const interaction = interactions.find((entry) => entry.id === interactionSelect.value) || interactions[0];
+  const anchors = Array.isArray(interaction?.anchors) ? interaction.anchors : [];
+  seatSelect.innerHTML = "";
+  if (!anchors.length) {
+    const noAnchor = document.createElement("option");
+    noAnchor.value = "";
+    noAnchor.textContent = "위치를 선택하세요";
+    seatSelect.append(noAnchor);
+    seatSelect.disabled = true;
+    return;
+  }
+  anchors.forEach((anchor, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = anchor.label;
+    seatSelect.append(option);
+  });
+  seatSelect.value = String(clamp(Number(selectedAnchorIndex || 0), 0, anchors.length - 1));
+  seatSelect.disabled = locked;
+}
+
+function renderActorMountStatus(actor, locked = false) {
+  const status = $("#actorMountStatus");
+  if (!status) return;
+  const mountSelect = $("#actorMountSelect");
+  const interactionSelect = $("#actorInteractionSelect");
+  const applyButton = $("#actorMountApplyBtn");
+  const detachButton = $("#actorDetachMountBtn");
+  const mounted = isAutoMountedActor(actor);
+  const mountedInteraction = interactionAnchorForActor(actor, state);
+
+  if (mountSelect) {
+    mountSelect.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "연결 안 함";
+    mountSelect.append(none);
+    interactiveProps(state).forEach((prop) => {
+      const option = document.createElement("option");
+      option.value = prop.id;
+      option.textContent = `${propDefinition(prop.assetType).label} · ${prop.name}`;
+      mountSelect.append(option);
+    });
+    mountSelect.value = mounted && mountedInteraction ? mountedInteraction.target.id : "";
+    mountSelect.disabled = locked;
+  }
+  renderActorInteractionOptions(
+    mountSelect?.value || "",
+    mounted ? actor.mountAction : "",
+    mounted ? actor.seatIndex : 0,
+    locked,
+  );
+
+  if (mounted && mountedInteraction) {
+    status.textContent = `${mountedInteraction.target.name} · ${mountedInteraction.interaction.label} · ${mountedInteraction.anchor.label}`;
+    status.dataset.mounted = "true";
+  } else {
+    status.textContent = "연결 안 함";
+    status.dataset.mounted = "false";
+  }
+  if (applyButton) applyButton.disabled = locked
+    || !mountSelect?.value
+    || !interactionSelect?.value
+    || !$("#actorSeatSelect")?.value;
+  if (detachButton) {
+    detachButton.hidden = !mounted;
+    detachButton.disabled = locked || !mounted;
   }
 }
 
@@ -9711,7 +10563,7 @@ function renderActorPoseControls(actor, locked, updateInputs = true) {
   $("#actorPoseKeyBtn").disabled = !canKeyPose;
   $("#actorPoseKeyBtn").querySelector("span").textContent = existing ? "포즈 키 갱신" : "포즈 키 추가";
   $("#actorPoseHint").textContent = actor.placementMode === "auto" && actor.mountId
-    ? "차량 탑승 중에는 포즈를 고정 편집할 수 있지만 독립 포즈 키는 추가되지 않습니다."
+    ? "행동 연결 중에는 포즈를 편집할 수 있지만 위치·방향은 선택한 행동 위치를 따라갑니다. 배우를 따로 움직이려면 연결 해제를 누르세요."
     : "현재 포즈는 배우 키프레임에 위치·방향과 함께 저장됩니다.";
 }
 
@@ -9926,6 +10778,10 @@ function renderKeyStatus(updateInputs = true) {
       : "이 키에 도착하는 이동 방식";
   }
   renderPathModeSelect(pathSelect, current, isFirstSourceKey, updateInputs);
+  if (pathSelect) {
+    pathSelect.disabled = Boolean(current && !isFirstSourceKey && currentLocked);
+    if (current && !isFirstSourceKey && currentLocked) pathSelect.title = "편집 잠금된 대상의 경로는 바꿀 수 없습니다.";
+  }
   if (instructionInput && (updateInputs || document.activeElement !== instructionInput)) {
     instructionInput.value = current?.note || "";
   }
@@ -10121,7 +10977,7 @@ function renderSourceSelect() {
     option.value = source.id;
     const item = state.items.find((entry) => entry.id === source.id);
     option.textContent = item?.type === "actor" && item.mountId
-      ? `${source.name} (탑승 연동)`
+      ? `${source.name} (행동 연결)`
       : sourceEditLocked(source.id) ? `${source.name} (잠김)`
         : item?.motionEnabled === false || isSourceHidden(source.id) ? `${source.name} (고정)` : source.name;
     select.append(option);
@@ -10424,6 +11280,14 @@ function resetCurrentStage() {
     blenderControls: previous.blenderControls,
     previs: clone(previous.previs || fresh.previs),
   };
+  // defaultState is intentionally a compact legacy-shaped document. Normalize
+  // it before committing so camera profiles and activeCameraId are restored as
+  // real editable state after a stage reset, not merely synthesized for render.
+  sanitizeState();
+  // The reset camera uses the canonical default position near the stage edge.
+  // Reframe the 3D editor so that camera is immediately visible and can be
+  // grabbed, including when reset is invoked while the workspace is in 2D.
+  focusThreeViewOnNextRender = true;
   evaluatedViewState = null;
   selected = { kind: "camera" };
   drag = null;
@@ -10677,7 +11541,7 @@ function addItem(type, rawName, assetType = "generic") {
     x: spawn.x,
     y: spawn.y,
     size: 1,
-    color: colors[(state.items.length + 2) % colors.length],
+    color: nextItemSourceColor(type, safeAssetType),
     shape: type === "prop" ? "square" : "circle",
     dummyType: type === "actor" ? "human" : safeAssetType,
     facing: 0,
@@ -10688,6 +11552,7 @@ function addItem(type, rawName, assetType = "generic") {
     scaleZ: 1,
     placementMode: "manual",
     mountId: "",
+    mountAction: "",
     seatIndex: 0,
     motionEnabled: true,
     editLocked: false,
@@ -10707,24 +11572,29 @@ $("#environmentPresetButtons").addEventListener("click", (event) => {
     .map((item) => item.id)
     .forEach((itemId) => removeItemById(itemId));
   const presetInstanceId = uid();
-  const added = preset.items.map(([assetType, name, x, y, facing, size, mountedHeight = 0]) => sanitizeItemPose({
-    id: uid(),
-    type: "prop",
-    name,
-    x,
-    y,
-    facing,
-    size,
-    color: defaultPropColor(assetType),
-    shape: "square",
-    assetType,
-    scaleX: 1,
-    scaleY: 1,
-    scaleZ: 1,
-    mountedHeight,
-    motionEnabled: true,
-    presetInstanceId,
-  }));
+  const colorDraftItems = [...state.items];
+  const added = preset.items.map(([assetType, name, x, y, facing, size, mountedHeight = 0]) => {
+    const item = sanitizeItemPose({
+      id: uid(),
+      type: "prop",
+      name,
+      x,
+      y,
+      facing,
+      size,
+      color: defaultPropColor(assetType, colorDraftItems),
+      shape: "square",
+      assetType,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+      mountedHeight,
+      motionEnabled: true,
+      presetInstanceId,
+    });
+    colorDraftItems.push(item);
+    return item;
+  });
   state.items.push(...added);
   state.spacePresetId = button.dataset.environmentPreset;
   selected = { kind: "item", id: added[0].id };
@@ -10733,15 +11603,8 @@ $("#environmentPresetButtons").addEventListener("click", (event) => {
   commit();
 });
 
-function defaultPropColor(assetType) {
-  const category = propDefinition(assetType).category;
-  if (category === "탈것") return "#5a8dff";
-  if (category === "자연") return "#65b96b";
-  if (category === "공간") return "#82909a";
-  if (category === "가전") return "#b8c3c9";
-  if (category === "가구") return "#d39b62";
-  if (category === "세트") return "#d9c3a1";
-  return "#65d66f";
+function defaultPropColor(assetType, items = state.items) {
+  return nextItemSourceColor("prop", assetType, items);
 }
 
 $("#selectedName").addEventListener("input", (event) => {
@@ -10869,7 +11732,7 @@ $("#selectedPropAsset").addEventListener("change", (event) => {
   materializeEvaluatedViewForEditing();
   const item = selectedItem();
   if (!item || item.type !== "prop" || !propCatalog[event.target.value]) return;
-  if (isVehicleProp(item) && propDefinition(event.target.value).kind !== "vehicle") {
+  if (isSeatProp(item) && !isSeatAsset(event.target.value)) {
     detachAutoMountedActors(item.id, state);
   }
   item.assetType = event.target.value;
@@ -10883,6 +11746,66 @@ $("#selectedActorDummy").addEventListener("change", (event) => {
   if (!item || item.type !== "actor" || !actorDummyCatalog[event.target.value]) return;
   item.dummyType = event.target.value;
   commit();
+});
+
+$("#actorMountSelect").addEventListener("change", (event) => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor") return;
+  const locked = sourceEditLocked(actor.id);
+  renderActorInteractionOptions(event.target.value, "", 0, locked);
+  $("#actorMountApplyBtn").disabled = locked
+    || !event.target.value
+    || !$("#actorInteractionSelect").value
+    || !$("#actorSeatSelect").value;
+});
+
+$("#actorInteractionSelect").addEventListener("change", (event) => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor") return;
+  const locked = sourceEditLocked(actor.id);
+  renderActorInteractionOptions($("#actorMountSelect").value, event.target.value, 0, locked);
+  $("#actorMountApplyBtn").disabled = locked
+    || !$("#actorMountSelect").value
+    || !event.target.value
+    || !$("#actorSeatSelect").value;
+});
+
+$("#actorMountApplyBtn").addEventListener("click", () => {
+  const actor = selectedItem();
+  const mountId = $("#actorMountSelect").value;
+  const interactionId = $("#actorInteractionSelect").value;
+  const anchorIndex = Number($("#actorSeatSelect").value);
+  if (!actor || actor.type !== "actor" || !mountId) return;
+  if (sourceEditLocked(actor.id)) {
+    notifyEditLocked(actor.name);
+    return;
+  }
+  const result = attachActorToInteraction(actor.id, mountId, interactionId, anchorIndex);
+  if (!result.ok) {
+    notifyApp(result.message);
+    return;
+  }
+  selected = { kind: "item", id: actor.id };
+  setActiveSource(mountId);
+  selectKeyForSource(mountId);
+  commit({ preserveSourceIds: [mountId] });
+  notifyApp(`${actor.name}을(를) ${result.targetObject.name}의 ${result.interaction.label} · ${result.anchor.label}에 배치했습니다.`);
+});
+
+$("#actorDetachMountBtn").addEventListener("click", () => {
+  const actor = selectedItem();
+  if (!actor || actor.type !== "actor" || !isAutoMountedActor(actor)) return;
+  if (sourceEditLocked(actor.id)) {
+    notifyEditLocked(actor.name);
+    return;
+  }
+  const visibleState = currentInteractionFrame();
+  if (!detachAutoMountedActor(actor.id, state, visibleState)) return;
+  selected = { kind: "item", id: actor.id };
+  setActiveSource(actor.id);
+  selectKeyForSource(actor.id);
+  commit({ preserveSourceIds: [actor.id] });
+  notifyApp(`${actor.name}의 ${actor.mountAction || "행동"} 연결을 해제했습니다.`);
 });
 
 $("#propMotionToggle").addEventListener("change", (event) => {
@@ -10921,63 +11844,6 @@ $("#propMotionToggle").addEventListener("change", (event) => {
     draw();
   });
   $("#propScale" + axis + "Value").addEventListener("change", finalizeLiveProjectInputEdit);
-});
-
-$("#actorPlacementMode").addEventListener("change", (event) => {
-  const actor = selectedItem();
-  if (!actor || actor.type !== "actor") return;
-  const nextMode = event.target.value === "auto" ? "auto" : "manual";
-  if (actor.placementMode !== nextMode
-    && !confirmKeyframeRemoval(actor.id, `${actor.name}의 탑승 방식을 바꿀까요?`, "배우의 독립 동선은 차량 또는 묶음 동선으로 전환됩니다.")) {
-    event.target.value = actor.placementMode || "manual";
-    return;
-  }
-  materializeEvaluatedViewForEditing();
-  if (actor.placementMode === "auto" && nextMode === "manual") {
-    const pose = resolvedItemPose(actor, state);
-    actor.x = pose.x;
-    actor.y = pose.y;
-    actor.facing = pose.facing;
-    actor.mountId = "";
-    actor.seatIndex = 0;
-  }
-  if (nextMode === "auto") {
-    const group = groupForItem(actor.id, state);
-    if (group) dissolveManualGroup(group.id, state);
-    actor.mountId = "";
-    actor.seatIndex = 0;
-  }
-  actor.placementMode = nextMode;
-  state.motion.keyframes = state.motion.keyframes.filter((keyframe) => keyframe.source !== actor.id);
-  setActiveSource(actor.id);
-  commit();
-});
-
-$("#actorMountSelect").addEventListener("change", (event) => {
-  materializeEvaluatedViewForEditing();
-  const actor = selectedItem();
-  if (!actor || actor.type !== "actor" || actor.placementMode !== "auto") return;
-  const vehicle = state.items.find((item) => item.id === event.target.value && isVehicleProp(item));
-  const occupied = new Set(state.items
-    .filter((item) => item.type === "actor" && item.id !== actor.id && item.placementMode === "auto" && item.mountId === vehicle?.id)
-    .map((item) => Number(item.seatIndex || 0)));
-  const availableSeat = (propDefinition(vehicle?.assetType).seats || []).findIndex((seat, index) => !occupied.has(index));
-  actor.mountId = vehicle && availableSeat >= 0 ? vehicle.id : "";
-  actor.seatIndex = Math.max(0, availableSeat);
-  sanitizeAutoMountRelationships(state);
-  const sourceId = actor.mountId || actor.id;
-  setActiveSource(sourceId);
-  selectKeyForSource(sourceId);
-  commit();
-});
-
-$("#actorSeatSelect").addEventListener("change", (event) => {
-  materializeEvaluatedViewForEditing();
-  const actor = selectedItem();
-  if (!actor || actor.type !== "actor" || actor.placementMode !== "auto" || !actor.mountId) return;
-  actor.seatIndex = Math.max(0, Number(event.target.value) || 0);
-  sanitizeAutoMountRelationships(state);
-  commit();
 });
 
 $("#actorPoseJointSelect").addEventListener("change", (event) => {
@@ -11111,11 +11977,13 @@ $(".facing-grid").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-facing]");
   const item = selectedItem();
   if (!button || !item) return;
-  materializeEvaluatedViewForEditing();
-  const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  const sourceId = transformLeaderIdForItem(item.id, state);
+  materializeEvaluatedViewForEditing(sourceId);
+  const target = state.items.find((entry) => entry.id === sourceId) || state.items.find((entry) => entry.id === item.id);
+  if (!target) return;
   target.facing = Number(button.dataset.facing);
   selected = { kind: "item", id: item.id };
-  commit();
+  commit({ preserveSourceIds: [sourceId] });
 });
 
 $("#sceneTitle").addEventListener("input", (event) => {
@@ -11144,14 +12012,18 @@ $(".nudge-grid").addEventListener("click", (event) => {
 });
 
 function nudge(item, dx, dy, amount) {
-  const target = state.items.find((entry) => entry.id === transformLeaderIdForItem(item.id, state)) || item;
+  const sourceId = transformLeaderIdForItem(item.id, state);
+  const target = state.items.find((entry) => entry.id === sourceId) || item;
   if (sourceEditLocked(target.id)) {
     notifyEditLocked(target.name);
     return;
   }
-  target.x = clamp(target.x + dx * amount, 0.02, 0.98);
-  target.y = clamp(target.y + dy * amount, 0.02, 0.98);
-  commit();
+  materializeEvaluatedViewForEditing(sourceId);
+  const currentTarget = state.items.find((entry) => entry.id === sourceId) || state.items.find((entry) => entry.id === item.id);
+  if (!currentTarget) return;
+  currentTarget.x = clamp(currentTarget.x + dx * amount, 0.02, 0.98);
+  currentTarget.y = clamp(currentTarget.y + dy * amount, 0.02, 0.98);
+  commit({ preserveSourceIds: [sourceId] });
 }
 
 $("#duplicateBtn").addEventListener("click", () => {
@@ -11171,6 +12043,7 @@ $("#duplicateBtn").addEventListener("click", () => {
   };
   if (duplicate.type === "actor") {
     duplicate.mountId = "";
+    duplicate.mountAction = "";
     duplicate.seatIndex = 0;
   }
   state.items.push(duplicate);
@@ -11197,7 +12070,7 @@ function deleteSelected() {
 function removeItemById(itemId) {
   if (state.camera.trackingTargetId === itemId) state.camera.trackingTargetId = "";
   const item = state.items.find((entry) => entry.id === itemId);
-  if (isVehicleProp(item)) detachAutoMountedActors(itemId, state);
+  if (isSeatProp(item)) detachAutoMountedActors(itemId, state);
   const group = groupForItem(itemId, state);
   if (group) dissolveManualGroup(group.id, state);
   state.items = state.items.filter((entry) => entry.id !== itemId);
@@ -11611,7 +12484,46 @@ $("#keyTransitionSelect").addEventListener("change", (event) => {
     keyframe.transition = nextMode;
   }
   commit();
+  notifyApp(`${keyTransitionLabels[nextMode]} 도착 방식을 적용했습니다.`);
 });
+
+function applySelectedPathMode(event) {
+  const keyframe = selectedKeyframe();
+  const requestedMode = String(event.target.value || "straight");
+  if (!keyframe) {
+    // With no selected key, keep the value as the mode for the next key.
+    syncUi(false);
+    return;
+  }
+  if (sourceEditLocked(keyframe.source)) {
+    notifyEditLocked(sourceLabel(keyframe.source));
+    syncUi(false);
+    return;
+  }
+  const sourceKeys = keysForSource(keyframe.source);
+  if (sourceKeys[0]?.id === keyframe.id) {
+    // The first key has no incoming segment. Its select value is intentionally
+    // retained as the mode for the next key the user adds.
+    notifyApp("첫 키에는 진입 경로가 없습니다. 다음 키 추가 시 적용됩니다.");
+    renderKeyStatus(false);
+    return;
+  }
+  const sourceType = keyframe.source === "camera" ? "camera" : "actor";
+  const nextMode = normalizePathMode(requestedMode, sourceType);
+  const previousMode = pathModeForSegment(keyframe.segment, keyframe.source);
+  if (nextMode === previousMode) return;
+  applyPathModeToKeyframe(keyframe, nextMode);
+  // A direct-shoot key's operator spline is an alternate path authority. Once
+  // the user chooses a timeline path, the explicit path must win.
+  if (keyframe.source === "camera") keyframe.operatorContinuity = false;
+  reconcileSourcePathConstraints(keyframe.source);
+  state.motion.playhead = keyframe.time;
+  setTimelineSelection([keyframe.id], keyframe.id);
+  commit();
+  notifyApp(`${pathModeLabels[nextMode]} 경로를 선택한 키에 적용했습니다.`);
+}
+
+$("#keyPathSelect").addEventListener("change", applySelectedPathMode);
 
 function saveSelectedKeyInstruction(event) {
   const keyframe = selectedKeyframe();
@@ -11935,22 +12847,11 @@ function applyPathModeToKeyframe(keyframe, pathMode) {
       ? clone(previousSegment.plan.control)
       : defaultFreeCurveControl(previous.pose, keyframe.pose);
   }
-  const effectiveMode = mode === "straight"
-    ? magneticAxisMode(previous.pose, keyframe.pose)
-    : mode;
-  const constrained = constrainPathEndpoint(previous.pose, keyframe.pose, effectiveMode, sourceType);
+  // "정확한 직선" is an explicit authored mode. Do not silently alter its
+  // endpoint or turn it into a different kind of path.
+  const constrained = constrainPathEndpoint(previous.pose, keyframe.pose, mode, sourceType);
   keyframe.pose = sanitizeSourcePose(keyframe.source, constrained);
   applySourcePose(keyframe.source, keyframe.pose);
-}
-
-function magneticAxisMode(startPose, endPose, renderState = state) {
-  const size = stageWorldSize(renderState);
-  const dx = Math.abs(endPose.x - startPose.x) * size.width;
-  const dy = Math.abs(endPose.y - startPose.y) * size.depth;
-  const thresholdMeters = 0.22;
-  if (dy <= thresholdMeters && dy <= dx) return "horizontal";
-  if (dx <= thresholdMeters) return "vertical";
-  return "straight";
 }
 
 function defaultFreeCurveControl(startPose, endPose, renderState = state) {
@@ -12043,6 +12944,13 @@ function restoreUncommittedState(startState) {
 
 function materializeEvaluatedViewForEditing(sourceId = selectedSourceId() || activeSourceId()) {
   if (!evaluatedViewState) return;
+  // Camera tracking is a camera-level authoring setting, not part of an
+  // individual evaluated/keyframed pose. Preserve it before replacing the
+  // camera with the current visible frame so height/value edits cannot clear
+  // the selected subject as a side effect.
+  const trackingTargetId = sourceId === "camera"
+    ? sanitizeTrackingTargetId(state.camera?.trackingTargetId, state)
+    : "";
   const visibleFrame = clone(evaluatedViewState);
   const baseFrame = interpolateStateAtTime(evaluatedViewState.motion.playhead);
   state.motion.playhead = evaluatedViewState.motion.playhead;
@@ -12051,6 +12959,8 @@ function materializeEvaluatedViewForEditing(sourceId = selectedSourceId() || act
     state.items = clone(visibleFrame.items);
   } else if (sourceId === "camera") {
     state.camera = clone(baseFrame.camera);
+    state.camera.trackingTargetId = trackingTargetId;
+    applyCameraTracking(state);
     // Camera controls can be entered while the stage is showing an evaluated
     // frame. Keep every subject at that visible frame instead of falling back
     // to the base state, which makes an actor jump to its last keyframe when
@@ -12182,12 +13092,20 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
   const plan = sourceKeyframeEvaluationPlan(keyframes, time);
   if (plan.kind === "fallback") return clone(fallbackPose);
   if (plan.kind === "key") return mergePoseWithFallbackFor(renderState, sourceId, plan.keyframe.pose, fallbackPose);
-  const interpolationProgress = sourceId !== "camera" && fallbackPose?.type === "actor"
-    ? plan.referenceProgress
-    : plan.progress;
+  // The destination key owns the arrival mode for every source type. Actors
+  // used to receive this eased/reference progress while props silently used
+  // raw time, which made the same setting look different in one scene.
+  // Spatial movement always follows the authored timeline fraction. This
+  // keeps straight/arc/free-curve motion at a stable travel speed and lets
+  // consecutive keys pass through without a fresh ease-in/ease-out at every
+  // marker. The reference fraction remains available for discrete/reference
+  // semantics and is not allowed to brake the moving object.
+  const interpolationProgress = plan.progress;
   const evaluationOptions = sourceId === "camera"
     ? {
+        movementProgress: plan.progress,
         referenceProgress: plan.referenceProgress,
+        authoredProgress: plan.rawProgress,
         operatorContinuity: plan.end?.operatorContinuity === true
           ? (() => {
               const startIndex = keyframes.findIndex((keyframe) => keyframe.id === plan.start?.id);
@@ -12204,7 +13122,7 @@ function interpolateSourceAtTimeFor(renderState, sourceId, time, fallbackPose) {
             })()
           : null,
       }
-    : null;
+    : { authoredProgress: plan.rawProgress };
   return interpolatePoseFor(
     renderState,
     sourceId,
@@ -12247,6 +13165,9 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
     from,
     to,
     progress: t,
+    discreteProgress: Number.isFinite(Number(evaluationOptions?.authoredProgress))
+      ? clamp(Number(evaluationOptions.authoredProgress), 0, 1)
+      : t,
     spatial,
     transformed,
   });
@@ -12257,7 +13178,11 @@ function interpolatePoseFor(renderState, sourceId, startPose, endPose, t, fallba
       t,
       evaluationOptions?.operatorContinuity,
     );
-    if (operatorPose) {
+    // A selected arc/free-curve is an explicit authored route. Direct-shoot
+    // keys may carry the legacy operator spline flag, but that flag must not
+    // silently turn a user-selected non-linear path back into a straight run.
+    const authoredPathMode = pathModeForSegment(segment, "camera");
+    if (operatorPose && authoredPathMode === "straight") {
       result.x = operatorPose.x;
       result.y = operatorPose.y;
       result.height = operatorPose.height;
@@ -12285,6 +13210,7 @@ function evaluateMotionSegment(renderState, sourceId, from, to, progress, segmen
   const mode = pathModeForSegment(segment, sourceId);
   let planar = samplePlanarPath(startWorld, endWorld, t, mode, {
     sourceType: sourceId === "camera" ? "camera" : "actor",
+    constantSpeed: true,
     bulge: Math.abs(Number(segment?.plan?.bulge ?? 0.32)),
     control: segment?.plan?.control
       ? {
@@ -12301,24 +13227,6 @@ function evaluateMotionSegment(renderState, sourceId, from, to, progress, segmen
     { x: planar.x / size.width + 0.5, y: planar.y / size.depth + 0.5 },
   );
   let height = waypoint.elevation;
-
-  if (sourceId === "camera" && segment.elevation.kind === "jib-arc") {
-    const planarDistance = Math.hypot(endWorld.x - startWorld.x, endWorld.y - startWorld.y);
-    const side = Number(segment.elevation.bulge ?? 0.32) < 0 ? -1 : 1;
-    const verticalArc = circularArcPoint(
-      { x: 0, y: from.height },
-      { x: Math.max(0.0001, planarDistance), y: to.height },
-      t,
-      side,
-      Math.abs(Number(segment.elevation.bulge ?? 0.32)),
-    );
-    const distanceProgress = planarDistance > 0.0001 ? verticalArc.x / planarDistance : t;
-    planar = {
-      x: lerp(startWorld.x, endWorld.x, distanceProgress),
-      y: lerp(startWorld.y, endWorld.y, distanceProgress),
-    };
-    height = verticalArc.y;
-  }
 
   return {
     x: planar.x / size.width + 0.5,
@@ -15455,6 +16363,13 @@ function drawAnnotations(tempAnno = null) {
     }
   }
 
+  // The authored curve handle belongs to the blocking editor, not to screen
+  // annotations. Draw a lightweight copy on the top overlay so the handle
+  // remains visible when the floating camera preview happens to cover the
+  // underlying stage canvas. Pointer events still pass through this overlay
+  // and are resolved by the native 2D/3D editor pickers below it.
+  drawFreeCurveHandleOverlay(ctxAnno, overlay, dpr);
+
   if (tempAnno) {
     ctxAnno.save();
     ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -15484,6 +16399,81 @@ function drawAnnotations(tempAnno = null) {
     ctxAnno.restore();
     ctxAnno.restore();
   }
+}
+
+function drawFreeCurveHandleOverlay(ctxAnno, overlay, dpr) {
+  if (workspaceMode !== "blocking") return;
+  const renderState = evaluatedViewState || state;
+  const keyframes = renderState.motion?.keyframes || [];
+  const segment = selectedFreeCurveSegment(renderState, keyframes);
+  if (!segment?.control) return;
+
+  let points = null;
+  if (viewMode === "3d" && threeView?.ready && threeView.canvas && threeView.camera) {
+    const viewport = threeView.canvas.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const project = (pose, height) => {
+      const world = mapToWorld(pose, renderState, height);
+      const projected = world.project(threeView.camera);
+      return {
+        x: viewport.left - overlayRect.left + (projected.x * 0.5 + 0.5) * viewport.width,
+        y: viewport.top - overlayRect.top + (-projected.y * 0.5 + 0.5) * viewport.height,
+      };
+    };
+    points = {
+      start: project(segment.previous.pose, 0.08),
+      control: project(segment.control, 0.22),
+      end: project(segment.keyframe.pose, 0.08),
+    };
+  } else if (viewMode === "2d" && canvas) {
+    const canvasRect = canvas.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const offset = {
+      x: canvasRect.left - overlayRect.left,
+      y: canvasRect.top - overlayRect.top,
+    };
+    const project = (pose) => {
+      const point = toCanvas(pose);
+      return { x: offset.x + point.x, y: offset.y + point.y };
+    };
+    points = {
+      start: project(segment.previous.pose),
+      control: project(segment.control),
+      end: project(segment.keyframe.pose),
+    };
+  }
+  if (!points) return;
+
+  const color = sourceColor(segment.keyframe.source, renderState);
+  const width = overlay.clientWidth || overlay.width / dpr;
+  const height = overlay.clientHeight || overlay.height / dpr;
+  if (points.control.x < -24 || points.control.x > width + 24
+    || points.control.y < -24 || points.control.y > height + 24) return;
+
+  ctxAnno.save();
+  ctxAnno.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctxAnno.strokeStyle = hexToRgba(color, 0.8);
+  ctxAnno.lineWidth = 2;
+  ctxAnno.setLineDash([5, 4]);
+  ctxAnno.beginPath();
+  ctxAnno.moveTo(points.start.x, points.start.y);
+  ctxAnno.lineTo(points.control.x, points.control.y);
+  ctxAnno.lineTo(points.end.x, points.end.y);
+  ctxAnno.stroke();
+  ctxAnno.setLineDash([]);
+  ctxAnno.fillStyle = color;
+  ctxAnno.strokeStyle = "#f5ffff";
+  ctxAnno.lineWidth = 3;
+  ctxAnno.beginPath();
+  ctxAnno.arc(points.control.x, points.control.y, 12, 0, Math.PI * 2);
+  ctxAnno.fill();
+  ctxAnno.stroke();
+  ctxAnno.fillStyle = "#071016";
+  ctxAnno.font = "900 10px system-ui, sans-serif";
+  ctxAnno.textAlign = "center";
+  ctxAnno.textBaseline = "middle";
+  ctxAnno.fillText("곡", points.control.x, points.control.y + 0.5);
+  ctxAnno.restore();
 }
 
 function init() {
