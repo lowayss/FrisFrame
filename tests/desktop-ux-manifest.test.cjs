@@ -36,9 +36,12 @@ const expectedConditionalPhoneInjection = [
   "phone-handheld-command-ux.js",
 ];
 const expectedInjection = [...expectedPrelude, ...expectedMainInjection];
-const expectedUx = [
-  ...expectedInjection.filter((filename) => /-ux\.js$/.test(filename)),
+const expectedAlwaysUx = expectedInjection.filter((filename) => /-ux\.js$/.test(filename));
+const phoneCameraIndex = expectedAlwaysUx.indexOf("phone-motion-camera-ux.js");
+const expectedPackagedUx = [
+  ...expectedAlwaysUx.slice(0, phoneCameraIndex + 1),
   ...expectedConditionalPhoneInjection,
+  ...expectedAlwaysUx.slice(phoneCameraIndex + 1),
 ];
 const quotedManifest = (source) => [...source.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 
@@ -59,8 +62,8 @@ assert.deepEqual(mainInjected, expectedMainInjection,
   "desktop main renderer injection order must stay canonical");
 assert.deepEqual(injected, expectedInjection,
   "combined desktop renderer injection order must match the canonical manifest");
-assert.deepEqual(packaged, expectedUx,
-  "desktop package UX files must match always-on UX plus explicitly conditional phone UX in canonical order");
+assert.deepEqual(packaged, expectedPackagedUx,
+  "desktop package UX files must preserve always-on order and colocate conditional phone UX after Physical Camera UX");
 assert.ok(packageJson.build.files.includes("electron/phone-motion-core.js"),
   "phone motion support core must be packaged even though it is not an -ux.js module");
 assert.ok(packageJson.build.files.includes("electron/phone-motion-core-absolute-focal.js"),
