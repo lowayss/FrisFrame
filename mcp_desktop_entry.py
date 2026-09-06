@@ -75,6 +75,7 @@ def main() -> None:
     import reference_master_pipeline_mcp  # noqa: F401 - installs reference image -> authoritative Master Set pipeline
     import spatial_quality_mcp  # noqa: F401 - canonicalizes interpreted geometry and reports topology quality
     import spatial_command_mcp  # noqa: F401 - installs atomic MCP -> authoritative Master Set command engine
+    import director_previs_mcp  # noqa: F401 - installs full Set -> Actor -> Camera/Lens -> Shot orchestration
     import camera_take_context_mcp  # noqa: F401 - installs read-only Physical Camera take context tool
     from mcp_previs_server import main as run_mcp
     run_mcp()
