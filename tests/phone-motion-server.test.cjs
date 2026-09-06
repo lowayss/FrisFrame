@@ -147,6 +147,36 @@ test("viewfinder capture targets the clean camera canvas before its UI container
   assert.match(viewfinderServer,/authorized\(requestUrl\)/);
 });
 
+test("viewfinder targets 30 fps and drops stale frames under backpressure", () => {
+  assert.match(viewfinderServer,/VIEWFINDER_INTERVAL_MS = 33/);
+  assert.match(viewfinderServer,/VIEWFINDER_JPEG_QUALITY = 62/);
+  assert.match(viewfinderServer,/VIEWFINDER_MAX_WIDTH = 854/);
+  assert.match(viewfinderServer,/client\.blocked/);
+  assert.match(viewfinderServer,/droppedFrames \+= 1/);
+  assert.match(viewfinderServer,/response\.once\("drain"/);
+  assert.match(viewfinderServer,/response\.socket\?\.setNoDelay\?\.\(true\)/);
+  assert.match(viewfinderServer,/Buffer\.concat\(\[header, frame/);
+  assert.match(viewfinderServer,/X-FrisFrame-Frame-Seq/);
+  assert.match(viewfinderServer,/latestFrameFirst:true/);
+});
+
+test("phone HUD exposes measured viewfinder fps and latency telemetry", () => {
+  const html = motionHtml("token");
+  assert.match(html,/id="vfFps"/);
+  assert.match(html,/id="latency"/);
+  assert.match(html,/pollLinkTelemetry/);
+  assert.match(html,/\/status\?token=/);
+  assert.match(html,/data\.serverNow/);
+  assert.match(html,/data\.lastFrameAt/);
+  assert.match(html,/data\.measuredFps/);
+  assert.match(viewfinderServer,/serverNow:Date\.now\(\)/);
+  assert.match(viewfinderServer,/lastFrameSeq/);
+  assert.match(viewfinderServer,/captureMs:lastCaptureDurationMs/);
+  assert.match(viewfinderServer,/measuredFps:/);
+  assert.match(viewfinderServer,/droppedFrames:totalDroppedFrames/);
+  assert.match(viewfinderServer,/latencyTelemetry:true/);
+});
+
 test("absolute focal renderer patch overrides anchor focal in every physical pose", () => {
   const sandbox = {
     document:{documentElement:{dataset:{}}},
