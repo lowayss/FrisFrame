@@ -4,7 +4,8 @@
 External vision remains responsible for reading pixels. This extension only
 cleans and validates spatial geometry that has already been interpreted:
 nearby wall endpoints are canonicalized, openings can attach to a nearby wall,
-and wall topology is reported before the Master Set is compiled/applied.
+closed wall loops become derived room zones, and topology is reported before
+the Master Set is compiled/applied.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ OPENING_KINDS = {"door", "window"}
 DEFAULT_ENDPOINT_SNAP_TOLERANCE_M = 0.15
 DEFAULT_OPENING_ATTACH_TOLERANCE_M = 0.35
 DEFAULT_OPENING_ROTATION_TOLERANCE_DEG = 20.0
+MIN_ROOM_AREA_M2 = 0.25
 
 _PREVIOUS_CALL_TOOL = base.call_tool
 
@@ -152,9 +154,6 @@ def _attach_openings(objects, tolerance_m, rotation_tolerance_deg):
             projection = _project_point_to_segment(center, wall)
             if not projection:
                 continue
-            # Small tolerance beyond the segment endpoints allows a vision model
-            # to land an opening a few centimeters past a corner without attaching
-            # it to a remote wall.
             if not (-0.03 <= projection["t"] <= 1.03):
                 continue
             if projection["distance_m"] <= tolerance_m:
@@ -181,17 +180,8 @@ def _attach_openings(objects, tolerance_m, rotation_tolerance_deg):
     return inferred
 
 
-def _topology_report(objects, tolerance_m):
+def _wall_graph(objects, tolerance_m):
     walls = [entry for entry in objects if _kind(entry) in LINEAR_KINDS and _complete_line(entry)]
-    if not walls:
-        return {
-            "wall_count": 0,
-            "endpoint_count": 0,
-            "open_endpoint_count": 0,
-            "junction_count": 0,
-            "connected_component_count": 0,
-        }
-
     nodes = []
     edges = []
 
@@ -205,11 +195,27 @@ def _topology_report(objects, tolerance_m):
     for wall in walls:
         start = node_for(_finite(wall["start_x_m"]), _finite(wall["start_z_m"]))
         end = node_for(_finite(wall["end_x_m"]), _finite(wall["end_z_m"]))
-        edges.append((start, end))
+        if start == end:
+            continue
+        edges.append({"start": start, "end": end, "wall_id": str(wall.get("id") or "")})
+    return walls, nodes, edges
+
+
+def _topology_report(objects, tolerance_m):
+    walls, nodes, edges = _wall_graph(objects, tolerance_m)
+    if not walls:
+        return {
+            "wall_count": 0,
+            "endpoint_count": 0,
+            "open_endpoint_count": 0,
+            "junction_count": 0,
+            "connected_component_count": 0,
+        }
 
     adjacency = {index: set() for index in range(len(nodes))}
     degree = {index: 0 for index in range(len(nodes))}
-    for left, right in edges:
+    for edge in edges:
+        left, right = edge["start"], edge["end"]
         adjacency[left].add(right)
         adjacency[right].add(left)
         degree[left] += 1
@@ -238,6 +244,101 @@ def _topology_report(objects, tolerance_m):
     }
 
 
+def _polygon_area(points):
+    area2 = 0.0
+    for index, point in enumerate(points):
+        next_point = points[(index + 1) % len(points)]
+        area2 += point[0] * next_point[1] - next_point[0] * point[1]
+    return area2 / 2.0
+
+
+def _polygon_perimeter(points):
+    return sum(
+        math.hypot(points[index][0] - points[(index + 1) % len(points)][0],
+                   points[index][1] - points[(index + 1) % len(points)][1])
+        for index in range(len(points))
+    )
+
+
+def _derive_room_zones(objects, tolerance_m):
+    """Return bounded planar faces from existing wall edges only.
+
+    No wall is created here. Near endpoints have already been canonicalized by
+    the snap pass. The half-edge walk keeps each bounded face on the left and
+    naturally supports adjacent rooms that share walls.
+    """
+    _, nodes, edges = _wall_graph(objects, tolerance_m)
+    if len(edges) < 3:
+        return []
+
+    neighbors = {index: [] for index in range(len(nodes))}
+    wall_by_pair = {}
+    for edge in edges:
+        left, right = edge["start"], edge["end"]
+        neighbors[left].append(right)
+        neighbors[right].append(left)
+        wall_by_pair[(min(left, right), max(left, right))] = edge["wall_id"]
+
+    for node_id, values in neighbors.items():
+        values.sort(key=lambda other: math.atan2(nodes[other][1] - nodes[node_id][1], nodes[other][0] - nodes[node_id][0]))
+
+    visited = set()
+    faces = []
+    directed = []
+    for edge in edges:
+        directed.append((edge["start"], edge["end"]))
+        directed.append((edge["end"], edge["start"]))
+
+    for start_a, start_b in directed:
+        start_key = (start_a, start_b)
+        if start_key in visited:
+            continue
+        polygon_nodes = []
+        wall_ids = []
+        a, b = start_a, start_b
+        for _ in range(len(edges) * 4 + 8):
+            key = (a, b)
+            if key in visited and key != start_key:
+                break
+            visited.add(key)
+            polygon_nodes.append(a)
+            wall_ids.append(wall_by_pair.get((min(a, b), max(a, b)), ""))
+            options = neighbors.get(b) or []
+            if not options or a not in options:
+                break
+            reverse_index = options.index(a)
+            next_node = options[(reverse_index - 1) % len(options)]
+            a, b = b, next_node
+            if (a, b) == start_key:
+                points = [nodes[node_id] for node_id in polygon_nodes]
+                area = _polygon_area(points)
+                if len(points) >= 3 and area > MIN_ROOM_AREA_M2:
+                    faces.append({
+                        "points": points,
+                        "area_m2": area,
+                        "perimeter_m": _polygon_perimeter(points),
+                        "wall_ids": list(dict.fromkeys(item for item in wall_ids if item)),
+                    })
+                break
+
+    faces.sort(key=lambda face: face["area_m2"], reverse=True)
+    zones = []
+    for index, face in enumerate(faces):
+        zones.append({
+            "id": f"room-zone-{index + 1}",
+            "name": f"Room {index + 1}",
+            "polygon": [
+                {"x_m": round(point[0], 4), "z_m": round(point[1], 4)}
+                for point in face["points"]
+            ],
+            "area_m2": round(face["area_m2"], 4),
+            "perimeter_m": round(face["perimeter_m"], 4),
+            "wall_ids": face["wall_ids"],
+            "basis": "derived-closed-wall-loop",
+        })
+    return zones
+
+
 def enhance_interpretation(raw, *, endpoint_snap_tolerance_m=DEFAULT_ENDPOINT_SNAP_TOLERANCE_M,
                            opening_attach_tolerance_m=DEFAULT_OPENING_ATTACH_TOLERANCE_M,
                            opening_rotation_tolerance_deg=DEFAULT_OPENING_ROTATION_TOLERANCE_DEG):
@@ -254,7 +355,10 @@ def enhance_interpretation(raw, *, endpoint_snap_tolerance_m=DEFAULT_ENDPOINT_SN
 
     snapped_endpoints, snap_clusters = _snap_wall_endpoints(objects, endpoint_snap_tolerance_m)
     attachments = _attach_openings(objects, opening_attach_tolerance_m, opening_rotation_tolerance_deg)
-    topology = _topology_report(objects, endpoint_snap_tolerance_m * 0.5)
+    topology_tolerance = endpoint_snap_tolerance_m * 0.5
+    topology = _topology_report(objects, topology_tolerance)
+    room_zones = _derive_room_zones(objects, topology_tolerance)
+    result["derived_room_zones"] = copy.deepcopy(room_zones)
 
     warnings = []
     if topology["open_endpoint_count"]:
@@ -280,7 +384,7 @@ def enhance_interpretation(raw, *, endpoint_snap_tolerance_m=DEFAULT_ENDPOINT_SN
         })
 
     report = {
-        "policy": "deterministic-spatial-quality-v1",
+        "policy": "deterministic-spatial-quality-v2",
         "status": "review" if any(item["severity"] == "review" for item in warnings) else "ready",
         "endpoint_snap_tolerance_m": endpoint_snap_tolerance_m,
         "opening_attach_tolerance_m": opening_attach_tolerance_m,
@@ -289,9 +393,11 @@ def enhance_interpretation(raw, *, endpoint_snap_tolerance_m=DEFAULT_ENDPOINT_SN
         "snap_cluster_count": snap_clusters,
         "inferred_attachment_count": len(attachments),
         "inferred_attachments": attachments,
+        "room_zone_count": len(room_zones),
+        "room_zones": room_zones,
         "topology": topology,
         "warnings": warnings,
-        "guardrail": "No missing wall is synthesized only to make a room look closed.",
+        "guardrail": "Room zones are derived only from closed existing wall loops; no missing wall is synthesized.",
     }
     return result, report
 
@@ -338,10 +444,11 @@ def call_tool(name, args):
         payload = json.loads(_PREVIOUS_CALL_TOOL(name, args))
         if isinstance(payload, dict):
             payload["spatial_quality"] = {
-                "policy": "deterministic-spatial-quality-v1",
+                "policy": "deterministic-spatial-quality-v2",
                 "wall_endpoint_snap": True,
                 "opening_to_wall_inference": True,
                 "room_topology_diagnostics": True,
+                "closed_wall_loop_room_zones": True,
                 "synthesize_missing_walls": False,
                 "defaults": {
                     "endpoint_snap_tolerance_m": DEFAULT_ENDPOINT_SNAP_TOLERANCE_M,

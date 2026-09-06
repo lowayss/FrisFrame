@@ -65,6 +65,58 @@ def sample_interpretation():
     }
 
 
+def closed_room_interpretation():
+    return {
+        "source_name": "closed-room-fixture",
+        "objects": [
+            {
+                "id": "bottom",
+                "kind": "wall",
+                "start_x_m": -2.0,
+                "start_z_m": -1.5,
+                "end_x_m": 2.0,
+                "end_z_m": -1.5,
+                "height_m": 2.8,
+                "basis": "observed",
+                "confidence": 0.95,
+            },
+            {
+                "id": "right",
+                "kind": "wall",
+                "start_x_m": 2.0,
+                "start_z_m": -1.5,
+                "end_x_m": 2.0,
+                "end_z_m": 1.5,
+                "height_m": 2.8,
+                "basis": "observed",
+                "confidence": 0.95,
+            },
+            {
+                "id": "top",
+                "kind": "wall",
+                "start_x_m": 2.0,
+                "start_z_m": 1.5,
+                "end_x_m": -2.0,
+                "end_z_m": 1.5,
+                "height_m": 2.8,
+                "basis": "observed",
+                "confidence": 0.95,
+            },
+            {
+                "id": "left",
+                "kind": "wall",
+                "start_x_m": -2.0,
+                "start_z_m": 1.5,
+                "end_x_m": -2.0,
+                "end_z_m": -1.5,
+                "height_m": 2.8,
+                "basis": "observed",
+                "confidence": 0.95,
+            },
+        ],
+    }
+
+
 def main():
     original = sample_interpretation()
     enhanced, report = quality.enhance_interpretation(original)
@@ -97,14 +149,34 @@ def main():
     assert topology["connected_component_count"] == 2, topology
     assert topology["open_endpoint_count"] >= 4, topology
     assert report["status"] == "review", report
-    assert report["guardrail"].startswith("No missing wall"), report
+    assert report["room_zone_count"] == 0, report
+    assert "no missing wall is synthesized" in report["guardrail"].lower(), report
 
     # Tightening the opening tolerance must not attach the door.
     strict, strict_report = quality.enhance_interpretation(original, opening_attach_tolerance_m=0.1)
     assert not strict["objects"][3].get("parent_id"), strict["objects"][3]
     assert strict_report["inferred_attachment_count"] == 0, strict_report
 
-    print("spatial-quality-mcp: endpoint canonicalization, wall attachment, and topology diagnostics passed")
+    # Four actual closed walls derive one metric room zone. No floor/wall is synthesized.
+    closed, closed_report = quality.enhance_interpretation(closed_room_interpretation())
+    assert closed_report["status"] == "ready", closed_report
+    assert closed_report["topology"]["open_endpoint_count"] == 0, closed_report
+    assert closed_report["room_zone_count"] == 1, closed_report
+    zone = closed_report["room_zones"][0]
+    assert math.isclose(zone["area_m2"], 12.0, abs_tol=1e-9), zone
+    assert math.isclose(zone["perimeter_m"], 14.0, abs_tol=1e-9), zone
+    assert set(zone["wall_ids"]) == {"bottom", "right", "top", "left"}, zone
+    assert closed["derived_room_zones"] == closed_report["room_zones"], closed
+
+    # Break one wall: the derived room must disappear rather than inventing a closing wall.
+    open_room = closed_room_interpretation()
+    open_room["objects"].pop()
+    open_result, open_report = quality.enhance_interpretation(open_room)
+    assert open_report["room_zone_count"] == 0, open_report
+    assert open_report["status"] == "review", open_report
+    assert open_result["derived_room_zones"] == [], open_result
+
+    print("spatial-quality-mcp: endpoint canonicalization, wall attachment, topology diagnostics, and closed room zones passed")
 
 
 if __name__ == "__main__":

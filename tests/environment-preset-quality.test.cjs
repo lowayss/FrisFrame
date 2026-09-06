@@ -79,7 +79,7 @@ vm.runInContext(`
 `, context);
 
 vm.runInContext(source, context, { filename: "multi-camera-core.js" });
-assert.equal(loadHandlers.length, 1, "preset quality extension must register one load handler");
+assert.ok(loadHandlers.length >= 2, "preset quality and architectural CAD extensions must register load handlers");
 loadHandlers[0]();
 
 const api = windowObject.FrisFrameEnvironmentPresetQuality;
