@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const tls = require("node:tls");
 const vm = require("node:vm");
-const { sanitizeMotionInput, normalizeDirectorStatus, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
+const { sanitizeMotionInput, normalizeDirectorStatus, commandTransitionSatisfied, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
 const { extensionConfig, localCaConfig, pemCertificateToDer, isCertificateAuthority } = require("../electron/phone-remote-tls.cjs");
 
 const root = path.join(__dirname, "..");
@@ -13,6 +13,7 @@ const viewfinderServer = fs.readFileSync(path.join(root, "electron", "phone-dire
 const focalPatch = fs.readFileSync(path.join(root, "electron", "phone-motion-core-absolute-focal.js"), "utf8");
 const commandPatch = fs.readFileSync(path.join(root, "electron", "phone-handheld-command-ux.js"), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const mainSource = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
 
 test("motion transport clamps hostile input and keeps phone lens absolute", () => {
   const value = sanitizeMotionInput({
@@ -140,9 +141,12 @@ test("motion packets reject stale sequence values and renderer patches install o
   assert.match(viewfinderServer,/phone-handheld-command-ux\.js/);
 });
 
-test("viewfinder capture targets the clean camera canvas before its UI container", () => {
-  assert.match(viewfinderServer,/document\.getElementById\("cameraFrameCanvas"\)\|\|document\.getElementById\("cameraFrame"\)/);
-  assert.match(viewfinderServer,/webContents\.capturePage/);
+test("viewfinder captures only the clean camera canvas and never falls back to the full window", () => {
+  assert.match(viewfinderServer,/document\.getElementById\("cameraFrameCanvas"\)/);
+  assert.doesNotMatch(viewfinderServer,/cameraFrameCanvas"\)\|\|document\.getElementById\("cameraFrame"/);
+  assert.match(viewfinderServer,/if \(!rect\) return lastFrame/);
+  assert.match(viewfinderServer,/capturePage\(rect\)/);
+  assert.doesNotMatch(viewfinderServer,/capturePage\(rect \|\| undefined\)/);
   assert.match(viewfinderServer,/multipart\/x-mixed-replace/);
   assert.match(viewfinderServer,/authorized\(requestUrl\)/);
 });
@@ -256,7 +260,7 @@ test("status backchannel reads authoritative Camera Operator state and reports t
   assert.match(viewfinderServer,/async function readRendererDirectorStatus/);
   assert.match(viewfinderServer,/FrisFrameCameraOperator/);
   assert.match(viewfinderServer,/playheadSeconds:Number\(appState\?\.motion\?\.playhead/);
-  assert.match(viewfinderServer,/focalMm:Number\(appState\?\.camera\?\.focal/);
+  assert.match(viewfinderServer,/focalMm:Number\(live\?\.focal \?\? appState\?\.camera\?\.focal/);
   assert.match(viewfinderServer,/lastCommandAck/);
   assert.match(viewfinderServer,/recordBackchannel:true/);
   assert.match(viewfinderServer,/timecodeBackchannel:true/);
@@ -286,4 +290,50 @@ test("downloadable local CA is DER X.509 data without PEM or private-key materia
   const text = der.toString("latin1");
   assert.doesNotMatch(text,/BEGIN CERTIFICATE/);
   assert.doesNotMatch(text,/PRIVATE KEY/);
+});
+
+
+test("REC STOP command queue keeps a newer STOP when an older REC acknowledgement returns", () => {
+  const html = motionHtml("token");
+  assert.match(html,/pendingCommands=\[\]/);
+  assert.match(html,/const cmd=pendingCommands\[0\]\|\|null/);
+  assert.match(html,/removePendingCommand\(cmd\.id\)/);
+  assert.doesNotMatch(html,/pendingCommand=null/);
+  assert.match(html,/pendingCommands\.push\(next\)/);
+});
+
+test("command acknowledgement is emitted only after the authoritative operator transition is applied", () => {
+  assert.equal(commandTransitionSatisfied("toggle-record", {mode:"idle"}, {mode:"recording"}), true);
+  assert.equal(commandTransitionSatisfied("toggle-record", {mode:"idle"}, {mode:"armed"}), false);
+  assert.equal(commandTransitionSatisfied("toggle-record", {mode:"recording"}, {mode:"idle"}), true);
+  assert.equal(commandTransitionSatisfied("stop", {mode:"recording"}, {mode:"idle"}), true);
+  assert.equal(commandTransitionSatisfied("stop", {mode:"recording"}, {mode:"recording"}), false);
+  assert.match(viewfinderServer,/waitForCommandApplied/);
+  assert.match(viewfinderServer,/stage:"applied"/);
+  assert.match(viewfinderServer,/failedCommandId/);
+  assert.match(viewfinderServer,/if \(!dispatched\) return \{ applied:false,error:"renderer-unavailable"/);
+});
+
+test("phone transport starts from authoritative desktop state and bounds stalled requests", () => {
+  const html = motionHtml("token");
+  assert.match(html,/fetchWithTimeout/);
+  assert.match(html,/AbortController/);
+  assert.match(html,/telemetryInFlight/);
+  assert.match(html,/async function initialize\(\)\{probeXR\(\);await pollLinkTelemetry\(\);if\(!alive\)return;sendLoop\(\)/);
+  assert.doesNotMatch(html,/probeXR\(\);sendLoop\(\);pollLinkTelemetry\(\)/);
+});
+
+test("LIVE backchannel uses the effective physical preview focal instead of stale saved camera focal", () => {
+  assert.match(viewfinderServer,/const live=physical\?\.livePreview/);
+  assert.match(viewfinderServer,/focalMm:Number\(live\?\.focal \?\? appState\?\.camera\?\.focal \?\? 35\)/);
+});
+
+test("handheld compatibility patches are guaranteed after every Electron renderer reload", () => {
+  const core = mainSource.indexOf('"phone-motion-core.js"');
+  const focal = mainSource.indexOf('"phone-motion-core-absolute-focal.js"');
+  const motion = mainSource.indexOf('"phone-motion-camera-ux.js"');
+  const command = mainSource.indexOf('"phone-handheld-command-ux.js"');
+  assert.ok(core >= 0 && focal > core && motion > focal && command > motion);
+  assert.match(viewfinderServer,/performance\.timeOrigin/);
+  assert.doesNotMatch(viewfinderServer,/patchedWebContentsId/);
 });
