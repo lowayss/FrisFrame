@@ -27,6 +27,15 @@ PIPELINE_POLICY = "reference-image-to-master-set-single-source-of-truth"
 SET_ROLES = set(set_reconstruction.ROLE_VALUES)
 BASE_ROLES = set(interpretation.ROLE_VALUES)
 
+RECONSTRUCTION_POLICY = "reference-reconstruction-v2"
+SCENE_TYPE_VALUES = {"interior", "exterior", "vehicle", "mixed", "unknown"}
+PREVIS_PRIORITY_VALUES = {"critical", "major", "supporting", "detail"}
+CRITICAL_KINDS = {"wall", "partition", "railing", "door", "window", "column", "stairs"}
+MAJOR_KINDS = {
+    "sofa", "bed", "table", "counter", "cabinet", "refrigerator", "stove",
+    "bathtub", "toilet", "sink", "tree", "vegetation", "pergola", "platform",
+}
+
 ASSET_KIND_MAP = {
     "wall": "wall",
     "partition": "partition",
@@ -95,15 +104,137 @@ def _extended_interpretation_schema():
         "thickness_m": {"type": "number", "exclusiveMinimum": 0},
         "notes": {"type": "string"},
         "locked": {"type": "boolean"},
+        "previs_priority": {"type": "string", "enum": sorted(PREVIS_PRIORITY_VALUES)},
+        "image_bbox": {
+            "type": "object",
+            "properties": {
+                "x": {"type": "number", "minimum": 0, "maximum": 1},
+                "y": {"type": "number", "minimum": 0, "maximum": 1},
+                "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            },
+            "required": ["x", "y", "width", "height"],
+        },
+        "visible_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "occluded_by": {"type": "array", "maxItems": 32, "items": {"type": "string"}},
+        "evidence_note": {"type": "string"},
     })
     schema["properties"].update({
         "declared_width_m": {"type": "number", "exclusiveMinimum": 0},
         "declared_depth_m": {"type": "number", "exclusiveMinimum": 0},
+        "scene_type": {"type": "string", "enum": sorted(SCENE_TYPE_VALUES)},
+        "scene_label": {"type": "string"},
+        "scene_envelope": {
+            "type": "object",
+            "properties": {
+                "width_m": {"type": "number", "exclusiveMinimum": 0},
+                "depth_m": {"type": "number", "exclusiveMinimum": 0},
+                "height_m": {"type": "number", "exclusiveMinimum": 0},
+                "basis": {"type": "string", "enum": sorted(interpretation.BASIS_VALUES)},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "notes": {"type": "string"},
+            },
+        },
     })
     return schema
 
-
 REFERENCE_MASTER_INTERPRETATION_SCHEMA = _extended_interpretation_schema()
+
+
+def _finite_number(value, label):
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} 값이 숫자가 아닙니다.") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} 값이 유효한 유한수가 아닙니다.")
+    return number
+
+
+def _unit_interval(value, label):
+    number = _finite_number(value, label)
+    if not 0 <= number <= 1:
+        raise ValueError(f"{label} 값은 0~1 사이여야 합니다.")
+    return number
+
+
+def _positive_number(value, label):
+    number = _finite_number(value, label)
+    if number <= 0:
+        raise ValueError(f"{label} 값은 0보다 커야 합니다.")
+    return number
+
+
+def _scene_type(value):
+    candidate = str(value or "unknown").strip().lower()
+    if candidate not in SCENE_TYPE_VALUES:
+        raise ValueError(f"scene_type은 {sorted(SCENE_TYPE_VALUES)} 중 하나여야 합니다.")
+    return candidate
+
+
+def _basis_confidence(basis, confidence):
+    candidate = str(basis or "inferred").strip()
+    if candidate not in interpretation.BASIS_VALUES:
+        raise ValueError(f"basis는 {sorted(interpretation.BASIS_VALUES)} 중 하나여야 합니다.")
+    if confidence is None:
+        confidence = 1.0 if candidate == "user_fixed" else (0.78 if candidate == "observed" else 0.5)
+    return candidate, _unit_interval(confidence, "confidence")
+
+
+def _normalize_scene_envelope(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("scene_envelope는 객체여야 합니다.")
+    result = {}
+    for key in ("width_m", "depth_m", "height_m"):
+        if raw.get(key) is not None:
+            result[key] = _positive_number(raw[key], f"scene_envelope.{key}")
+    if not result:
+        raise ValueError("scene_envelope에는 width_m/depth_m/height_m 중 하나 이상이 필요합니다.")
+    basis, confidence = _basis_confidence(raw.get("basis"), raw.get("confidence"))
+    result["basis"] = basis
+    result["confidence"] = confidence
+    result["notes"] = str(raw.get("notes") or "")[:500]
+    result["source"] = "explicit-scene-envelope"
+    return result
+
+
+def _normalize_image_bbox(raw, label):
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label}는 객체여야 합니다.")
+    bbox = {
+        "x": _unit_interval(raw.get("x"), f"{label}.x"),
+        "y": _unit_interval(raw.get("y"), f"{label}.y"),
+        "width": _positive_number(raw.get("width"), f"{label}.width"),
+        "height": _positive_number(raw.get("height"), f"{label}.height"),
+    }
+    if bbox["width"] > 1 or bbox["height"] > 1:
+        raise ValueError(f"{label}.width/height는 1 이하여야 합니다.")
+    if bbox["x"] + bbox["width"] > 1.000001 or bbox["y"] + bbox["height"] > 1.000001:
+        raise ValueError(f"{label}가 이미지 정규화 범위 0~1을 벗어납니다.")
+    return bbox
+
+
+def _default_previs_priority(kind, role):
+    if kind in CRITICAL_KINDS or role in {"structure", "opening"}:
+        return "critical"
+    if kind in MAJOR_KINDS or role in {"furniture", "service", "vegetation"}:
+        return "major"
+    if role == "prop" and kind == "generic":
+        return "detail"
+    return "supporting"
+
+
+def _previs_priority(raw_object, kind, role):
+    requested = str(raw_object.get("previs_priority") or "").strip().lower()
+    if not requested:
+        return _default_previs_priority(kind, role)
+    if requested not in PREVIS_PRIORITY_VALUES:
+        raise ValueError(f"previs_priority는 {sorted(PREVIS_PRIORITY_VALUES)} 중 하나여야 합니다.")
+    return requested
 
 CONTRACT_TOOL = {
     "name": "get_reference_master_set_contract",
@@ -189,7 +320,20 @@ def _prepare_object(raw_object, index):
     kind = _set_kind(raw_object)
     defaults = set_reconstruction.DEFAULT_KIND[kind]
     requested_role = str(raw_object.get("role") or defaults["role"])
+    set_role = requested_role if requested_role in SET_ROLES else defaults["role"]
     prepared["role"] = BASE_ROLE_BY_SET_ROLE.get(requested_role, requested_role if requested_role in BASE_ROLES else "prop")
+    prepared["previs_priority"] = _previs_priority(raw_object, kind, set_role)
+
+    bbox = _normalize_image_bbox(raw_object.get("image_bbox"), f"objects[{index}].image_bbox")
+    if bbox is not None:
+        prepared["image_bbox"] = bbox
+    if raw_object.get("visible_fraction") is not None:
+        prepared["visible_fraction"] = _unit_interval(raw_object["visible_fraction"], f"objects[{index}].visible_fraction")
+    occluded_by = raw_object.get("occluded_by") or []
+    if not isinstance(occluded_by, list) or len(occluded_by) > 32:
+        raise ValueError(f"objects[{index}].occluded_by는 32개 이하 배열이어야 합니다.")
+    prepared["occluded_by"] = [str(value).strip() for value in occluded_by if str(value).strip()]
+    prepared["evidence_note"] = str(raw_object.get("evidence_note") or "")[:500]
 
     line_keys = ("start_x_m", "start_z_m", "end_x_m", "end_z_m")
     present = [key for key in line_keys if raw_object.get(key) is not None]
@@ -230,17 +374,28 @@ def _prepare_object(raw_object, index):
         prepared["asset_type"] = defaults["asset_type"]
     return prepared
 
-
 def _prepare_interpretation(raw):
     if not isinstance(raw, dict):
         raise ValueError("interpretation은 객체여야 합니다.")
     prepared = copy.deepcopy(raw)
+    prepared["scene_type"] = _scene_type(raw.get("scene_type"))
+    prepared["scene_label"] = str(raw.get("scene_label") or "")[:160]
+    envelope = _normalize_scene_envelope(raw.get("scene_envelope"))
+    if envelope is not None:
+        prepared["scene_envelope"] = envelope
     objects = raw.get("objects") or []
     if not isinstance(objects, list) or not objects:
         raise ValueError("interpretation.objects는 하나 이상 필요합니다.")
     prepared["objects"] = [_prepare_object(entry, index) for index, entry in enumerate(objects)]
+    ids = {str(entry.get("id") or "") for entry in prepared["objects"]}
+    for index, entry in enumerate(prepared["objects"]):
+        object_id = str(entry.get("id") or "")
+        for reference_id in entry.get("occluded_by") or []:
+            if reference_id == object_id:
+                raise ValueError(f"objects[{index}].occluded_by가 자기 자신을 참조합니다.")
+            if reference_id not in ids:
+                raise ValueError(f"objects[{index}].occluded_by '{reference_id}'가 objects에 없습니다.")
     return prepared
-
 
 def _default_collection_id(role):
     return COLLECTION_BY_ROLE.get(role, "props")
@@ -348,7 +503,248 @@ def _camera_observation(camera):
     return {key: camera.get(key) for key in keys if camera.get(key) is not None}
 
 
-def _reference_evidence(normalized_interpretation):
+def _report_scene_envelope(prepared):
+    explicit = prepared.get("scene_envelope")
+    if isinstance(explicit, dict):
+        return copy.deepcopy(explicit)
+    declared = {}
+    if prepared.get("declared_width_m") is not None:
+        declared["width_m"] = _positive_number(prepared["declared_width_m"], "declared_width_m")
+    if prepared.get("declared_depth_m") is not None:
+        declared["depth_m"] = _positive_number(prepared["declared_depth_m"], "declared_depth_m")
+    if not declared:
+        return None
+    declared.update({
+        "basis": "inferred",
+        "confidence": 0.55,
+        "notes": "Legacy declared dimensions retained as coarse scene-envelope evidence.",
+        "source": "declared-dimensions",
+    })
+    return declared
+
+
+def _object_evidence(prepared_object, normalized_object):
+    kind = _set_kind(prepared_object)
+    role = _set_role(prepared_object, kind, normalized_object)
+    priority = _previs_priority(prepared_object, kind, role)
+    result = {
+        "id": normalized_object["id"],
+        "name": normalized_object["name"],
+        "kind": kind,
+        "role": role,
+        "basis": normalized_object["basis"],
+        "confidence": normalized_object["confidence"],
+        "previs_priority": priority,
+        "include_in_scene": normalized_object["include_in_scene"],
+        "visible_fraction": prepared_object.get("visible_fraction"),
+        "occluded_by": list(prepared_object.get("occluded_by") or []),
+        "evidence_note": str(prepared_object.get("evidence_note") or "")[:500],
+    }
+    if prepared_object.get("image_bbox") is not None:
+        result["image_bbox"] = copy.deepcopy(prepared_object["image_bbox"])
+    else:
+        result["image_bbox"] = None
+    result["hidden_inference"] = bool(
+        result["basis"] == "inferred"
+        and result["visible_fraction"] is not None
+        and float(result["visible_fraction"]) < 0.35
+    )
+    return result
+
+
+def _reconstruction_report(prepared, normalized_interpretation, normalized_master_plan):
+    prepared_by_id = {
+        str(entry.get("id")): entry
+        for entry in prepared.get("objects", [])
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    object_evidence = [
+        _object_evidence(prepared_by_id.get(entry["id"], {}), entry)
+        for entry in normalized_interpretation["objects"]
+    ]
+    important = [entry for entry in object_evidence if entry["previs_priority"] in {"critical", "major"} and entry["include_in_scene"]]
+    critical = [entry for entry in important if entry["previs_priority"] == "critical"]
+    major = [entry for entry in important if entry["previs_priority"] == "major"]
+    details = [entry for entry in object_evidence if entry["previs_priority"] == "detail" and entry["include_in_scene"]]
+    scene_type = _scene_type(prepared.get("scene_type"))
+    envelope = _report_scene_envelope(prepared)
+    reliable_scale = int(normalized_interpretation["summary"].get("reliable_scale_anchor_count", 0))
+    user_fixed_envelope = bool(
+        envelope
+        and envelope.get("basis") == "user_fixed"
+        and float(envelope.get("confidence", 0)) >= 0.8
+        and any(envelope.get(key) is not None for key in ("width_m", "depth_m"))
+    )
+    scale_ready = reliable_scale > 0 or user_fixed_envelope
+    scale_status = "anchored" if scale_ready else "unanchored"
+
+    queue = []
+    if not scale_ready:
+        queue.append({
+            "code": "scale-anchor-needed",
+            "rank": 0,
+            "severity": "blocking",
+            "message": "촬영 가능한 미터 스케일을 위해 신뢰 가능한 visible scale anchor 또는 user-fixed scene envelope가 필요합니다.",
+        })
+
+    if scene_type == "interior":
+        if envelope is None:
+            queue.append({
+                "code": "scene-envelope-needed",
+                "rank": 1,
+                "severity": "review",
+                "message": "실내 공간의 대략적인 폭/깊이/높이 envelope가 아직 없습니다.",
+            })
+        elif float(envelope.get("confidence", 0)) < 0.6:
+            queue.append({
+                "code": "scene-envelope-low-confidence",
+                "rank": 1,
+                "severity": "review",
+                "confidence": envelope.get("confidence"),
+                "message": "실내 공간 envelope 신뢰도가 낮습니다. 전체 도면 정밀화가 아니라 방 규모만 먼저 확인하세요.",
+            })
+
+    for entry in critical:
+        threshold = 0.7 if entry["basis"] == "inferred" else 0.58
+        if float(entry["confidence"]) < threshold:
+            queue.append({
+                "code": "critical-spatial-uncertainty",
+                "rank": 2,
+                "severity": "review",
+                "object_id": entry["id"],
+                "kind": entry["kind"],
+                "basis": entry["basis"],
+                "confidence": entry["confidence"],
+                "hidden_inference": entry["hidden_inference"],
+                "message": "배우/카메라 배치에 영향을 주는 핵심 공간 요소의 위치·크기·방향을 확인하세요.",
+            })
+        if entry["kind"] in {"door", "window"}:
+            raw = prepared_by_id.get(entry["id"], {})
+            if not raw.get("parent_id"):
+                queue.append({
+                    "code": "opening-parent-unresolved",
+                    "rank": 2,
+                    "severity": "review",
+                    "object_id": entry["id"],
+                    "kind": entry["kind"],
+                    "message": "문/창이 어느 벽에 속하는지 확인하세요.",
+                })
+
+    for entry in major:
+        if float(entry["confidence"]) < 0.5:
+            queue.append({
+                "code": "major-blocking-object-uncertain",
+                "rank": 5,
+                "severity": "review",
+                "object_id": entry["id"],
+                "kind": entry["kind"],
+                "confidence": entry["confidence"],
+                "message": "블로킹에 영향을 주는 주요 가구/환경 오브젝트를 확인하세요.",
+            })
+
+    ignored_issue_codes = {"missing-camera", "camera-target-not-in-interpretation"}
+    for issue in normalized_interpretation.get("issues", []):
+        if issue.get("code") in ignored_issue_codes:
+            continue
+        queue.append({
+            "code": f"interpretation-{issue.get('code', 'review')}",
+            "rank": 1,
+            "severity": "review",
+            "message": issue.get("message") or "Reference interpretation consistency needs review.",
+        })
+
+    room_zones = prepared.get("derived_room_zones") or []
+    wall_count = sum(1 for entry in object_evidence if entry["kind"] in {"wall", "partition", "railing"} and entry["include_in_scene"])
+    if scene_type == "interior" and wall_count >= 3 and not room_zones:
+        queue.append({
+            "code": "room-envelope-open",
+            "rank": 4,
+            "severity": "review",
+            "message": "보이는 벽만으로 닫힌 방이 확인되지 않습니다. 보이지 않는 벽을 자동 생성하지 말고 필요할 때만 inferred로 확인하세요.",
+        })
+
+    deduped = []
+    seen = set()
+    for entry in sorted(queue, key=lambda item: (item.get("rank", 99), str(item.get("object_id") or ""), str(item.get("code") or ""))):
+        key = (entry.get("code"), entry.get("object_id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        clean = dict(entry)
+        clean.pop("rank", None)
+        deduped.append(clean)
+
+    structure_count = sum(
+        1 for entry in object_evidence
+        if entry["include_in_scene"] and entry["role"] in {"structure", "surface"}
+    )
+    meaningful_count = len(important) + sum(
+        1 for entry in object_evidence
+        if entry["include_in_scene"] and entry["previs_priority"] == "supporting"
+    )
+    structure_ready = structure_count > 0 if scene_type == "interior" else meaningful_count > 0
+    geometry_ready = normalized_master_plan.get("status") == "ready"
+    blocking_viable = bool(scale_ready and structure_ready and geometry_ready and meaningful_count > 0)
+    evidence_count = sum(
+        1 for entry in important
+        if entry.get("image_bbox") is not None
+        or entry.get("visible_fraction") is not None
+        or entry.get("evidence_note")
+    )
+    evidence_coverage = 1.0 if not important else evidence_count / len(important)
+    camera = normalized_interpretation.get("camera")
+
+    return {
+        "policy": RECONSTRUCTION_POLICY,
+        "goal": "shootable-set-first",
+        "status": "review" if deduped else "ready",
+        "blocking_viable": blocking_viable,
+        "scene": {
+            "type": scene_type,
+            "label": str(prepared.get("scene_label") or "")[:160],
+            "envelope": envelope,
+            "occupied_bounds": copy.deepcopy(normalized_master_plan.get("bounds") or {}),
+            "derived_room_zone_count": len(room_zones),
+        },
+        "scale": {
+            "status": scale_status,
+            "reliable_anchor_count": reliable_scale,
+            "user_fixed_scene_envelope": user_fixed_envelope,
+        },
+        "camera_evidence": {
+            "present": camera is not None,
+            "confidence": None if camera is None else camera.get("confidence"),
+            "target_id": None if camera is None else camera.get("target_id"),
+            "blocks_master_set": False,
+            "applied_during_set_build": False,
+        },
+        "coverage": {
+            "critical_count": len(critical),
+            "major_count": len(major),
+            "supporting_count": sum(1 for entry in object_evidence if entry["previs_priority"] == "supporting" and entry["include_in_scene"]),
+            "detail_count": len(details),
+            "important_evidence_coverage": round(evidence_coverage, 4),
+            "observed_count": sum(1 for entry in object_evidence if entry["basis"] == "observed"),
+            "inferred_count": sum(1 for entry in object_evidence if entry["basis"] == "inferred"),
+            "user_fixed_count": sum(1 for entry in object_evidence if entry["basis"] == "user_fixed"),
+        },
+        "focus_object_ids": [entry["id"] for entry in important],
+        "ignored_detail_ids": [entry["id"] for entry in details],
+        "object_evidence": object_evidence,
+        "correction_queue": deduped,
+        "next_action": "correct-flagged-spatial-uncertainties" if deduped else "actor-blocking-and-camera-design",
+        "guardrails": [
+            "Do not synthesize unseen walls or objects silently; hidden geometry must remain explicit inferred evidence.",
+            "Decorative detail never blocks first-pass shootable-set readiness.",
+            "Reference-camera evidence is retained but never moves the authored previs camera during set build.",
+            "Correct only spatial uncertainties that can change blocking, camera placement, framing, or movement clearance.",
+        ],
+    }
+
+
+def _reference_evidence(normalized_interpretation, prepared=None, reconstruction=None):
+    prepared = prepared or {}
+    reconstruction = reconstruction or {}
     return {
         "schema": normalized_interpretation["schema"],
         "version": normalized_interpretation["version"],
@@ -361,17 +757,27 @@ def _reference_evidence(normalized_interpretation):
         "cameraObservation": _camera_observation(normalized_interpretation.get("camera")),
         "cameraApplied": False,
         "pipelinePolicy": PIPELINE_POLICY,
+        "reconstructionPolicy": RECONSTRUCTION_POLICY,
+        "sceneType": _scene_type(prepared.get("scene_type")),
+        "sceneLabel": str(prepared.get("scene_label") or "")[:160],
+        "sceneEnvelope": copy.deepcopy(reconstruction.get("scene", {}).get("envelope")),
+        "objectEvidence": copy.deepcopy(reconstruction.get("object_evidence") or []),
+        "derivedRoomZones": copy.deepcopy(prepared.get("derived_room_zones") or []),
+        "reconstruction": copy.deepcopy(reconstruction),
     }
-
 
 def pipeline_contract():
     return {
         "schema": "frisframe-reference-master-set-contract",
-        "version": 1,
+        "version": 2,
         "product_definition": (
-            "A reference image is spatial evidence. FrisFrame reconstructs a shootable Master Set, "
-            "not a pixel-identical 3D copy."
+            "A reference image is spatial evidence. FrisFrame reconstructs a shootable virtual set for blocking and camera design, "
+            "not a pixel-identical 3D copy and not a precision CAD drawing."
         ),
+        "reconstruction_policy": RECONSTRUCTION_POLICY,
+        "first_pass_goal": "shootable-spatial-set",
+        "detail_policy": "decorative-detail-never-blocks-first-pass-readiness",
+        "correction_policy": "Correct only flagged spatial uncertainties that can change actor blocking, camera placement, framing, or movement clearance.",
         "ownership": {
             "image_pixel_reasoning": "external-vision-mcp-client",
             "metric_validation_master_set_and_views": "FrisFrame",
@@ -387,6 +793,13 @@ def pipeline_contract():
             "actor blocking",
             "camera placement and shot design",
         ],
+        "first_pass_priority": [
+            "scene envelope and usable metric scale",
+            "walls/boundaries/openings that affect movement and framing",
+            "major furniture and obstacles that affect blocking",
+            "reference-camera evidence for later calibration",
+            "decorative detail only when it matters to a shot",
+        ],
         "source_of_truth": {
             "data": "blocking.setMasterPlan + shared blocking items",
             "views": ["2D", "2.5D", "3D"],
@@ -395,9 +808,12 @@ def pipeline_contract():
         "interpretation_rules": {
             "linear_architecture": "Prefer kind + start_x_m/start_z_m/end_x_m/end_z_m + thickness_m for walls/partitions/railings.",
             "rectangular_elements": "Use world_x_m/world_z_m + width_m/depth_m; height can use kind defaults when omitted.",
-            "provenance": "Every important object should be observed, inferred, or user_fixed with confidence.",
+            "provenance": "Every blocking-relevant object should be observed, inferred, or user_fixed with confidence.",
+            "visual_evidence": "For important objects, retain normalized image_bbox, visible_fraction, occlusion references, and a short evidence note when available.",
+            "priority": "Mark spatially decisive architecture/openings as critical, large blocking objects as major, and nonessential decoration as detail.",
+            "hidden_geometry": "Never silently close a room. Hidden boundaries must be explicitly supplied as inferred geometry with confidence/evidence.",
             "scale": "Use one or more plausible visible scale anchors; user-fixed dimensions outrank guesses.",
-            "camera": "Camera observation may be recorded during image interpretation but is not applied while building the Master Set.",
+            "camera": "Reference camera observation is evidence for later shot calibration and never moves the authored FrisFrame camera while building the set.",
         },
         "preferred_tools": [
             "get_reference_master_set_contract",
@@ -410,7 +826,6 @@ def pipeline_contract():
         "schema_hint": REFERENCE_MASTER_INTERPRETATION_SCHEMA,
     }
 
-
 def _compile(args):
     blocking = None
     if args.get("project_id"):
@@ -419,22 +834,24 @@ def _compile(args):
             int(args.get("scene_index", 0)),
             int(args.get("cut_index", 0)),
         )
-    _, normalized_interpretation, _, normalized_master_plan = _normalize_pipeline(args, blocking=blocking)
+    prepared, normalized_interpretation, _, normalized_master_plan = _normalize_pipeline(args, blocking=blocking)
+    reconstruction = _reconstruction_report(prepared, normalized_interpretation, normalized_master_plan)
     return {
         "schema": "frisframe-reference-master-set-compile",
-        "version": 1,
-        "status": "ready" if normalized_interpretation["status"] == "ready" and normalized_master_plan["status"] == "ready" else "review",
+        "version": 2,
+        "status": "ready" if reconstruction["blocking_viable"] else "review",
         "pipeline_policy": PIPELINE_POLICY,
+        "reconstruction_policy": RECONSTRUCTION_POLICY,
         "reference_interpretation": {
             "status": normalized_interpretation["status"],
             "summary": normalized_interpretation["summary"],
             "issues": normalized_interpretation["issues"],
             "relation_checks": normalized_interpretation["relation_checks"],
         },
+        "reference_reconstruction": reconstruction,
         "master_plan": normalized_master_plan,
         "camera_policy": "observation-retained-not-applied-during-master-set",
     }
-
 
 def _apply(args):
     project_id = args.get("project_id")
@@ -442,11 +859,12 @@ def _apply(args):
     scene_index = int(args.get("scene_index", 0))
     cut_index = int(args.get("cut_index", 0))
     blocking = base._load_blocking(project_id, scene_index, cut_index)
-    _, normalized_interpretation, _, normalized_master_plan = _normalize_pipeline(args, blocking=blocking)
+    prepared, normalized_interpretation, _, normalized_master_plan = _normalize_pipeline(args, blocking=blocking)
+    reconstruction = _reconstruction_report(prepared, normalized_interpretation, normalized_master_plan)
 
-    if bool(args.get("require_interpretation_ready", True)) and normalized_interpretation["status"] != "ready":
-        codes = ", ".join(issue["code"] for issue in normalized_interpretation["issues"][:8])
-        raise ValueError(f"reference-interpretation-review-required: {codes}")
+    if bool(args.get("require_interpretation_ready", True)) and not reconstruction["blocking_viable"]:
+        codes = ", ".join(item["code"] for item in reconstruction["correction_queue"][:8]) or "blocking-not-viable"
+        raise ValueError(f"reference-reconstruction-review-required: {codes}")
     if bool(args.get("require_master_plan_ready", True)) and normalized_master_plan["status"] != "ready":
         codes = ", ".join(issue["code"] for issue in normalized_master_plan["issues"][:8])
         raise ValueError(f"reference-master-plan-review-required: {codes}")
@@ -469,7 +887,7 @@ def _apply(args):
 
     all_anchors = list(set_anchors) + scale_anchors
     spatial_guide = reference._merge_guide(blocking, normalized_interpretation["source_name"], all_anchors)
-    evidence = _reference_evidence(normalized_interpretation)
+    evidence = _reference_evidence(normalized_interpretation, prepared, reconstruction)
 
     def apply_atomic(project_obj):
         payload = base._target_args(args, revision)
@@ -488,6 +906,8 @@ def _apply(args):
         )
         current_blocking["setMasterPlan"]["referenceInterpretation"] = evidence
         current_blocking["setMasterPlan"]["pipelinePolicy"] = PIPELINE_POLICY
+        current_blocking["setMasterPlan"]["reconstructionPolicy"] = RECONSTRUCTION_POLICY
+        current_blocking["setMasterPlan"]["referenceReconstruction"] = copy.deepcopy(reconstruction)
         current_blocking["setMasterPlan"]["cameraAppliedDuringSetBuild"] = False
         return {"stage": stage_detail, "collections": collections}
 
@@ -500,9 +920,12 @@ def _apply(args):
         "revision": committed["revision"],
         "updated_at": committed.get("updated_at"),
         "reference_master_pipeline": {
-            "status": "ready",
+            "status": "ready" if reconstruction["blocking_viable"] else "review",
             "pipeline_policy": PIPELINE_POLICY,
+            "reconstruction_policy": RECONSTRUCTION_POLICY,
             "reference_status": normalized_interpretation["status"],
+            "reconstruction_status": reconstruction["status"],
+            "blocking_viable": reconstruction["blocking_viable"],
             "master_plan_status": normalized_master_plan["status"],
             "generated_item_ids": [entry["id"] for entry in applied_elements],
             "collection_ids": [entry["id"] for entry in normalized_master_plan["collections"]],
@@ -513,8 +936,14 @@ def _apply(args):
             "atomic_revision": True,
             "source_of_truth": "blocking.setMasterPlan",
             "view_policy": "2D/2.5D/3D share the same blocking items and referenceDimensionsM",
-            "next_step": "Review the auto-opened 2.5D Master Set, correct dimensions/layout, then block actors and calibrate/place camera.",
+            "next_step": (
+                "Correct only flagged spatial uncertainties, then block actors and place/calibrate cameras."
+                if reconstruction["correction_queue"]
+                else "Block actors and place/calibrate cameras; the first-pass set is spatially ready."
+            ),
+            "correction_queue": copy.deepcopy(reconstruction["correction_queue"]),
         },
+        "reference_reconstruction": reconstruction,
         "set_master_plan": {
             "summary": normalized_master_plan["summary"],
             "bounds": normalized_master_plan["bounds"],
