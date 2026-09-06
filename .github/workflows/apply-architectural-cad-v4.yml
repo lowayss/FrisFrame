@@ -1,0 +1,44 @@
+name: Apply architectural CAD v4 patch
+
+on:
+  push:
+    branches:
+      - feat/architectural-cad-room-opening-dimensions
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/architectural-cad-room-opening-dimensions
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch source
+        run: python3 scripts/patch_architectural_cad_v4.py
+      - name: Validate patched runtime
+        run: |
+          node --check multi-camera-core.js
+          node tests/architectural-cad-runtime.test.cjs
+          node tests/architectural-cad-v2-runtime.test.cjs
+          node tests/architectural-cad-v3-runtime.test.cjs
+          node tests/architectural-cad-v4-runtime.test.cjs
+      - name: Remove one-shot patch machinery
+        run: |
+          rm scripts/patch_architectural_cad_v4.py
+          rm .github/workflows/apply-architectural-cad-v4.yml
+      - name: Commit patched source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add room and opening architectural refinements"
+          git push origin HEAD:feat/architectural-cad-room-opening-dimensions
