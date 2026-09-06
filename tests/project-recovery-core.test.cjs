@@ -1,11 +1,14 @@
 const assert = require("node:assert/strict");
 
 const {
+  RECOVERY_VERSION,
   classifyRecovery,
   createRecoveryRecord,
+  documentFingerprint,
   normalizeRevision,
   projectFingerprint,
   parseRecoveryRecord,
+  stableStringify,
 } = require("../project-recovery-core.js");
 
 const serverDocument = { app: "FrisFrame", project: { title: "원본", scenes: [] } };
@@ -17,15 +20,26 @@ const record = createRecoveryRecord({
   savedAt: "2026-07-13T00:00:00.000Z",
 });
 
+assert.equal(RECOVERY_VERSION, 3);
 assert.deepEqual(parseRecoveryRecord(JSON.stringify(record)), record);
-assert.ok(projectFingerprint(changedDocument).length < 40, "fingerprint must not duplicate the project document");
+assert.ok(projectFingerprint(changedDocument).length < 40, "legacy project fingerprint must remain compact");
+assert.ok(documentFingerprint(changedDocument).length < 40, "full document fingerprint must remain compact");
 assert.equal(parseRecoveryRecord("not-json"), null);
 assert.equal(parseRecoveryRecord(JSON.stringify({ ...record, fingerprint: "tampered" })), null);
+assert.equal(parseRecoveryRecord(JSON.stringify({
+  ...record,
+  document: { ...record.document, app: "Tampered" },
+})), null, "top-level recovery metadata must be covered by the v3 fingerprint");
 assert.equal(classifyRecovery(record, {
   projectId: "project-1",
   revision: 3,
   document: changedDocument,
 }), "same");
+assert.equal(classifyRecovery(record, {
+  projectId: "project-1",
+  revision: 3,
+  document: { project: { scenes: [], title: "복구본" }, app: "FrisFrame" },
+}), "same", "object key order must not create a false recovery conflict");
 assert.equal(classifyRecovery(record, {
   projectId: "project-1",
   revision: 3,
@@ -41,6 +55,12 @@ assert.equal(classifyRecovery(record, {
   revision: 3,
   document: serverDocument,
 }), "none");
+
+assert.equal(
+  stableStringify({ z: 1, nested: { b: 2, a: 1 }, list: [{ y: 2, x: 1 }] }),
+  stableStringify({ list: [{ x: 1, y: 2 }], nested: { a: 1, b: 2 }, z: 1 }),
+  "canonical JSON must ignore object insertion order while preserving JSON values",
+);
 
 // Recovery creation must capture an independent snapshot. Mutating the live
 // editor document afterwards must not mutate or invalidate the recovery copy.
@@ -91,6 +111,7 @@ assert.equal(parseRecoveryRecord({ ...record, revision: -1 }), null);
 // references or changing its fingerprint.
 const largeDocument = {
   app: "FrisFrame",
+  schemaVersion: 11,
   project: {
     title: "대형 프로젝트",
     scenes: Array.from({ length: 40 }, (_, sceneIndex) => ({
@@ -118,13 +139,22 @@ assert.equal(largeRoundTrip.document.project.scenes.length, 40);
 assert.equal(largeRoundTrip.document.project.scenes[39].cuts.length, 20);
 assert.notEqual(largeRoundTrip.document, largeDocument);
 
-const legacyRecord = {
+const legacyV2Record = {
+  ...record,
+  version: 2,
+  fingerprint: projectFingerprint(changedDocument),
+};
+const migratedV2Record = parseRecoveryRecord(JSON.stringify(legacyV2Record));
+assert.equal(migratedV2Record.version, RECOVERY_VERSION);
+assert.equal(migratedV2Record.fingerprint, documentFingerprint(changedDocument));
+
+const legacyV1Record = {
   ...record,
   version: 1,
   fingerprint: JSON.stringify(changedDocument.project),
 };
-const migratedLegacyRecord = parseRecoveryRecord(JSON.stringify(legacyRecord));
-assert.equal(migratedLegacyRecord.version, 2);
-assert.equal(migratedLegacyRecord.fingerprint, projectFingerprint(changedDocument));
+const migratedV1Record = parseRecoveryRecord(JSON.stringify(legacyV1Record));
+assert.equal(migratedV1Record.version, RECOVERY_VERSION);
+assert.equal(migratedV1Record.fingerprint, documentFingerprint(changedDocument));
 
-console.log("project-recovery-core: immutable snapshots, revision validation, large payloads, and conflict classification passed");
+console.log("project-recovery-core: canonical full-document integrity, immutable snapshots, revision validation, large payloads, and legacy migration passed");
