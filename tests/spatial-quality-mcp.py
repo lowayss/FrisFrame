@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import spatial_quality_mcp as quality
 
@@ -77,10 +83,14 @@ def main():
     assert math.isclose(wall_a["end_x_m"], wall_b["start_x_m"], abs_tol=1e-9)
     assert math.isclose(wall_a["end_z_m"], wall_b["start_z_m"], abs_tol=1e-9)
 
-    # A nearby opening attaches to the vertical wall and aligns to it.
+    # A nearby opening attaches to the vertical-ish wall and aligns to its actual snapped angle.
     assert door["parent_id"] == "wall-b", door
     assert report["inferred_attachment_count"] == 1, report
-    assert math.isclose(abs(door["rotation_deg"]), 90.0, abs_tol=1e-6), door
+    wall_angle = math.degrees(math.atan2(
+        wall_b["end_z_m"] - wall_b["start_z_m"],
+        wall_b["end_x_m"] - wall_b["start_x_m"],
+    ))
+    assert math.isclose(door["rotation_deg"], wall_angle, abs_tol=1e-6), (door, wall_angle)
 
     # The disconnected island remains disconnected instead of being fabricated into a room.
     topology = report["topology"]
