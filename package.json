@@ -22,7 +22,7 @@
     "desktop:build:win": "npm run desktop:prepare && electron-builder --win nsis --x64",
     "desktop:migrate-data": "node electron/scripts/migrate-local-data.cjs",
     "desktop:verify": "node electron/scripts/verify-package.cjs && node electron/scripts/verify-camera-take-mcp.cjs && node electron/scripts/verify-orientation-revision.cjs && node electron/scripts/verify-runtime-source-parity.cjs && node electron/scripts/smoke-package.cjs",
-    "check": "python3 quality_check.py && node tests/electron-contract.test.cjs && node tests/birdseye-2-5d-mode-contract.test.cjs && node tests/birdseye-cad-edit-flow-contract.test.cjs"
+    "check": "python3 quality_check.py && node tests/electron-contract.test.cjs && node tests/birdseye-2-5d-mode-contract.test.cjs && node tests/birdseye-cad-edit-flow-contract.test.cjs && node tests/birdseye-cad-runtime-behavior.test.cjs"
   },
   "devDependencies": {
     "electron": "43.1.1",
