@@ -42,6 +42,7 @@ def check_python_syntax() -> None:
         ROOT / "autonomous_scale_core.py",
         ROOT / "spatial_quality_mcp.py",
         ROOT / "spatial_command_mcp.py",
+        ROOT / "director_previs_mcp.py",
         ROOT / "tests/reference-interpretation-mcp.py",
         ROOT / "tests/set-reconstruction-mcp.py",
         ROOT / "tests/reference-master-pipeline-mcp.py",
@@ -49,6 +50,7 @@ def check_python_syntax() -> None:
         ROOT / "tests/autonomous-scale-inference-mcp.py",
         ROOT / "tests/spatial-quality-mcp.py",
         ROOT / "tests/spatial-command-engine-mcp.py",
+        ROOT / "tests/director-previs-command-engine-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
         ROOT / "tests/seed-packaged-reference-project.py",
@@ -163,6 +165,7 @@ def main() -> None:
         "tests/mcp-desktop-runtime-contract.test.cjs",
         "tests/set-reconstruction-runtime-contract.test.cjs",
         "tests/spatial-command-runtime-contract.test.cjs",
+        "tests/director-previs-runtime-contract.test.cjs",
         "tests/mcp-first-product-boundary.test.cjs",
         "tests/mcp-live-sync-contract.test.cjs",
         "tests/retired-spatial-runtime-contract.test.cjs",
@@ -193,6 +196,7 @@ def main() -> None:
     run("Autonomous Scale Inference", [sys.executable, "tests/autonomous-scale-inference-mcp.py"])
     run("공간 해석 품질", [sys.executable, "tests/spatial-quality-mcp.py"])
     run("Spatial Command Engine", [sys.executable, "tests/spatial-command-engine-mcp.py"])
+    run("Director Previs Command Engine", [sys.executable, "tests/director-previs-command-engine-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
