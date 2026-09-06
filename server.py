@@ -325,6 +325,16 @@ def atomic_write_bytes(path, data):
             pass
 
 
+def port_bind_unavailable(error):
+    error_number = getattr(error, "errno", None)
+    windows_error = getattr(error, "winerror", None)
+    return (
+        error_number == errno.EADDRINUSE
+        or windows_error in (10013, 10048)
+        or (os.name == "nt" and error_number in (10013, 10048))
+    )
+
+
 def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
     try:
         return ThreadingHTTPServer((host, requested_port), handler), False
@@ -332,7 +342,7 @@ def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
         if (
             not allow_port_fallback
             or int(requested_port or 0) <= 0
-            or error.errno != errno.EADDRINUSE
+            or not port_bind_unavailable(error)
         ):
             raise
         return ThreadingHTTPServer((host, 0), handler), True

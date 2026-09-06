@@ -107,6 +107,7 @@ assert.match(main, /`\$\{statePath\}\.\$\{process\.pid\}\.\$\{Date\.now\(\)\}\.t
   "runtime state must use a collision-resistant atomic temporary file");
 assert.match(server, /def bind_http_server\(/);
 assert.match(server, /errno\.EADDRINUSE/);
+assert.match(server, /10013, 10048/, "Windows occupied/reserved persisted ports must use the same explicit fallback path");
 assert.match(server, /--fallback-port/);
 assert.match(main, /\/api\/health/);
 assert.match(main, /FRISFRAME_STARTUP_NONCE/);
