@@ -162,6 +162,7 @@ def main() -> None:
         "tests/workflow-shell-ux-contract.test.cjs",
         "tests/mcp-desktop-runtime-contract.test.cjs",
         "tests/set-reconstruction-runtime-contract.test.cjs",
+        "tests/spatial-command-runtime-contract.test.cjs",
         "tests/mcp-first-product-boundary.test.cjs",
         "tests/mcp-live-sync-contract.test.cjs",
         "tests/retired-spatial-runtime-contract.test.cjs",
