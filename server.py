@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import errno
 import hashlib
 import hmac
 import json
@@ -322,6 +323,29 @@ def atomic_write_bytes(path, data):
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def port_bind_unavailable(error):
+    error_number = getattr(error, "errno", None)
+    windows_error = getattr(error, "winerror", None)
+    return (
+        error_number == errno.EADDRINUSE
+        or windows_error in (10013, 10048)
+        or (os.name == "nt" and error_number in (10013, 10048))
+    )
+
+
+def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
+    try:
+        return ThreadingHTTPServer((host, requested_port), handler), False
+    except OSError as error:
+        if (
+            not allow_port_fallback
+            or int(requested_port or 0) <= 0
+            or not port_bind_unavailable(error)
+        ):
+            raise
+        return ThreadingHTTPServer((host, 0), handler), True
 
 
 class PrevisHandler(SimpleHTTPRequestHandler):
@@ -1275,6 +1299,7 @@ def main():
     default_port = int(os.environ.get("PORT", 8766))
     parser.add_argument("--host", default=default_host)
     parser.add_argument("--port", type=int, default=default_port)
+    parser.add_argument("--fallback-port", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     if args.host not in ("127.0.0.1", "localhost", "::1") and not ENABLE_LICENSE_CHECK:
@@ -1290,7 +1315,17 @@ def main():
     handler = lambda *handler_args, **handler_kwargs: PrevisHandler(
         *handler_args, directory=str(root), **handler_kwargs
     )
-    server = ThreadingHTTPServer((args.host, args.port), handler)
+    server, used_port_fallback = bind_http_server(
+        args.host, args.port, handler, allow_port_fallback=args.fallback_port
+    )
+    if used_port_fallback:
+        print(
+            "FRISFRAME_PORT_FALLBACK " + json.dumps({
+                "requestedPort": int(args.port),
+                "actualPort": int(server.server_address[1]),
+            }),
+            flush=True,
+        )
     sweeper_stop = threading.Event()
     sweeper = threading.Thread(target=sweep_expired_jobs, args=(sweeper_stop,), daemon=True)
     sweeper.start()

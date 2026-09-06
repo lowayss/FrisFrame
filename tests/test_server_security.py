@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import sqlite3
 import tempfile
 import threading
@@ -161,6 +162,41 @@ class ServerSecurityTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), b"stable-frame")
             temporary_files = [entry for entry in Path(directory).iterdir() if entry.name.endswith(".tmp")]
             self.assertEqual(temporary_files, [])
+
+    def test_windows_bind_errors_are_classified_as_unavailable_ports(self):
+        windows_access = OSError("Windows socket access denied")
+        windows_access.errno = 10013
+        windows_access.winerror = 10013
+        windows_in_use = OSError("Windows address in use")
+        windows_in_use.errno = 10048
+        windows_in_use.winerror = 10048
+        unrelated = OSError("unrelated")
+        unrelated.errno = 22
+        self.assertTrue(server.port_bind_unavailable(windows_access))
+        self.assertTrue(server.port_bind_unavailable(windows_in_use))
+        self.assertFalse(server.port_bind_unavailable(unrelated))
+
+    def test_local_http_server_falls_back_only_when_requested_port_is_busy(self):
+        blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        requested_port = blocker.getsockname()[1]
+        try:
+            with self.assertRaises(OSError):
+                server.bind_http_server(
+                    "127.0.0.1", requested_port, server.PrevisHandler, allow_port_fallback=False
+                )
+            fallback_server, used_fallback = server.bind_http_server(
+                "127.0.0.1", requested_port, server.PrevisHandler, allow_port_fallback=True
+            )
+            try:
+                self.assertTrue(used_fallback)
+                self.assertNotEqual(fallback_server.server_address[1], requested_port)
+                self.assertGreater(int(fallback_server.server_address[1]), 0)
+            finally:
+                fallback_server.server_close()
+        finally:
+            blocker.close()
 
 
 class ProjectManagementApiTests(unittest.TestCase):

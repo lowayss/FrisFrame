@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { app } = require("electron");
+const { createRendererInjector } = require("./renderer-injection-core.cjs");
 
 const TAKE_PRELUDE_FILES = Object.freeze([
   "camera-take-path-core.js",
@@ -12,7 +13,7 @@ const TAKE_PRELUDE_FILES = Object.freeze([
 function readPreludeSources() {
   return TAKE_PRELUDE_FILES.map((filename) => ({
     filename,
-    source:fs.readFileSync(path.join(__dirname, filename), "utf8"),
+    source: fs.readFileSync(path.join(__dirname, filename), "utf8"),
   }));
 }
 
@@ -21,37 +22,29 @@ function installTakePrelude(webContents) {
   if (webContents.__frisframeTakePreludeInstalled === true) return;
   webContents.__frisframeTakePreludeInstalled = true;
   const originalOn = webContents.on.bind(webContents);
-  const sources = readPreludeSources();
-  let loadGeneration = 0;
-  let injectedGeneration = -1;
-  let injectionPromise = null;
-
-  originalOn("did-start-loading", () => {
-    loadGeneration += 1;
-    injectionPromise = null;
-  });
-
-  const inject = () => {
-    if (injectedGeneration === loadGeneration) return Promise.resolve();
-    if (injectionPromise) return injectionPromise;
-    injectionPromise = (async () => {
-      for (const entry of sources) {
-        if (webContents.isDestroyed?.()) return;
-        await webContents.executeJavaScript(entry.source, true);
-      }
-      injectedGeneration = loadGeneration;
-    })().catch((error) => {
+  const injector = createRendererInjector({
+    webContents,
+    entries: readPreludeSources(),
+    label: "camera take prelude",
+    onError: (error) => {
       process.stderr.write(`[FrisFrame] camera take prelude failed: ${error?.stack || error}\n`);
-    });
-    return injectionPromise;
-  };
+    },
+  });
+  webContents.__frisframeTakePreludeInjector = injector;
+
+  originalOn("did-start-loading", () => injector.markLoadStarted());
 
   webContents.on = function patchedOn(eventName, listener) {
     if (eventName !== "did-finish-load" || typeof listener !== "function") {
       return originalOn(eventName, listener);
     }
     return originalOn(eventName, (...args) => {
-      inject().finally(() => listener(...args));
+      injector.injectCurrent().then((result) => {
+        if (result.status === "stale" || result.status === "destroyed") return;
+        listener(...args);
+      }).catch(() => {
+        // Fail closed: dependent renderer UX must not run after a partial prelude.
+      });
     });
   };
 }
