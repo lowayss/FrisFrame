@@ -7,6 +7,24 @@ const assert = require("node:assert/strict");
 
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "multi-camera-core.js"), "utf8");
+const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+
+const presetBlock = appSource.match(/const environmentPresets = \{([\s\S]*?)\n\};\n\nconst aspectMap/);
+assert.ok(presetBlock, "environmentPresets source block must exist");
+const appPresetIds = [...presetBlock[1].matchAll(/^\s{2}([a-z][a-z0-9_]*): \{/gm)].map((match) => match[1]);
+const appAssetTypes = [...new Set([...presetBlock[1].matchAll(/\[\s*"([^"]+)"\s*,\s*"[^"]+"/g)].map((match) => match[1]))];
+const expectedPresetIds = [
+  "living", "kitchen", "bedroom", "forest", "car", "office", "classroom",
+  "corridor", "elevator_lobby", "bathroom", "train_cabin", "slope_hill", "classic_salon",
+];
+assert.deepEqual(appPresetIds, expectedPresetIds, "all existing environment presets must stay under metric quality management");
+for (const presetId of appPresetIds) {
+  assert.match(source, new RegExp(`\\b${presetId}: \\{`), `missing metric preset spec: ${presetId}`);
+}
+for (const assetType of appAssetTypes) {
+  const escaped = assetType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.match(source, new RegExp(`(?:^|\\n)\\s*(?:"${escaped}"|${escaped}): \\[`), `missing curated asset metric: ${assetType}`);
+}
 
 const loadHandlers = [];
 const clickHandlers = [];
@@ -67,9 +85,7 @@ loadHandlers[0]();
 const api = windowObject.FrisFrameEnvironmentPresetQuality;
 assert.ok(api, "preset quality API must be exposed");
 assert.equal(api.version, 2);
-assert.ok(api.presetIds.includes("living"));
-assert.ok(api.presetIds.includes("train_cabin"));
-assert.ok(api.presetIds.includes("classic_salon"));
+assert.deepEqual(api.presetIds, expectedPresetIds);
 assert.equal(api.getSpec("living").width, 7.2);
 assert.equal(api.upgradeCurrent(), true);
 
@@ -99,4 +115,4 @@ assert.equal(doorElement.parentId, "room-1", "room openings must retain a spatia
 assert.equal(doorElement.basis, "user_fixed");
 assert.equal(doorElement.confidence, 1);
 
-console.log("environment-preset-quality: curated metric layouts, semantics, dimensions and Master Set persistence passed");
+console.log("environment-preset-quality: all presets/assets covered; curated metric layouts, semantics, dimensions and Master Set persistence passed");
