@@ -125,7 +125,7 @@ test("REC and STOP are retried until a command-id acknowledgement arrives", () =
   const html = motionHtml("token");
   assert.match(html,/pendingCommand/);
   assert.match(html,/commandId:cmd\?\.id/);
-  assert.match(html,/ack\.ack===cmd\.id/);
+  assert.match(html,/body\.ack===cmd\.id/);
   assert.match(html,/while\(alive\)/);
   assert.doesNotMatch(html,/command="";try/);
   assert.match(viewfinderServer,/commandAcks = new Map/);
