@@ -27,6 +27,7 @@ jobs:
           python3 scripts/patch_architectural_cad_v5.py
           python3 scripts/fix_architectural_cad_v5_dimension.py
           python3 scripts/fix_architectural_cad_v5_test.py
+          python3 scripts/add_v5_dimension_diagnostics.py
       - name: Validate patched runtime
         run: |
           node --check multi-camera-core.js
@@ -40,6 +41,7 @@ jobs:
           rm scripts/patch_architectural_cad_v5.py
           rm scripts/fix_architectural_cad_v5_dimension.py
           rm scripts/fix_architectural_cad_v5_test.py
+          rm scripts/add_v5_dimension_diagnostics.py
           rm .github/workflows/apply-architectural-cad-v5.yml
       - name: Commit patched source
         run: |
