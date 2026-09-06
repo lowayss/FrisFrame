@@ -85,7 +85,7 @@ loadHandlers[0]();
 const api = windowObject.FrisFrameEnvironmentPresetQuality;
 assert.ok(api, "preset quality API must be exposed");
 assert.equal(api.version, 2);
-assert.deepEqual(api.presetIds, expectedPresetIds);
+assert.deepEqual([...api.presetIds], expectedPresetIds);
 assert.equal(api.getSpec("living").width, 7.2);
 assert.equal(api.upgradeCurrent(), true);
 
