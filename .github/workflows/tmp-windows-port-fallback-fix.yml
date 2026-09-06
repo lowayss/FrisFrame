@@ -1,4 +1,4 @@
-name: Temporary Windows port fallback fix
+name: Temporary port fallback compatibility fix
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   patch:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,14 +20,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Patch Windows bind conflict classification
-        shell: pwsh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch cross-platform bind conflict handling
+        shell: bash
         run: |
-          @'
+          python - <<'PY'
           from pathlib import Path
 
-          path = Path("server.py")
-          text = path.read_text(encoding="utf-8")
+          server_path = Path("server.py")
+          server_text = server_path.read_text(encoding="utf-8")
           old = '''def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
               try:
                   return ThreadingHTTPServer((host, requested_port), handler), False
@@ -62,14 +65,13 @@ jobs:
                       raise
                   return ThreadingHTTPServer((host, 0), handler), True
           '''
-          if text.count(old) != 1:
-              raise SystemExit("server.py bind helper did not match exactly")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          if server_text.count(old) != 1:
+              raise SystemExit("server bind helper did not match exactly")
+          server_path.write_text(server_text.replace(old, new), encoding="utf-8")
 
           test_path = Path("tests/test_server_security.py")
           test_text = test_path.read_text(encoding="utf-8")
-          marker = '''    def test_local_http_server_falls_back_only_when_requested_port_is_busy(self):
-          '''
+          marker = '    def test_local_http_server_falls_back_only_when_requested_port_is_busy(self):\n'
           addition = '''    def test_windows_bind_errors_are_classified_as_unavailable_ports(self):
               windows_access = OSError("Windows socket access denied")
               windows_access.errno = 10013
@@ -88,24 +90,26 @@ jobs:
               raise SystemExit("server fallback test marker did not match exactly")
           test_path.write_text(test_text.replace(marker, addition + marker), encoding="utf-8")
 
-          contract = Path("tests/electron-contract.test.cjs")
-          contract_text = contract.read_text(encoding="utf-8")
-          old_contract = 'assert.match(server, /errno\\.EADDRINUSE/);\n'
-          new_contract = 'assert.match(server, /errno\\.EADDRINUSE/);\nassert.match(server, /10013, 10048/, "Windows occupied/reserved persisted ports must use the same explicit fallback path");\n'
-          if contract_text.count(old_contract) != 1:
-              raise SystemExit("electron contract marker did not match exactly")
-          contract.write_text(contract_text.replace(old_contract, new_contract), encoding="utf-8")
+          contract_path = Path("tests/electron-contract.test.cjs")
+          contract_text = contract_path.read_text(encoding="utf-8")
+          marker = 'assert.match(server, /errno\\.EADDRINUSE/);\n'
+          addition = 'assert.match(server, /10013, 10048/, "Windows occupied/reserved persisted ports must use the same explicit fallback path");\n'
+          if contract_text.count(marker) != 1:
+              raise SystemExit("electron contract fallback marker did not match exactly")
+          contract_path.write_text(contract_text.replace(marker, marker + addition), encoding="utf-8")
 
           Path(".github/workflows/tmp-windows-port-fallback-fix.yml").unlink()
-          '@ | python -
-      - name: Verify Windows fallback
-        shell: pwsh
+          PY
+      - name: Verify compatibility patch
+        shell: bash
         run: |
+          set -euo pipefail
           python -m unittest tests.test_server_security
           node tests/electron-contract.test.cjs
-      - name: Commit fix
-        shell: pwsh
+      - name: Commit compatibility patch
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
