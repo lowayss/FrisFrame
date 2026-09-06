@@ -72,6 +72,7 @@ def main() -> None:
     import reference_space_orientation_mcp  # noqa: F401 - installs explicit screen-orientation tools
     import reference_interpretation_mcp  # noqa: F401 - installs external-vision interpretation contract + apply tools
     import set_reconstruction_mcp  # noqa: F401 - installs 2D master-plan set reconstruction + lock tools
+    import reference_master_pipeline_mcp  # noqa: F401 - installs reference image -> authoritative Master Set pipeline
     import camera_take_context_mcp  # noqa: F401 - installs read-only Physical Camera take context tool
     from mcp_previs_server import main as run_mcp
     run_mcp()

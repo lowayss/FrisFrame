@@ -38,8 +38,10 @@ def check_python_syntax() -> None:
         ROOT / "reference_space_orientation_mcp.py",
         ROOT / "reference_interpretation_mcp.py",
         ROOT / "set_reconstruction_mcp.py",
+        ROOT / "reference_master_pipeline_mcp.py",
         ROOT / "tests/reference-interpretation-mcp.py",
         ROOT / "tests/set-reconstruction-mcp.py",
+        ROOT / "tests/reference-master-pipeline-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
         ROOT / "tests/seed-packaged-reference-project.py",
@@ -172,6 +174,7 @@ def main() -> None:
     run("Reference Space 화면 방향", [sys.executable, "tests/reference-space-orientation-mcp.py"])
     run("Reference 이미지 해석 계약", [sys.executable, "tests/reference-interpretation-mcp.py"])
     run("2D 마스터 세트 재구성", [sys.executable, "tests/set-reconstruction-mcp.py"])
+    run("Reference → Master Set 파이프라인", [sys.executable, "tests/reference-master-pipeline-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
