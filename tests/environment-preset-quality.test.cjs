@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "multi-camera-core.js"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
 
-const presetBlock = appSource.match(/const environmentPresets = \{([\s\S]*?)\n\};\n\nconst aspectMap/);
+const presetBlock = appSource.match(/const environmentPresets = \{([\s\S]*?)\r?\n\};\r?\n\r?\nconst aspectMap/);
 assert.ok(presetBlock, "environmentPresets source block must exist");
 const appPresetIds = [...presetBlock[1].matchAll(/^\s{2}([a-z][a-z0-9_]*): \{/gm)].map((match) => match[1]);
 const appAssetTypes = [...new Set([...presetBlock[1].matchAll(/\[\s*"([^"]+)"\s*,\s*"[^"]+"/g)].map((match) => match[1]))];
