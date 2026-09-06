@@ -4,13 +4,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { app } = require("electron");
 
+const MOTION_PRELUDE_FILES = Object.freeze([
+  "phone-motion-ipc-ux.js",
+]);
+
 const TAKE_PRELUDE_FILES = Object.freeze([
   "camera-take-path-core.js",
   "camera-take-replay-ux.js",
 ]);
 
 function readPreludeSources() {
-  return TAKE_PRELUDE_FILES.map((filename) => ({
+  return [...MOTION_PRELUDE_FILES, ...TAKE_PRELUDE_FILES].map((filename) => ({
     filename,
     source:fs.readFileSync(path.join(__dirname, filename), "utf8"),
   }));
@@ -57,5 +61,13 @@ function installTakePrelude(webContents) {
 }
 
 app.on("web-contents-created", (_event, webContents) => installTakePrelude(webContents));
+
+// Keep the original module as the stable import path, but replace only the
+// Physical Camera bridge implementation before main.cjs loads it. This keeps
+// the precision transport isolated to this refinement branch without changing
+// the public desktop bootstrap contract.
+const legacyPhoneMotionServer = require("./phone-motion-server.cjs");
+const precisionPhoneMotionServer = require("./phone-motion-server-v2.cjs");
+legacyPhoneMotionServer.createPhoneMotionBridge = precisionPhoneMotionServer.createPhoneMotionBridge;
 
 require("./main.cjs");

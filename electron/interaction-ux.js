@@ -80,6 +80,59 @@
     );
   }
 
+  function cameraOperatorMotionVector(from, to, thresholds) {
+    return [
+      (Number(to.x || 0) - Number(from.x || 0)) / thresholds.position,
+      (Number(to.y || 0) - Number(from.y || 0)) / thresholds.position,
+      (Number(to.height || 0) - Number(from.height || 0)) / thresholds.height,
+      shortestOperatorAngleDelta(from.panDeg || 0, to.panDeg || 0) / thresholds.angle,
+      (Number(to.tiltDeg || 0) - Number(from.tiltDeg || 0)) / thresholds.angle,
+      (Number(to.focal || 0) - Number(from.focal || 0)) / thresholds.focal,
+    ];
+  }
+
+  function cameraOperatorNaturalMotionAnchors(samples, thresholds) {
+    const anchors = new Set([0, samples.length - 1]);
+    if (!Array.isArray(samples) || samples.length < 3) return anchors;
+
+    const segments = [];
+    for (let index = 0; index < samples.length - 1; index += 1) {
+      const vector = cameraOperatorMotionVector(samples[index], samples[index + 1], thresholds);
+      const magnitude = Math.hypot(...vector);
+      const duration = Math.max(1 / 240, Number(samples[index + 1].time) - Number(samples[index].time));
+      segments.push({ vector, magnitude, rate: magnitude / duration });
+    }
+
+    // Preserve the places where a real operator move starts, settles, sharply
+    // redirects, or changes speed. Geometry-only reduction can otherwise turn
+    // a human move into a constant-speed robotic glide.
+    const quietMotion = 0.35;
+    const activeMotion = 1.0;
+    for (let index = 1; index < samples.length - 1; index += 1) {
+      const left = segments[index - 1];
+      const right = segments[index];
+      const leavesHold = left.magnitude <= quietMotion && right.magnitude >= activeMotion;
+      const entersHold = left.magnitude >= activeMotion && right.magnitude <= quietMotion;
+      if (leavesHold || entersHold) {
+        anchors.add(index);
+        continue;
+      }
+      if (left.magnitude < activeMotion || right.magnitude < activeMotion) continue;
+
+      const dot = left.vector.reduce((sum, value, component) => sum + value * right.vector[component], 0);
+      const direction = dot / Math.max(0.000001, left.magnitude * right.magnitude);
+      if (direction <= 0.25) {
+        anchors.add(index);
+        continue;
+      }
+
+      const slowRate = Math.max(0.000001, Math.min(left.rate, right.rate));
+      const speedRatio = Math.max(left.rate, right.rate) / slowRate;
+      if (speedRatio >= 2.75) anchors.add(index);
+    }
+    return anchors;
+  }
+
   function simplifyCameraOperatorSamples(samples, options = {}) {
     if (!Array.isArray(samples) || samples.length <= 2) return Array.isArray(samples) ? samples.map((sample) => ({ ...sample })) : [];
     const thresholds = {
@@ -89,7 +142,9 @@
       focal: Math.max(0.05, Number(options.focalTolerance || 0.25)),
     };
     const maxGap = Number.isFinite(Number(options.maxGap)) ? Math.max(0.05, Number(options.maxGap)) : 0.55;
-    const keep = new Set([0, samples.length - 1]);
+    const keep = options.preserveNaturalMotion === true
+      ? cameraOperatorNaturalMotionAnchors(samples, thresholds)
+      : new Set([0, samples.length - 1]);
 
     function chooseMidpoint(startIndex, endIndex) {
       const midpoint = (Number(samples[startIndex].time) + Number(samples[endIndex].time)) / 2;
@@ -130,7 +185,10 @@
       }
     }
 
-    reduce(0, samples.length - 1);
+    const naturalAnchors = [...keep].sort((left, right) => left - right);
+    for (let index = 0; index < naturalAnchors.length - 1; index += 1) {
+      reduce(naturalAnchors[index], naturalAnchors[index + 1]);
+    }
     return [...keep].sort((left, right) => left - right).map((index) => ({ ...samples[index] }));
   }
 

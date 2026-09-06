@@ -4,9 +4,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const tls = require("node:tls");
 const { sanitizeMotionInput, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
+const precision = require("../electron/phone-motion-server-v2.cjs");
 const { extensionConfig, localCaConfig, pemCertificateToDer, isCertificateAuthority } = require("../electron/phone-remote-tls.cjs");
 
 const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
+const phoneMotionIpcUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-ipc-ux.js"), "utf8");
+const phoneRemotePreload = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-remote-preload.cjs"), "utf8");
+const mainEntry = fs.readFileSync(path.join(__dirname, "..", "electron", "main-entry.cjs"), "utf8");
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
 
 test("motion transport clamps hostile sensor input and never marks visual flow metric", () => {
   const value = sanitizeMotionInput({
@@ -87,9 +92,105 @@ test("motion page processes camera frames locally and progressively enables WebX
   assert.doesNotMatch(html,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
+test("precision motion page uses single-flight 60Hz-class transport and anchors XR on the first valid pose", () => {
+  const html = precision.motionHtml("token");
+  assert.match(html,/sendInFlight/);
+  assert.match(html,/sendQueued/);
+  assert.match(html,/clientRttMs:lastRttMs/);
+  assert.match(html,/keepalive:true/);
+  assert.match(html,/setInterval\(\(\)=>\{if\(state\.enabled\|\|command\)send\(\)\},16\)/);
+  assert.doesNotMatch(html,/setInterval\(send,33\)/);
+  assert.match(html,/timer=setInterval\(track,50\)/);
+  assert.match(html,/xrNeedsRecenter=true/);
+  assert.match(html,/if\(xrNeedsRecenter\)\{recenter\(\);xrNeedsRecenter=false\}/);
+  assert.match(html,/addEventListener\?\.\("reset"/);
+  assert.match(html,/state\.spatial=\{\.\.\.state\.spatial,confidence:0\}/);
+  assert.match(html,/function sendUrgent\(outgoingCommand=""\)/);
+  assert.match(html,/sendUrgent\("toggle-record"\)/);
+  assert.match(html,/sendUrgent\("stop"\)/);
+  assert.match(html,/recenter\(\);sendUrgent\(\)/);
+});
+
+test("precision sanitizer carries a bounded session id and phone-observed RTT", () => {
+  const value = precision.sanitizeMotionInput({
+    sessionId:"phone session!?_01",
+    clientRttMs:9999,
+    seq:8,
+    motion:{enabled:true},
+  });
+  assert.equal(value.sessionId,"phonesession_01");
+  assert.equal(value.clientRttMs,2000);
+  assert.equal(value.seq,8);
+});
+
+test("latest-only dispatcher rejects reordered packets, coalesces motion and dispatches commands immediately", () => {
+  let now = 1000;
+  let scheduled = null;
+  const sent = [];
+  const dispatcher = precision.createLatestDispatcher({
+    dispatch:(payload)=>sent.push(payload),
+    intervalMs:16,
+    now:()=>now,
+    setTimer:(callback,delay)=>{scheduled={callback,delay};return scheduled;},
+    clearTimer:()=>{scheduled=null;},
+  });
+
+  assert.equal(dispatcher.push({sessionId:"a",seq:1}).immediate,true);
+  assert.equal(sent.at(-1).seq,1);
+  now = 1004;
+  assert.equal(dispatcher.push({sessionId:"a",seq:2}).immediate,false);
+  assert.equal(scheduled.delay,12);
+  now = 1005;
+  dispatcher.push({sessionId:"a",seq:3});
+  const stale = dispatcher.push({sessionId:"a",seq:2});
+  assert.equal(stale.accepted,false);
+  assert.equal(stale.reason,"stale-sequence");
+  now = 1016;
+  const flush = scheduled.callback;
+  scheduled = null;
+  flush();
+  assert.equal(sent.at(-1).seq,3,"only the newest queued motion packet should render");
+
+  now = 1017;
+  const command = dispatcher.push({sessionId:"a",seq:4,command:"stop"});
+  assert.equal(command.immediate,true);
+  assert.equal(sent.at(-1).command,"stop");
+
+  now = 1020;
+  const reloaded = dispatcher.push({sessionId:"b",seq:1});
+  assert.equal(reloaded.accepted,true,"a reloaded phone page gets a fresh sequence namespace");
+});
+
+test("renderer IPC bridge drops stale work, coalesces rendering and forces fresh anchors after mode or session changes", () => {
+  assert.match(phoneRemotePreload,/ipcRenderer\.on\("phone-motion:input"/);
+  assert.match(phoneRemotePreload,/onMotionInput/);
+  assert.match(phoneMotionIpcUx,/MAX_RENDER_AGE_MS = 100/);
+  assert.match(phoneMotionIpcUx,/droppedStaleSequence/);
+  assert.match(phoneMotionIpcUx,/droppedRendererAge/);
+  assert.match(phoneMotionIpcUx,/requestAnimationFrame\(flush\)/);
+  assert.match(phoneMotionIpcUx,/const ageNow = Math\.max/);
+  assert.match(phoneMotionIpcUx,/if \(!detail\.command && ageNow > MAX_RENDER_AGE_MS\)/);
+  assert.match(phoneMotionIpcUx,/lastMetric = null/);
+  assert.match(phoneMotionIpcUx,/modeEpoch \+= 1/);
+  assert.match(phoneMotionIpcUx,/calibrationId:calibrationId \* 1024 \+ modeEpoch/);
+  assert.match(phoneMotionIpcUx,/frisframe:phone-remote-input/);
+  assert.match(mainEntry,/phone-motion-server-v2\.cjs/);
+  assert.match(mainEntry,/phone-motion-ipc-ux\.js/);
+  assert.ok(packageJson.build.files.includes("electron/phone-motion-server-v2.cjs"));
+  assert.ok(packageJson.build.files.includes("electron/phone-motion-ipc-ux.js"));
+});
+
+test("Physical Camera exposes DIRECT as the low-latency default and warns when Tracking Target owns pan/tilt", () => {
+  assert.match(phoneMotionUx,/direct:\s*\{\s*label:"DIRECT",\s*positionHalfLifeMs:12,\s*angleHalfLifeMs:8,\s*focalHalfLifeMs:24\s*\}/);
+  assert.match(phoneMotionUx,/:\s*"direct";/);
+  assert.match(phoneMotionUx,/TRACK TARGET · Pan\/Tilt 타깃 고정/);
+  assert.match(phoneMotionUx,/Tracking Target이 활성화된 카메라는 Pan\/Tilt가 타깃 추적으로 고정됩니다/);
+  assert.match(phoneMotionUx,/DIRECT는 짧은 안정화만 적용해 조작 지연을 최소화/);
+});
+
 test("Physical Camera UX explains metric boundaries and exposes no image serialization path", () => {
   assert.match(phoneMotionUx,/WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다/);
-  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아니라/);
+  assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 (?:아니라|아닙니다)/);
   assert.doesNotMatch(phoneMotionUx,/toDataURL|base64|image\/jpeg|image\/png/);
 });
 
@@ -97,7 +198,7 @@ test("TLS SAN configuration includes localhost and LAN IPs", () => {
   const config = extensionConfig(["192.168.0.21","10.0.0.8"]);
   assert.match(config,/DNS\.1=localhost/);
   assert.match(config,/IP\.1=127\.0\.0\.1/);
-  assert.match(config,/192\.168\.0\.21/);
+  assert.match(config,/192\.168\.0.21/);
   assert.match(config,/10\.0\.0\.8/);
 });
 

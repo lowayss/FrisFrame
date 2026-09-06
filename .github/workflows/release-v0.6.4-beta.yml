@@ -1,0 +1,102 @@
+name: Release v0.6.4 beta
+
+on:
+  push:
+    branches:
+      - refine/physical-camera-precision
+    paths:
+      - .github/workflows/release-v0.6.4-beta.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS · Apple Silicon
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate source
+        run: npm run check
+      - name: Set beta build version
+        run: npm version 0.6.4 --no-git-tag-version
+      - name: Build unsigned macOS package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --mac dmg zip --arm64 --publish never
+      - name: Verify package
+        run: npm run desktop:verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-macOS-arm64
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+
+  windows:
+    name: Windows · x64
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate source
+        run: npm run check
+      - name: Set beta build version
+        run: npm version 0.6.4 --no-git-tag-version
+      - name: Build unsigned Windows package
+        run: |
+          npm run desktop:prepare
+          npx electron-builder --win nsis --x64 --publish never
+      - name: Verify package
+        run: npm run desktop:verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FrisFrame-Windows-x64
+          if-no-files-found: error
+          path: release/*.exe
+
+  release:
+    name: Publish v0.6.4-beta
+    runs-on: ubuntu-latest
+    needs: [macos, windows]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: FrisFrame-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create v0.6.4-beta release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "FrisFrame v0.6.4-beta" \
+            --prerelease \
+            --notes "Physical Camera test build from PR #94. Adds dedicated phone recording, current-playhead start key creation, LIVE-pose adoption, up to 60 Hz phone sampling, 30 Hz editable camera-path reconstruction, lighter phone-specific stabilization, and denser key retention for natural handheld motion. Also includes the existing v0.6.3 Physical Camera tracking and Android local CA fixes. Unsigned test build; macOS Gatekeeper or Windows SmartScreen may warn."

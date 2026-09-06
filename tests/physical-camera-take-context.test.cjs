@@ -6,6 +6,7 @@ const vm = require("node:vm");
 
 const root = path.join(__dirname, "..");
 const ux = fs.readFileSync(path.join(root, "electron", "phone-motion-camera-ux.js"), "utf8");
+const cameraOperatorUx = fs.readFileSync(path.join(root, "electron", "camera-operator-live-ux.js"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const mcp = fs.readFileSync(path.join(root, "mcp_previs_server.py"), "utf8");
 
@@ -100,6 +101,27 @@ test("Physical Camera metadata is gated to an actual Camera Operator finish comm
   assert.match(ux, /TAKE_HISTORY_LIMIT = 20/);
   assert.match(ux, /cameraOperatorTakes/);
   assert.match(ux, /latestCameraOperatorTakeId/);
+});
+
+test("Physical Camera REC is persisted through the Camera Operator camera-keyframe path", () => {
+  assert.match(ux, /const starter = inputs\(\)\?\.startRecording/,
+    "phone REC must enter the existing Camera Operator recording path");
+  assert.match(cameraOperatorUx, /const recordPhysicalPose = \(pose\) =>/,
+    "Physical Camera must capture stabilized phone poses on packet arrival");
+  assert.match(cameraOperatorUx, /time - lastSampleTime >= 1 \/ 90/,
+    "Physical Camera packet capture must retain display-class motion without duplicate bursts");
+  assert.match(cameraOperatorUx, /resampleStep = phoneTake \? 1 \/ 30 : 1 \/ 15/,
+    "Physical Camera samples must become a dense but editable 30 Hz timeline path");
+  assert.match(cameraOperatorUx, /captureSourceKeyframe\("camera", sample\.time, undefined, "straight"\)/,
+    "the finished Physical Camera take must materialize as camera keyframes");
+  assert.match(cameraOperatorUx, /recordPhysicalPose/,
+    "Camera Operator must expose packet-timed Physical Camera capture");
+  assert.match(ux, /op\.recordPhysicalPose\?\.\(pose\)/,
+    "stabilized Physical Camera packets must feed the packet-timed recorder");
+  assert.match(cameraOperatorUx, /state\.motion\.keyframes\.push\(keyframe\)/,
+    "materialized camera keys must be stored in the project timeline");
+  assert.match(cameraOperatorUx, /commit\(\{ preserveSourceIds: \["camera"\] \}\)/,
+    "the keyframed camera take must be committed as authored camera motion");
 });
 
 test("unrelated camera commit during REC cannot finalize Physical Camera metadata", () => {
@@ -201,6 +223,9 @@ test("LIVE preview contract is render-only until recording adopts it", () => {
   assert.match(ux, /const starter = inputs\(\)\?\.startRecording/);
   assert.match(ux, /LIVE 프리뷰 구도에서 바로 촬영을 시작합니다/);
   assert.match(ux, /get livePreview\(\)/);
+  assert.match(ux, /op\.arm\(\{ ensureStartKey:true \}\)/, "phone REC must auto-create a start camera key when the timeline has none");
+  assert.match(ux, /op\.adoptStartPose\(pose, "phone"\)/, "the LIVE phone pose must become the actual first recorded camera key");
+  assert.match(ux, /op\?\.startPhysical/, "physical motion must use the dedicated high-fidelity recording path");
 });
 
 test("take context records tracking semantics needed by downstream generation", () => {
