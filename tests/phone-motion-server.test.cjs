@@ -7,11 +7,13 @@ const { sanitizeMotionInput, bootstrapHtml, motionHtml } = require("../electron/
 const { extensionConfig, localCaConfig, pemCertificateToDer, isCertificateAuthority } = require("../electron/phone-remote-tls.cjs");
 
 const phoneMotionUx = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-motion-camera-ux.js"), "utf8");
+const viewfinderServer = fs.readFileSync(path.join(__dirname, "..", "electron", "phone-director-viewfinder.cjs"), "utf8");
 
 test("motion transport clamps hostile sensor input and never marks visual flow metric", () => {
   const value = sanitizeMotionInput({
     seq:-4,
     command:"toggle-record",
+    focal:9,
     motion:{
       enabled:true,calibrationId:8,screenAngle:999,
       orientation:{alpha:999,beta:-999,gamma:999,absolute:true},
@@ -21,6 +23,7 @@ test("motion transport clamps hostile sensor input and never marks visual flow m
   });
   assert.equal(value.seq,0);
   assert.equal(value.command,"toggle-record");
+  assert.equal(value.focal,1);
   assert.equal(value.motion.screenAngle,360);
   assert.deepEqual(value.motion.orientation,{alpha:360,beta:-180,gamma:90,absolute:true});
   assert.deepEqual(value.motion.acceleration,{x:100,y:-100,z:0});
@@ -59,35 +62,58 @@ test("WebXR spatial input is the only transport path allowed to claim metric 6Do
   assert.equal(spoofed.motion.spatial.metric,false);
 });
 
-test("bootstrap keeps CA onboarding separate from the HTTPS motion controller", () => {
+test("bootstrap introduces the phone as a Director Viewfinder rather than a visible rear-camera controller", () => {
   const html = bootstrapHtml("token", "https://192.168.0.2:4443/?token=token", "AA:BB", "");
+  assert.match(html,/Director Viewfinder/);
   assert.match(html,/FrisFrame 로컬 CA 설치/);
-  assert.match(html,/HTTPS 모션 카메라 열기/);
+  assert.match(html,/가상 핸드헬드 카메라/);
+  assert.match(html,/실제 후면 카메라 대신 FrisFrame 가상 카메라 프레임/);
   assert.match(html,/AA:BB/);
-  assert.match(html,/WebXR/);
-  assert.match(html,/Visual Flow/);
 });
 
-test("motion page processes camera frames locally and progressively enables WebXR 6DoF", () => {
+test("phone page uses the FrisFrame virtual frame as the visible viewfinder and keeps the real camera hidden for tracking", () => {
   const html = motionHtml("token");
+  assert.match(html,/DIRECTOR VIEWFINDER/);
+  assert.match(html,/id="feed" class="feed"/);
+  assert.match(html,/\/viewfinder\.mjpeg\?token=/);
+  assert.match(html,/id="tracker" class="tracker"/);
   assert.match(html,/getUserMedia/);
   assert.match(html,/deviceorientation/);
   assert.match(html,/devicemotion/);
   assert.match(html,/calibrationId/);
-  assert.match(html,/visual:\{/);
-  assert.match(html,/spatial:\{/);
+  assert.match(html,/HANDHELD/);
+  assert.match(html,/HEAVY/);
+  assert.match(html,/RAW/);
+  assert.match(html,/RECENTER/);
   assert.match(html,/navigator\.xr\.isSessionSupported\("immersive-ar"\)/);
   assert.match(html,/navigator\.xr\.requestSession\("immersive-ar"/);
   assert.match(html,/requestReferenceSpace\("local"\)/);
   assert.match(html,/getViewerPose\(xrSpace\)/);
-  assert.match(html,/XRWebGLLayer/);
   assert.match(html,/mode:"webxr",metric:true/);
-  assert.match(html,/6DoF WebXR 시작/);
-  assert.match(html,/후면 카메라 Visual Flow/);
-  assert.doesNotMatch(html,/toDataURL|base64|image\/jpeg|image\/png/);
+  assert.doesNotMatch(html,/toDataURL|base64/);
 });
 
-test("Physical Camera UX explains metric boundaries and exposes no image serialization path", () => {
+test("Director Viewfinder bridge captures only the camera surface and streams a token-protected MJPEG feed", () => {
+  assert.match(viewfinderServer,/cameraFrameRect/);
+  assert.match(viewfinderServer,/document\.getElementById\("cameraFrame"\)/);
+  assert.match(viewfinderServer,/webContents\.capturePage/);
+  assert.match(viewfinderServer,/multipart\/x-mixed-replace/);
+  assert.match(viewfinderServer,/viewfinder\.mjpeg/);
+  assert.match(viewfinderServer,/authorized\(requestUrl\)/);
+  assert.match(viewfinderServer,/VIEWFINDER_INTERVAL_MS = 66/);
+  assert.match(viewfinderServer,/VIEWFINDER_MAX_WIDTH = 960/);
+});
+
+test("phone-side rig keeps RAW immediate, HANDHELD responsive, and HEAVY more inertial", () => {
+  const html = motionHtml("token");
+  assert.match(html,/rig==="raw"\?1/);
+  assert.match(html,/rig==="heavy"\?1-Math\.pow\(\.5,dt\/145\)/);
+  assert.match(html,/dt\/48/);
+  assert.match(html,/angleStep/);
+  assert.match(html,/lastFiltered=null/);
+});
+
+test("Physical Camera UX still explains metric boundaries and exposes no image serialization path", () => {
   assert.match(phoneMotionUx,/WebXR 모드만 물리적 local-space 위치를 meter로 사용합니다/);
   assert.match(phoneMotionUx,/Visual Flow는 실제 이동거리 측정값이 아니라/);
   assert.doesNotMatch(phoneMotionUx,/toDataURL|base64|image\/jpeg|image\/png/);
