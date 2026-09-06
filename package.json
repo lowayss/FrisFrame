@@ -44,6 +44,7 @@
     "files": [
       "electron/main-entry.cjs",
       "electron/main.cjs",
+      "electron/renderer-injection-core.cjs",
       "electron/clipboard.cjs",
       "electron/file-save.cjs",
       "electron/preload.cjs",

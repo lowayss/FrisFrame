@@ -7,6 +7,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const packageLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
 const mainEntry = fs.readFileSync(path.join(root, "electron/main-entry.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
+const rendererInjectionCore = fs.readFileSync(path.join(root, "electron/renderer-injection-core.cjs"), "utf8");
 const clipboardBridge = fs.readFileSync(path.join(root, "electron/clipboard.cjs"), "utf8");
 const fileSaveBridge = fs.readFileSync(path.join(root, "electron/file-save.cjs"), "utf8");
 const preload = fs.readFileSync(path.join(root, "electron/preload.cjs"), "utf8");
@@ -41,6 +42,7 @@ assert.ok(packageJson.build.extraResources.some((entry) => entry.to === "license
 assert.equal(packageJson.build.mac.icon, "build/icon.icns");
 assert.ok(packageJson.build.files.includes("electron/main-entry.cjs"));
 assert.ok(packageJson.build.files.includes("electron/main.cjs"));
+assert.ok(packageJson.build.files.includes("electron/renderer-injection-core.cjs"));
 assert.ok(packageJson.build.files.includes("electron/clipboard.cjs"));
 assert.ok(packageJson.build.files.includes("electron/file-save.cjs"));
 assert.ok(packageJson.build.files.includes("electron/selection-ux.js"));
@@ -87,6 +89,25 @@ assert.match(main, /sandbox:\s*true/);
 assert.match(main, /FRISFRAME_REQUIRE_ORIGIN:\s*"true"/);
 assert.match(main, /app\.getPath\("userData"\)/);
 assert.match(main, /runtime\.json/);
+assert.match(mainEntry, /renderer-injection-core\.cjs/,
+  "Take prelude must share the packaged deterministic renderer injector");
+assert.match(main, /renderer-injection-core\.cjs/,
+  "desktop UX must share the packaged deterministic renderer injector");
+assert.match(rendererInjectionCore, /DEFAULT_SCRIPT_TIMEOUT_MS = 8000/,
+  "a broken renderer module must not hang desktop startup forever");
+assert.match(rendererInjectionCore, /targetGeneration !== generation/,
+  "renderer injection must stop when navigation advances the document generation");
+assert.match(main, /--fallback-port/,
+  "desktop server launch must allow recovery when the persisted local port is occupied");
+assert.equal(main.includes("저장된 로컬 포트와 다른 서버가 시작되었습니다."), false,
+  "a safe nonce-verified port fallback must not make desktop startup fail permanently");
+assert.match(main, /if \(serverProcess === child\) killServerProcess\(\);[\s\S]*?serverOrigin = "";[\s\S]*?throw error;/,
+  "failed local-server startup must terminate its child and clear the trusted origin");
+assert.match(main, /`\$\{statePath\}\.\$\{process\.pid\}\.\$\{Date\.now\(\)\}\.tmp`/,
+  "runtime state must use a collision-resistant atomic temporary file");
+assert.match(server, /def bind_http_server\(/);
+assert.match(server, /errno\.EADDRINUSE/);
+assert.match(server, /--fallback-port/);
 assert.match(main, /\/api\/health/);
 assert.match(main, /FRISFRAME_STARTUP_NONCE/);
 assert.match(main, /setPermissionCheckHandler\(\(\) => false\)/,

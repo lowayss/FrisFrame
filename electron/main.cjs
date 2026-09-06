@@ -10,8 +10,32 @@ const { registerClipboardImageHandler } = require("./clipboard.cjs");
 const { registerFileSaveHandler } = require("./file-save.cjs");
 const { createPhoneRemoteBridge } = require("./phone-remote.cjs");
 const { createPhoneMotionBridge } = require("./phone-motion-server.cjs");
+const { createRendererInjector } = require("./renderer-injection-core.cjs");
 
 app.setName("FrisFrame");
+
+const MAIN_RENDERER_FILES = Object.freeze([
+  "workspace-ux.js",
+  "hud-export-ux.js",
+  "interaction-ux.js",
+  "camera-operator-live-ux.js",
+  "camera-operator-inputs-ux.js",
+  "phone-motion-core.js",
+  "phone-motion-core-absolute-focal.js",
+  "phone-motion-camera-ux.js",
+  "phone-handheld-command-ux.js",
+  "camera-take-browser-ux.js",
+  "selection-ux.js",
+  "alignment-ux.js",
+  "history-safety-ux.js",
+  "scene-cache-ux.js",
+  "dynamic-prop-cache-ux.js",
+  "stage-shell-cache-ux.js",
+  "camera-path-cache-ux.js",
+  "helper-raycast-ux.js",
+  "preview-cache-ux.js",
+  "performance-ux.js",
+]);
 
 let mainWindow = null;
 let serverProcess = null;
@@ -121,9 +145,13 @@ function readRuntimeState(statePath) {
 
 function writeRuntimeState(statePath, port) {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  const temporary = `${statePath}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify({ port, updatedAt: new Date().toISOString() }, null, 2), "utf8");
-  fs.renameSync(temporary, statePath);
+  const temporary = `${statePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify({ port, updatedAt: new Date().toISOString() }, null, 2), "utf8");
+    fs.renameSync(temporary, statePath);
+  } finally {
+    try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort temp cleanup. */ }
+  }
 }
 
 function waitForServer(origin, child, nonce, timeoutMs = 30000) {
@@ -204,7 +232,7 @@ async function startLocalServer() {
     fs.chmodSync(launch.command, 0o755);
     fs.chmodSync(launch.ffmpeg, 0o755);
   }
-  const args = [...launch.args, "--host", "127.0.0.1", "--port", String(persistedPort)];
+  const args = [...launch.args, "--host", "127.0.0.1", "--port", String(persistedPort), "--fallback-port"];
   const environment = {
     ...process.env,
     ENABLE_LICENSE_CHECK: "false",
@@ -249,15 +277,23 @@ async function startLocalServer() {
       dialog.showErrorBox("FrisFrame 서버 종료", "로컬 프로젝트 서버가 예기치 않게 종료되었습니다. 앱을 다시 실행해 주세요.");
     }
   });
-  const readyPayload = await Promise.race([
-    ready,
-    new Promise((_resolve, reject) => setTimeout(() => reject(new Error("FrisFrame 로컬 서버 시작 시간이 초과되었습니다.")), 30000)),
-  ]);
-  if (persistedPort && readyPayload.port !== persistedPort) throw new Error("저장된 로컬 포트와 다른 서버가 시작되었습니다.");
-  writeRuntimeState(runtimeStatePath, readyPayload.port);
-  serverOrigin = `http://127.0.0.1:${readyPayload.port}`;
-  await waitForServer(serverOrigin, child, nonce);
-  return serverOrigin;
+  try {
+    const readyPayload = await Promise.race([
+      ready,
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("FrisFrame 로컬 서버 시작 시간이 초과되었습니다.")), 30000)),
+    ]);
+    if (persistedPort && readyPayload.port !== persistedPort) {
+      writeLog(`저장된 로컬 포트 ${persistedPort} 사용 불가 · ${readyPayload.port}로 자동 복구`);
+    }
+    writeRuntimeState(runtimeStatePath, readyPayload.port);
+    serverOrigin = `http://127.0.0.1:${readyPayload.port}`;
+    await waitForServer(serverOrigin, child, nonce);
+    return serverOrigin;
+  } catch (error) {
+    if (serverProcess === child) killServerProcess();
+    serverOrigin = "";
+    throw error;
+  }
 }
 
 function buildApplicationMenu() {
@@ -378,16 +414,32 @@ function createMainWindow(origin) {
   window.webContents.on("will-redirect", preventExternalNavigation);
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_event, details) => writeLog(`renderer exited: ${JSON.stringify(details)}`));
+  const rendererInjector = createRendererInjector({
+    webContents: window.webContents,
+    entries: MAIN_RENDERER_FILES.map((filename) => ({
+      filename,
+      source: fs.readFileSync(path.join(__dirname, filename), "utf8"),
+    })),
+    label: "desktop renderer UX",
+    onError: (error) => writeLog(error?.stack || error),
+  });
+  let rendererFailureGeneration = -1;
+  window.webContents.on("did-start-loading", () => rendererInjector.markLoadStarted());
   window.webContents.on("did-finish-load", () => {
-    for (const filename of ["workspace-ux.js", "hud-export-ux.js", "interaction-ux.js", "camera-operator-live-ux.js", "camera-operator-inputs-ux.js", "phone-motion-core.js", "phone-motion-core-absolute-focal.js", "phone-motion-camera-ux.js", "phone-handheld-command-ux.js", "camera-take-browser-ux.js", "selection-ux.js", "alignment-ux.js", "history-safety-ux.js", "scene-cache-ux.js", "dynamic-prop-cache-ux.js", "stage-shell-cache-ux.js", "camera-path-cache-ux.js", "helper-raycast-ux.js", "preview-cache-ux.js", "performance-ux.js"]) {
-      const uxPath = path.join(__dirname, filename);
-      try {
-        const source = fs.readFileSync(uxPath, "utf8");
-        window.webContents.executeJavaScript(source, true).catch((error) => writeLog(`${filename} injection failed: ${error.stack || error}`));
-      } catch (error) {
-        writeLog(`${filename} file failed: ${error.stack || error}`);
-      }
-    }
+    rendererInjector.injectCurrent().catch((error) => {
+      const generation = rendererInjector.getState().generation;
+      if (rendererFailureGeneration === generation || window.isDestroyed()) return;
+      rendererFailureGeneration = generation;
+      dialog.showMessageBox(window, {
+        type: "error",
+        title: "FrisFrame UI 로드 오류",
+        message: "편집 모듈을 안전하게 불러오지 못했습니다.",
+        detail: `${error?.message || error}
+
+새로고침 후에도 반복되면 FrisFrame을 다시 실행해 주세요.`,
+        buttons: ["확인"],
+      }).catch((dialogError) => writeLog(`renderer failure dialog failed: ${dialogError?.stack || dialogError}`));
+    });
   });
   window.loadURL(`${origin}/`);
   return window;

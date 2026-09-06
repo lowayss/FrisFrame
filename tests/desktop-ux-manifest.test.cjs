@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const mainEntry = fs.readFileSync(path.join(root, "electron/main-entry.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
+const injectionCore = fs.readFileSync(path.join(root, "electron/renderer-injection-core.cjs"), "utf8");
 const phoneDirector = fs.readFileSync(path.join(root, "electron/phone-director-viewfinder.cjs"), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
@@ -45,7 +46,7 @@ const quotedManifest = (source) => [...source.matchAll(/"([^"]+)"/g)].map((match
 const prelude = mainEntry.match(/TAKE_PRELUDE_FILES = Object\.freeze\(\[(.*?)\]\)/s);
 assert.ok(prelude, "electron/main-entry.cjs must keep one explicit Take prelude manifest");
 const preInjected = quotedManifest(prelude[1]);
-const injection = main.match(/for \(const filename of \[(.*?)\]\) \{/s);
+const injection = main.match(/MAIN_RENDERER_FILES = Object\.freeze\(\[(.*?)\]\)/s);
 assert.ok(injection, "electron/main.cjs must keep one explicit renderer injection manifest");
 const mainInjected = quotedManifest(injection[1]);
 const injected = [...preInjected, ...mainInjected];
@@ -81,7 +82,19 @@ for (const filename of expectedInjection) {
 }
 assert.equal(mainInjected.at(-1), "performance-ux.js",
   "performance wrappers must load after the correctness/cache layers they wrap");
-assert.match(mainEntry, /inject\(\)\.finally\(\(\) => listener\(\.\.\.args\)\)/,
-  "existing did-finish-load UX injection must wait for the Take prelude");
+assert.match(mainEntry, /createRendererInjector/,
+  "Take prelude must use the deterministic renderer injection core");
+assert.match(main, /createRendererInjector/,
+  "desktop UX must use the deterministic renderer injection core");
+assert.match(injectionCore, /for \(const entry of normalizedEntries\)/,
+  "renderer modules must be applied by one sequential manifest loop");
+assert.match(injectionCore, /await withTimeout\(/,
+  "each renderer module must complete before the next dependency runs");
+assert.match(injectionCore, /failedGeneration === targetGeneration/,
+  "a partially failed renderer generation must remain fail-closed until reload");
+assert.equal(/executeJavaScript\(source, true\)\.catch/.test(main), false,
+  "desktop renderer modules must not be launched concurrently with fire-and-forget promises");
+assert.ok(packageJson.build.files.includes("electron/renderer-injection-core.cjs"),
+  "deterministic renderer injection core must ship in the desktop package");
 
-console.log("desktop-ux-manifest: reload-safe phone renderer manifests are synchronized with packaging and fallback injection");
+console.log("desktop-ux-manifest: canonical renderer order is sequential, generation-safe, fail-closed, and packaged");
