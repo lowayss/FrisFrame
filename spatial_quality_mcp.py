@@ -404,15 +404,17 @@ def enhance_interpretation(raw, *, endpoint_snap_tolerance_m=DEFAULT_ENDPOINT_SN
 
 def _quality_args(args):
     args = dict(args or {})
+    metric_raw, autonomous_report = pipeline._autonomous_scale_raw(args.get("interpretation"), args)
     enhanced, report = enhance_interpretation(
-        args.get("interpretation"),
+        metric_raw,
         endpoint_snap_tolerance_m=args.get("endpoint_snap_tolerance_m", DEFAULT_ENDPOINT_SNAP_TOLERANCE_M),
         opening_attach_tolerance_m=args.get("opening_attach_tolerance_m", DEFAULT_OPENING_ATTACH_TOLERANCE_M),
         opening_rotation_tolerance_deg=args.get("opening_rotation_tolerance_deg", DEFAULT_OPENING_ROTATION_TOLERANCE_DEG),
     )
     args["interpretation"] = enhanced
+    args["_autonomous_scale_report"] = copy.deepcopy(autonomous_report)
+    report["autonomous_scale"] = copy.deepcopy(autonomous_report)
     return args, report
-
 
 def _add_quality_schema(tool):
     schema = tool.get("inputSchema") if isinstance(tool, dict) else None
