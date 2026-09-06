@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const tls = require("node:tls");
 const vm = require("node:vm");
-const { sanitizeMotionInput, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
+const { sanitizeMotionInput, normalizeDirectorStatus, bootstrapHtml, motionHtml } = require("../electron/phone-motion-server.cjs");
 const { extensionConfig, localCaConfig, pemCertificateToDer, isCertificateAuthority } = require("../electron/phone-remote-tls.cjs");
 
 const root = path.join(__dirname, "..");
@@ -218,6 +218,48 @@ test("desktop remains the single pose stabilizer and still documents metric boun
 test("handheld compatibility patches are shipped in the desktop package", () => {
   assert.ok(packageJson.build.files.includes("electron/phone-motion-core-absolute-focal.js"));
   assert.ok(packageJson.build.files.includes("electron/phone-handheld-command-ux.js"));
+});
+
+
+test("director status normalization keeps REC state, timecode inputs, focal and rig bounded", () => {
+  const value = normalizeDirectorStatus({
+    mode:"recording",
+    playheadSeconds:12.345,
+    durationSeconds:60,
+    focalMm:500,
+    rigProfile:"cinema",
+    connected:true,
+  });
+  assert.equal(value.mode,"recording");
+  assert.equal(value.recording,true);
+  assert.equal(value.standby,false);
+  assert.equal(value.playheadSeconds,12.345);
+  assert.equal(value.durationSeconds,60);
+  assert.equal(value.focalMm,300);
+  assert.equal(value.rigProfile,"heavy");
+  assert.equal(value.connected,true);
+});
+
+test("phone Director Viewfinder renders renderer-backed REC STBY timecode and acknowledgement HUD", () => {
+  const html = motionHtml("token");
+  assert.match(html,/id="recordState">LIVE/);
+  assert.match(html,/id="timecode">00:00:00:00/);
+  assert.match(html,/id="ackHud">/);
+  assert.match(html,/formatTimecode/);
+  assert.match(html,/directorPlayheadNow/);
+  assert.match(html,/applyDirectorStatus/);
+  assert.match(html,/requestAnimationFrame\(renderDirectorHud\)/);
+  assert.match(viewfinderServer,/VIEWFINDER_TELEMETRY_INTERVAL_MS = 200/);
+});
+
+test("status backchannel reads authoritative Camera Operator state and reports the latest command ACK", () => {
+  assert.match(viewfinderServer,/async function readRendererDirectorStatus/);
+  assert.match(viewfinderServer,/FrisFrameCameraOperator/);
+  assert.match(viewfinderServer,/playheadSeconds:Number\(appState\?\.motion\?\.playhead/);
+  assert.match(viewfinderServer,/focalMm:Number\(appState\?\.camera\?\.focal/);
+  assert.match(viewfinderServer,/lastCommandAck/);
+  assert.match(viewfinderServer,/recordBackchannel:true/);
+  assert.match(viewfinderServer,/timecodeBackchannel:true/);
 });
 
 test("TLS SAN configuration includes localhost and LAN IPs", () => {

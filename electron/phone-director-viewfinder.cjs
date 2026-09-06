@@ -13,7 +13,7 @@ const DISPATCH_INTERVAL_MS = 24;
 const VIEWFINDER_INTERVAL_MS = 33;
 const VIEWFINDER_JPEG_QUALITY = 62;
 const VIEWFINDER_MAX_WIDTH = 854;
-const VIEWFINDER_TELEMETRY_INTERVAL_MS = 750;
+const VIEWFINDER_TELEMETRY_INTERVAL_MS = 200;
 const COMMAND_CACHE_MS = 60 * 1000;
 const ALLOWED_COMMANDS = new Set(["", "toggle-record", "stop", "cancel"]);
 const ALLOWED_RIGS = new Set(["raw", "handheld", "heavy"]);
@@ -37,6 +37,27 @@ function normalizeQuaternion(value = {}) {
 function sanitizeCommandId(value) {
   const text = String(value || "").trim();
   return /^[A-Za-z0-9_-]{1,80}$/.test(text) ? text : "";
+}
+
+function normalizeDirectorStatus(value = {}) {
+  const modeValue = String(value.mode || "idle");
+  const mode = ["idle", "armed", "recording"].includes(modeValue) ? modeValue : "idle";
+  const playheadSeconds = clamp(value.playheadSeconds, 0, 24 * 60 * 60);
+  const durationSeconds = clamp(value.durationSeconds, 0, 24 * 60 * 60);
+  const focalValue = Number(value.focalMm);
+  const focalMm = Number.isFinite(focalValue) ? clamp(focalValue, 8, 300) : 35;
+  const sourceRig = String(value.rigProfile || "handheld");
+  const rigProfile = sourceRig === "cinema" ? "heavy" : (ALLOWED_RIGS.has(sourceRig) ? sourceRig : "handheld");
+  return {
+    mode,
+    recording: mode === "recording",
+    standby: mode === "armed",
+    playheadSeconds: durationSeconds > 0 ? Math.min(playheadSeconds, durationSeconds) : playheadSeconds,
+    durationSeconds,
+    focalMm,
+    rigProfile,
+    connected: value.connected === true,
+  };
 }
 
 function sanitizeMotionInput(payload = {}) {
@@ -150,7 +171,7 @@ function motionHtml(token) {
 <meta name="theme-color" content="#000">
 <title>FrisFrame Director Viewfinder</title>
 <style>
-:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;overflow:hidden;touch-action:manipulation}.app{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}.top{z-index:4;display:flex;align-items:center;justify-content:space-between;padding:max(8px,env(safe-area-inset-top)) 12px 8px;background:#050709e8}.brand{font-weight:950;font-size:12px;letter-spacing:.08em}.brand b{color:#ff715b}.pill{font:10px ui-monospace;border:1px solid #3a4650;border-radius:999px;padding:5px 8px;color:#aeb8c1}.pill.ok{color:#a8f0bf;border-color:#315c3e}.pill.warn{color:#ffd18a;border-color:#614a28}.view{position:relative;min-height:0;background:#050608;overflow:hidden}.feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.tracker{position:absolute;width:2px;height:2px;opacity:.001;left:-4px;top:-4px}.grid{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent 33.15%,#ffffff20 33.3%,transparent 33.45%,transparent 66.5%,#ffffff20 66.65%,transparent 66.8%),linear-gradient(0deg,transparent 33.15%,#ffffff20 33.3%,transparent 33.45%,transparent 66.5%,#ffffff20 66.65%,transparent 66.8%)}.center{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);border:1px solid #ffffff60;border-radius:50%}.hud{position:absolute;left:8px;right:8px;top:8px;display:flex;justify-content:space-between;pointer-events:none}.hudGroup{display:flex;gap:5px}.stat{background:#050709b8;border:1px solid #3c4650;border-radius:8px;padding:5px 7px;min-width:58px;text-align:center}.stat small{display:block;color:#8f9aa4;font-size:8px}.stat b{font:10px ui-monospace}.gate{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:#030506dc;padding:20px}.gate[hidden]{display:none}.gateCard{width:min(92%,420px);padding:18px;border-radius:16px;border:1px solid #35414a;background:#0e1419;text-align:center}.gateCard h2{margin:0 0 8px;font-size:18px}.gateCard p{font-size:11px;color:#9ca8b1;line-height:1.5}.gateCard button{width:100%;min-height:48px;margin-top:8px;border:1px solid #ff715b;border-radius:10px;background:#e55645;color:#fff;font-weight:950}.gateCard button.secondary{background:#172028;border-color:#44515b}.bottom{z-index:4;padding:8px 10px max(10px,env(safe-area-inset-bottom));display:grid;gap:7px;background:#050709f3}.lens{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.lens button,.rig button,.actions button{border:1px solid #35414a;background:#11171c;color:#dce4e9;border-radius:9px;font-weight:900}.lens button{min-height:38px;font-size:12px}.lens button.on,.rig button.on{border-color:#ff715b;background:#4a211c;color:#fff}.rig{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.rig button{min-height:32px;font-size:10px}.actions{display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:7px}.actions button{min-height:46px}.primary{background:#e55645!important;border-color:#ff715b!important}.note{font-size:9px;color:#77838d;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@media(orientation:landscape){.bottom{grid-template-columns:1fr 1fr 1.2fr}.note{grid-column:1/-1}}
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;overflow:hidden;touch-action:manipulation}.app{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}.top{z-index:4;display:flex;align-items:center;justify-content:space-between;padding:max(8px,env(safe-area-inset-top)) 12px 8px;background:#050709e8}.brand{font-weight:950;font-size:12px;letter-spacing:.08em}.brand b{color:#ff715b}.pill{font:10px ui-monospace;border:1px solid #3a4650;border-radius:999px;padding:5px 8px;color:#aeb8c1}.pill.ok{color:#a8f0bf;border-color:#315c3e}.pill.warn{color:#ffd18a;border-color:#614a28}.view{position:relative;min-height:0;background:#050608;overflow:hidden}.feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.tracker{position:absolute;width:2px;height:2px;opacity:.001;left:-4px;top:-4px}.grid{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent 33.15%,#ffffff20 33.3%,transparent 33.45%,transparent 66.5%,#ffffff20 66.65%,transparent 66.8%),linear-gradient(0deg,transparent 33.15%,#ffffff20 33.3%,transparent 33.45%,transparent 66.5%,#ffffff20 66.65%,transparent 66.8%)}.center{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);border:1px solid #ffffff60;border-radius:50%}.hud{position:absolute;left:8px;right:8px;top:8px;display:flex;justify-content:space-between;pointer-events:none}.hudGroup{display:flex;gap:5px}.stat{background:#050709b8;border:1px solid #3c4650;border-radius:8px;padding:5px 7px;min-width:58px;text-align:center}.stat small{display:block;color:#8f9aa4;font-size:8px}.stat b{font:10px ui-monospace}.gate{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:#030506dc;padding:20px}.gate[hidden]{display:none}.gateCard{width:min(92%,420px);padding:18px;border-radius:16px;border:1px solid #35414a;background:#0e1419;text-align:center}.gateCard h2{margin:0 0 8px;font-size:18px}.gateCard p{font-size:11px;color:#9ca8b1;line-height:1.5}.gateCard button{width:100%;min-height:48px;margin-top:8px;border:1px solid #ff715b;border-radius:10px;background:#e55645;color:#fff;font-weight:950}.gateCard button.secondary{background:#172028;border-color:#44515b}.bottom{z-index:4;padding:8px 10px max(10px,env(safe-area-inset-bottom));display:grid;gap:7px;background:#050709f3}.lens{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.lens button,.rig button,.actions button{border:1px solid #35414a;background:#11171c;color:#dce4e9;border-radius:9px;font-weight:900}.lens button{min-height:38px;font-size:12px}.lens button.on,.rig button.on{border-color:#ff715b;background:#4a211c;color:#fff}.rig{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.rig button{min-height:32px;font-size:10px}.actions{display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:7px}.actions button{min-height:46px}.primary{background:#e55645!important;border-color:#ff715b!important}.note{font-size:9px;color:#77838d;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recordStrip{position:absolute;z-index:3;left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid #44515b;border-radius:999px;background:#050709cf;font:10px ui-monospace;pointer-events:none}.recordStrip b{min-width:32px}.recordStrip.rec{border-color:#ff5f55;background:#3b1010e6}.recordStrip.rec b{color:#ff8d85}.recordStrip.stby{border-color:#8a652d;background:#2a2110e6}.recordStrip.stby b{color:#ffd18a}.recordStrip small{color:#8996a1;font-size:8px}.actions button.recording{box-shadow:0 0 0 2px #ff5f5555 inset}@media(orientation:landscape){.bottom{grid-template-columns:1fr 1fr 1.2fr}.note{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -164,6 +185,7 @@ function motionHtml(token) {
       <div class="hudGroup"><div class="stat"><small>TRACK</small><b id="track">OFF</b></div><div class="stat"><small>CONF</small><b id="flow">0%</b></div><div class="stat"><small>VF FPS</small><b id="vfFps">—</b></div></div>
       <div class="hudGroup"><div class="stat"><small>LATENCY</small><b id="latency">—</b></div><div class="stat"><small>LENS</small><b id="lensHud">35mm</b></div><div class="stat"><small>POSE</small><b id="pose">0°/0°</b></div></div>
     </div>
+    <div id="recordStrip" class="recordStrip"><b id="recordState">LIVE</b><span id="timecode">00:00:00:00</span><small id="ackHud">—</small></div>
     <div id="gate" class="gate"><div class="gateCard"><h2>가상 카메라 시작</h2><p>센서와 후면 카메라 권한은 이 버튼을 누른 뒤에만 요청합니다. 지원되는 Android 기기는 별도 6DoF 버튼으로 실제 local-space 이동을 켤 수 있습니다.</p><button id="startBtn">START CAMERA</button><button id="xrBtn" class="secondary" hidden>START 6DoF</button></div></div>
   </div>
   <div class="bottom">
@@ -177,13 +199,19 @@ function motionHtml(token) {
 (()=>{"use strict";
 const TOKEN=${safeToken},$=id=>document.getElementById(id),W=96,H=72,canvas=document.createElement("canvas"),ctx=canvas.getContext("2d",{willReadFrequently:true});
 canvas.width=W;canvas.height=H;
-let stream=null,trackTimer=null,telemetryTimer=null,previous=null,previousOrientation=null,seq=0,calibrationId=0,xrSession=null,xrSpace=null,xrGl=null,selectedFocalMm=35,rigProfile="handheld",pendingCommand=null,sending=false,alive=true;
+let stream=null,trackTimer=null,telemetryTimer=null,previous=null,previousOrientation=null,seq=0,calibrationId=0,xrSession=null,xrSpace=null,xrGl=null,selectedFocalMm=35,rigProfile="handheld",pendingCommand=null,sending=false,alive=true,lastLocalControlAt=0;
+const directorSync={mode:"idle",playheadSeconds:0,durationSeconds:0,focalMm:35,rigProfile:"handheld",connected:false,syncedAt:performance.now(),lastAck:null};
 const raw={enabled:false,screenAngle:0,orientation:{alpha:0,beta:0,gamma:0,absolute:false},acceleration:{x:0,y:0,z:0},visual:{x:0,y:0,z:0,confidence:0,metric:false},spatial:{mode:"none",metric:false,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:0}};
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,Number(v)||0));
 const wrap=v=>{let n=(Number(v)||0)%360;if(n>180)n-=360;if(n<=-180)n+=360;return n};
 const angleStep=(a,b)=>wrap((Number(b)||0)-(Number(a)||0));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 function setStatus(text,kind=""){const n=$("status");n.textContent=text;n.className="pill"+(kind?" "+kind:"")}
+function formatTimecode(seconds){const fps=30,total=Math.max(0,Math.floor((Number(seconds)||0)*fps+1e-6)),ff=total%fps,whole=Math.floor(total/fps),ss=whole%60,mm=Math.floor(whole/60)%60,hh=Math.floor(whole/3600);return [hh,mm,ss,ff].map(v=>String(v).padStart(2,"0")).join(":")}
+function directorPlayheadNow(){const elapsed=directorSync.mode==="recording"?Math.max(0,performance.now()-directorSync.syncedAt)/1000:0;const value=directorSync.playheadSeconds+elapsed;return directorSync.durationSeconds>0?Math.min(value,directorSync.durationSeconds):value}
+function syncDirectorControls(){if(performance.now()-lastLocalControlAt<350)return;const focal=Number(directorSync.focalMm);if(Number.isFinite(focal)){selectedFocalMm=focal;$("lensHud").textContent=Math.round(focal)+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",Math.abs(Number(n.dataset.focalMm)-focal)<.5))}if(["raw","handheld","heavy"].includes(directorSync.rigProfile)){rigProfile=directorSync.rigProfile;document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n.dataset.rig===rigProfile))}}
+function applyDirectorStatus(data,rttMs=0){const d=data?.director||{};directorSync.mode=["idle","armed","recording"].includes(d.mode)?d.mode:"idle";directorSync.playheadSeconds=Math.max(0,Number(d.playheadSeconds)||0);directorSync.durationSeconds=Math.max(0,Number(d.durationSeconds)||0);directorSync.focalMm=Number(d.focalMm)||selectedFocalMm;directorSync.rigProfile=String(d.rigProfile||rigProfile);directorSync.connected=d.connected===true;directorSync.syncedAt=performance.now()-Math.max(0,Number(rttMs)||0)/2;directorSync.lastAck=data?.lastCommandAck||directorSync.lastAck;syncDirectorControls();if(directorSync.lastAck?.command){const label=directorSync.lastAck.command==="toggle-record"?"REC":directorSync.lastAck.command.toUpperCase();$("ackHud").textContent="ACK "+label}}
+function renderDirectorHud(){const mode=directorSync.mode,strip=$("recordStrip");$("recordState").textContent=mode==="recording"?"REC":(mode==="armed"?"STBY":"LIVE");$("timecode").textContent=formatTimecode(directorPlayheadNow());strip.className="recordStrip"+(mode==="recording"?" rec":(mode==="armed"?" stby":""));$("rec").classList.toggle("recording",mode==="recording");requestAnimationFrame(renderDirectorHud)}
 function screenAngle(){return Number(screen.orientation?.angle??window.orientation??0)||0}
 function remapOrientation(value,screen){const a=Number(value.alpha)||0,b=Number(value.beta)||0,g=Number(value.gamma)||0,s=((Math.round((Number(screen)||0)/90)*90)%360+360)%360;if(s===90)return{yaw:a,pitch:-g};if(s===270)return{yaw:a,pitch:g};if(s===180)return{yaw:a,pitch:-b};return{yaw:a,pitch:b}}
 function onOrientation(e){raw.screenAngle=screenAngle();raw.orientation={alpha:clamp(e.alpha,-360,360),beta:clamp(e.beta,-180,180),gamma:clamp(e.gamma,-90,90),absolute:Boolean(e.absolute)};$("pose").textContent=Math.round(raw.orientation.alpha||0)+"°/"+Math.round(raw.orientation.beta||0)+"°"}
@@ -202,13 +230,13 @@ async function probeXR(){try{if(await navigator.xr?.isSessionSupported?.("immers
 function xrFrame(_time,frame){if(!xrSpace)return;const pose=frame.getViewerPose(xrSpace);if(pose){const p=pose.transform.position,o=pose.transform.orientation;raw.spatial={mode:"webxr",metric:true,position:{x:p.x,y:p.y,z:p.z},orientation:{x:o.x,y:o.y,z:o.z,w:o.w},confidence:1};raw.enabled=true;$("flow").textContent="100%";$("track").textContent="6DoF"}frame.session.requestAnimationFrame(xrFrame)}
 async function startXRFromGesture(){try{if(!navigator.xr?.isSessionSupported||!(await navigator.xr.isSessionSupported("immersive-ar")))throw new Error("이 브라우저는 WebXR 6DoF를 지원하지 않습니다.");stopTracker();const c=document.createElement("canvas");xrGl=c.getContext("webgl",{alpha:true,xrCompatible:true});if(!xrGl)throw new Error("WebGL XR 컨텍스트를 만들 수 없습니다.");if(xrGl.makeXRCompatible)await xrGl.makeXRCompatible();xrSession=await navigator.xr.requestSession("immersive-ar",{optionalFeatures:["local-floor","dom-overlay"],domOverlay:{root:document.body}});xrSession.updateRenderState({baseLayer:new XRWebGLLayer(xrSession,xrGl)});xrSpace=await xrSession.requestReferenceSpace("local");raw.enabled=true;raw.visual={x:0,y:0,z:0,confidence:0,metric:false};recenter();xrSession.addEventListener("end",()=>{xrSession=null;xrSpace=null;raw.spatial={mode:"none",metric:false,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:0};$("track").textContent="OFF";$("gate").hidden=false;setStatus("READY")});xrSession.requestAnimationFrame(xrFrame);$("gate").hidden=true;setStatus("6DoF","ok")}catch(error){$("gate").hidden=false;setStatus("6DoF 실패","warn");$("note").textContent=String(error?.message||error)}}
 function newCommand(type){pendingCommand={id:"cmd_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8),type}}
-async function sendOnce(){seq++;const cmd=pendingCommand;const payload={seq,sentAt:Date.now(),command:cmd?.type||"",commandId:cmd?.id||"",focalMm:selectedFocalMm,rigProfile,motion:{...raw,calibrationId,focalMm:selectedFocalMm,rigProfile}};const res=await fetch("/input?token="+encodeURIComponent(TOKEN),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const ack=await res.json();if(cmd&&ack.ack===cmd.id)pendingCommand=null;return ack}
+async function sendOnce(){seq++;const cmd=pendingCommand;const payload={seq,sentAt:Date.now(),command:cmd?.type||"",commandId:cmd?.id||"",focalMm:selectedFocalMm,rigProfile,motion:{...raw,calibrationId,focalMm:selectedFocalMm,rigProfile}};const res=await fetch("/input?token="+encodeURIComponent(TOKEN),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const ack=await res.json();if(cmd&&ack.ack===cmd.id){pendingCommand=null;directorSync.lastAck={id:cmd.id,command:cmd.type,at:Date.now()};const label=cmd.type==="toggle-record"?"REC":cmd.type.toUpperCase();$("ackHud").textContent="ACK "+label}return ack}
 async function sendLoop(){if(sending)return;sending=true;while(alive){try{await sendOnce();if(raw.enabled)setStatus(raw.spatial.mode==="webxr"?"6DoF":rigProfile.toUpperCase(),"ok")}catch{setStatus("연결 끊김","warn")}await delay(24)}sending=false}
-async function pollLinkTelemetry(){const started=Date.now();try{const res=await fetch("/status?token="+encodeURIComponent(TOKEN),{cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const data=await res.json(),finished=Date.now(),midpoint=(started+finished)/2,clockOffset=(Number(data.serverNow)||finished)-midpoint,frameAt=Number(data.lastFrameAt)||0,estimatedAge=frameAt?Math.max(0,Math.round(finished-frameAt+clockOffset)):0;$("latency").textContent=frameAt?estimatedAge+"ms":"—";$("vfFps").textContent=Number(data.measuredFps)>0?Number(data.measuredFps).toFixed(0):"—";if((Number(data.droppedFrames)||0)>0)$("note").textContent="지연 시 오래된 프레임을 버리고 최신 프레임을 우선 표시합니다."}catch{$("latency").textContent="—";$("vfFps").textContent="—"}}
-document.querySelectorAll("[data-focal-mm]").forEach(b=>b.addEventListener("click",()=>{selectedFocalMm=Number(b.dataset.focalMm)||35;$("lensHud").textContent=selectedFocalMm+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",n===b))}));
-document.querySelectorAll("[data-rig]").forEach(b=>b.addEventListener("click",()=>{rigProfile=b.dataset.rig||"handheld";document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n===b));setStatus(rigProfile.toUpperCase(),raw.enabled?"ok":"")}));
+async function pollLinkTelemetry(){const started=Date.now(),startedPerf=performance.now();try{const res=await fetch("/status?token="+encodeURIComponent(TOKEN),{cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const data=await res.json(),finished=Date.now(),finishedPerf=performance.now(),midpoint=(started+finished)/2,clockOffset=(Number(data.serverNow)||finished)-midpoint,frameAt=Number(data.lastFrameAt)||0,estimatedAge=frameAt?Math.max(0,Math.round(finished-frameAt+clockOffset)):0;$("latency").textContent=frameAt?estimatedAge+"ms":"—";$("vfFps").textContent=Number(data.measuredFps)>0?Number(data.measuredFps).toFixed(0):"—";applyDirectorStatus(data,finishedPerf-startedPerf);if((Number(data.droppedFrames)||0)>0)$("note").textContent="지연 시 오래된 프레임을 버리고 최신 프레임을 우선 표시합니다."}catch{$("latency").textContent="—";$("vfFps").textContent="—"}}
+document.querySelectorAll("[data-focal-mm]").forEach(b=>b.addEventListener("click",()=>{lastLocalControlAt=performance.now();selectedFocalMm=Number(b.dataset.focalMm)||35;$("lensHud").textContent=selectedFocalMm+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",n===b))}));
+document.querySelectorAll("[data-rig]").forEach(b=>b.addEventListener("click",()=>{lastLocalControlAt=performance.now();rigProfile=b.dataset.rig||"handheld";document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n===b));setStatus(rigProfile.toUpperCase(),raw.enabled?"ok":"")}));
 $("startBtn").addEventListener("click",startCameraFromGesture);$("xrBtn").addEventListener("click",startXRFromGesture);$("centerBtn").addEventListener("click",recenter);$("rec").addEventListener("click",()=>newCommand("toggle-record"));$("stop").addEventListener("click",()=>newCommand("stop"));
-probeXR();sendLoop();pollLinkTelemetry();telemetryTimer=setInterval(pollLinkTelemetry,${VIEWFINDER_TELEMETRY_INTERVAL_MS});
+probeXR();sendLoop();pollLinkTelemetry();telemetryTimer=setInterval(pollLinkTelemetry,${VIEWFINDER_TELEMETRY_INTERVAL_MS});requestAnimationFrame(renderDirectorHud);
 window.addEventListener("pagehide",()=>{alive=false;if(telemetryTimer)clearInterval(telemetryTimer);stopTracker();try{xrSession?.end?.()}catch{}})
 })();
 </script>
@@ -237,6 +265,10 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   let totalDroppedFrames = 0;
   const streamClients = new Set();
   const commandAcks = new Map();
+  let lastCommandAck = null;
+  let lastDirectorStatus = normalizeDirectorStatus({});
+  let lastDirectorStatusAt = 0;
+  let directorStatusPromise = null;
   let patchedWebContentsId = null;
 
   function authorized(requestUrl) {
@@ -259,6 +291,25 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
       await window.webContents.executeJavaScript(source, true);
     }
     patchedWebContentsId = id;
+  }
+
+  async function readRendererDirectorStatus() {
+    const now = Date.now();
+    if (now - lastDirectorStatusAt < 120) return lastDirectorStatus;
+    if (directorStatusPromise) return directorStatusPromise;
+    directorStatusPromise = (async () => {
+      const window = typeof getWindow === "function" ? getWindow() : null;
+      if (!window || window.isDestroyed?.() || window.webContents?.isDestroyed?.()) return lastDirectorStatus;
+      await ensureRendererPatches(window);
+      const raw = await window.webContents.executeJavaScript(`(()=>{try{const appState=typeof state!=="undefined"?state:null;const op=window.FrisFrameCameraOperator;const physical=window.FrisFramePhoneMotionCamera;return{mode:op?.mode||"idle",playheadSeconds:Number(appState?.motion?.playhead||0),durationSeconds:Number(appState?.motion?.duration||globalThis.MAX_TIMELINE_DURATION||60),focalMm:Number(appState?.camera?.focal||35),rigProfile:physical?.stabilization||"handheld",connected:Boolean(physical?.connected)}}catch{return null}})()`, true);
+      lastDirectorStatus = normalizeDirectorStatus(raw || {});
+      lastDirectorStatusAt = Date.now();
+      return lastDirectorStatus;
+    })().catch((error) => {
+      writeLog(`director viewfinder status read failed: ${error.stack || error}`);
+      return lastDirectorStatus;
+    }).finally(() => { directorStatusPromise = null; });
+    return directorStatusPromise;
   }
 
   async function dispatchPayload(payload) {
@@ -388,11 +439,14 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     streamPumpRunning = false;
   }
 
-  function statusPayload(secure) {
+  async function statusPayload(secure) {
     const measuredFps = measuredFrameIntervalMs > 0 ? Math.min(120, 1000 / measuredFrameIntervalMs) : 0;
+    const director = await readRendererDirectorStatus();
     return {
       ok:true,
       secure,
+      director,
+      lastCommandAck:lastCommandAck ? { ...lastCommandAck } : null,
       serverNow:Date.now(),
       lastInputAt,
       viewfinderClients:streamClients.size,
@@ -415,7 +469,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     if (request.method === "GET" && parsed.pathname === "/") { htmlResponse(response, secure ? motionHtml(token) : bootstrapHtml(token, secureUrl(request), tls?.fingerprintSha256, tls?.error)); return; }
     if (request.method === "GET" && parsed.pathname === "/ca.cer" && !secure && tls?.available) { response.writeHead(200, {"content-type":"application/x-x509-ca-cert","content-disposition":"attachment; filename=FrisFrame-Director-Viewfinder-CA.crt","content-length":tls.ca.length,"cache-control":"no-store","x-content-type-options":"nosniff"}); response.end(tls.ca); return; }
     if (request.method === "GET" && parsed.pathname === "/viewfinder.mjpeg" && secure) { streamViewfinder(response); pumpStreams(); return; }
-    if (request.method === "GET" && parsed.pathname === "/status") { jsonResponse(response, 200, statusPayload(secure)); return; }
+    if (request.method === "GET" && parsed.pathname === "/status") { statusPayload(secure).then((payload)=>jsonResponse(response,200,payload)).catch(()=>jsonResponse(response,503,{ok:false,error:"status-unavailable"})); return; }
     if (request.method !== "POST" || parsed.pathname !== "/input") { jsonResponse(response, 404, {error:"not-found"}); return; }
     readJson(request,response,async(body)=>{
       const input=sanitizeMotionInput(body);lastInputAt=Date.now();cleanupCommandAcks(lastInputAt);
@@ -426,7 +480,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
       try {
         if (input.command) {
           await dispatchPayload(payload);
-          if (input.commandId) commandAcks.set(input.commandId,lastInputAt);
+          if (input.commandId) { commandAcks.set(input.commandId,lastInputAt); lastCommandAck={id:input.commandId,command:input.command,at:lastInputAt}; }
         } else scheduleDispatch(payload);
         jsonResponse(response,200,{ok:true,ack:input.commandId||null,seq:input.seq,lastAcceptedSeq});
       } catch(error) {
@@ -441,7 +495,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   async function start() {
     if (httpServer) return getConfig();
     token = crypto.randomBytes(24).toString("base64url");
-    lastAcceptedSeq = 0; commandAcks.clear();
+    lastAcceptedSeq = 0; commandAcks.clear(); lastCommandAck=null; lastDirectorStatus=normalizeDirectorStatus({}); lastDirectorStatusAt=0; directorStatusPromise=null;
     const addresses = privateIpv4Addresses();
     tls = tryEnsureTlsMaterial({directory:tlsDirectory,hosts:addresses});
     httpServer = http.createServer((req,res)=>handleRequest(req,res,false));
@@ -455,7 +509,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   }
 
   function stop() {
-    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();lastAcceptedSeq=0;patchedWebContentsId=null;
+    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();lastCommandAck=null;lastAcceptedSeq=0;lastDirectorStatus=normalizeDirectorStatus({});lastDirectorStatusAt=0;directorStatusPromise=null;patchedWebContentsId=null;
     for (const client of [...streamClients]) { try { client.response.end(); } catch {} closeStreamClient(client); }
     streamClients.clear();
     for (const server of [httpServer,httpsServer]) if (server) try { server.close(); } catch {}
@@ -465,10 +519,10 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   function getConfig() {
     if (!httpServer || !httpPort) return null;
     const addresses = privateIpv4Addresses();
-    return { pairingCode:token.slice(0,6).toUpperCase(), bootstrapUrls:addresses.map((address)=>`http://${address}:${httpPort}/?token=${encodeURIComponent(token)}`), secureUrls:httpsPort&&tls?.available?addresses.map((address)=>`https://${address}:${httpsPort}/?token=${encodeURIComponent(token)}`):[], tls:{available:Boolean(httpsPort&&tls?.available),fingerprintSha256:tls?.fingerprintSha256||null,error:tls?.error||null}, hasLanAddress:addresses.length>0,lastInputAt,directorViewfinder:true,virtualFeed:true,viewfinderFps:Math.round(1000/VIEWFINDER_INTERVAL_MS),latestFrameFirst:true,latencyTelemetry:true,absoluteLensPresets:[24,35,50,85],commandAck:true,userGestureStart:true };
+    return { pairingCode:token.slice(0,6).toUpperCase(), bootstrapUrls:addresses.map((address)=>`http://${address}:${httpPort}/?token=${encodeURIComponent(token)}`), secureUrls:httpsPort&&tls?.available?addresses.map((address)=>`https://${address}:${httpsPort}/?token=${encodeURIComponent(token)}`):[], tls:{available:Boolean(httpsPort&&tls?.available),fingerprintSha256:tls?.fingerprintSha256||null,error:tls?.error||null}, hasLanAddress:addresses.length>0,lastInputAt,directorViewfinder:true,virtualFeed:true,viewfinderFps:Math.round(1000/VIEWFINDER_INTERVAL_MS),latestFrameFirst:true,latencyTelemetry:true,recordBackchannel:true,timecodeBackchannel:true,statusHz:Math.round(1000/VIEWFINDER_TELEMETRY_INTERVAL_MS),absoluteLensPresets:[24,35,50,85],commandAck:true,userGestureStart:true };
   }
 
   return { start, stop, getConfig };
 }
 
-module.exports = { createPhoneMotionBridge, sanitizeMotionInput, bootstrapHtml, motionHtml };
+module.exports = { createPhoneMotionBridge, sanitizeMotionInput, normalizeDirectorStatus, bootstrapHtml, motionHtml };
