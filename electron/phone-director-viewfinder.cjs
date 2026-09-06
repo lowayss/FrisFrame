@@ -61,6 +61,14 @@ function normalizeDirectorStatus(value = {}) {
   };
 }
 
+function commandTransitionSatisfied(command, before = {}, after = {}) {
+  const beforeMode = String(before.mode || "idle");
+  const afterMode = String(after.mode || "idle");
+  if (command === "toggle-record") return beforeMode === "recording" ? afterMode !== "recording" : afterMode === "recording";
+  if (command === "stop" || command === "cancel") return afterMode === "idle";
+  return true;
+}
+
 function sanitizeMotionInput(payload = {}) {
   const motion = payload.motion || {};
   const orientation = motion.orientation || {};
@@ -331,14 +339,6 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     await ensureRendererPatches(window);
     const serialized = JSON.stringify(payload).replace(/</g, "\\u003c");
     await window.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent("frisframe:phone-remote-input",{detail:${serialized}}));`, true);
-    return true;
-  }
-
-  function commandTransitionSatisfied(command, before = {}, after = {}) {
-    const beforeMode = String(before.mode || "idle");
-    const afterMode = String(after.mode || "idle");
-    if (command === "toggle-record") return beforeMode === "recording" ? afterMode !== "recording" : afterMode === "recording";
-    if (command === "stop" || command === "cancel") return afterMode === "idle";
     return true;
   }
 
