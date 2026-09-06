@@ -1,0 +1,283 @@
+name: Patch director previs hardening
+
+on:
+  push:
+    branches: [feat/director-previs-command-engine-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/director-previs-command-engine-v1
+      - name: Harden validation and tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('director_previs_mcp.py')
+          text = source.read_text(encoding='utf-8')
+
+          old = '''CAMERA_PATH_POINT_SCHEMA = {
+              "type": "object",
+              "properties": {
+                  "time_sec": {"type": "number", "minimum": 0, "maximum": core.MAX_TIMELINE_DURATION},
+                  **CAMERA_FIELDS,
+                  "transition": {"type": "string", "enum": sorted(core.MCP_TRANSITIONS)},
+                  "path_mode": {"type": "string", "enum": sorted(core.MCP_PATH_MODES)},
+              },
+              "required": ["time_sec", "world_x_m", "world_z_m"],
+          }
+          '''
+          new = '''CAMERA_PATH_POINT_SCHEMA = {
+              "type": "object",
+              "properties": {
+                  "time_sec": {"type": "number", "minimum": 0, "maximum": core.MAX_TIMELINE_DURATION},
+                  **{key: CAMERA_FIELDS[key] for key in (
+                      "world_x_m", "world_z_m", "height_m", "pan_deg", "tilt_deg", "focal_mm", "focus_distance_m"
+                  )},
+                  "transition": {"type": "string", "enum": sorted(core.MCP_TRANSITIONS)},
+                  "path_mode": {"type": "string", "enum": sorted(core.MCP_PATH_MODES)},
+              },
+              "required": ["time_sec", "world_x_m", "world_z_m"],
+          }
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''def _existing_motion_ids(blocking):
+              return {str(entry.get("id")) for entry in (blocking.get("motion") or {}).get("keyframes", []) if entry.get("id")}
+
+
+          def _compile_actor_paths(raw_paths, blocking, actor_ids, initial_pose):
+          '''
+          new = '''def _existing_motion_ids(blocking):
+              return {str(entry.get("id")) for entry in (blocking.get("motion") or {}).get("keyframes", []) if entry.get("id")}
+
+
+          def _validated_transition(value, label):
+              transition = str(value or "smooth").lower()
+              if transition not in core.MCP_TRANSITIONS:
+                  raise ValueError(f"{label} 전환 방식이 올바르지 않습니다: {transition}")
+              return transition
+
+
+          def _validated_path_mode(value, label):
+              mode = str(value or "straight").lower()
+              if mode not in core.MCP_PATH_MODES:
+                  raise ValueError(f"{label} 경로 방식이 올바르지 않습니다: {mode}")
+              return mode
+
+
+          def _positive_focus_distance(value, label):
+              distance = _finite(value, label)
+              if distance <= 0:
+                  raise ValueError(f"{label}은 0보다 커야 합니다.")
+              return distance
+
+
+          def _compile_actor_paths(raw_paths, blocking, actor_ids, initial_pose):
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        default_transition = str(raw.get("transition") or "smooth")
+                  default_path = str(raw.get("path_mode") or "straight")
+          '''
+          new = '''        default_transition = _validated_transition(raw.get("transition") or "smooth", f"actor_paths[{index}].transition")
+                  default_path = _validated_path_mode(raw.get("path_mode") or "straight", f"actor_paths[{index}].path_mode")
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''                "transition": str(point.get("transition") or default_transition),
+                          "path_mode": str(point.get("path_mode") or default_path),
+          '''
+          new = '''                "transition": _validated_transition(point.get("transition") or default_transition, f"actor_paths[{index}].points[{point_index}].transition"),
+                          "path_mode": _validated_path_mode(point.get("path_mode") or default_path, f"actor_paths[{index}].points[{point_index}].path_mode"),
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''    default_transition = str(raw.get("transition") or "smooth")
+              default_path = str(raw.get("path_mode") or "straight")
+          '''
+          new = '''    default_transition = _validated_transition(raw.get("transition") or "smooth", "camera_path.transition")
+              default_path = _validated_path_mode(raw.get("path_mode") or "straight", "camera_path.path_mode")
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''            "transition": str(point.get("transition") or default_transition),
+                      "path_mode": str(point.get("path_mode") or default_path),
+          '''
+          new = '''            "transition": _validated_transition(point.get("transition") or default_transition, f"camera_path.points[{index}].transition"),
+                      "path_mode": _validated_path_mode(point.get("path_mode") or default_path, f"camera_path.points[{index}].path_mode"),
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        for source, target in aliases.items():
+                  if point.get(source) is not None:
+                      operation[target] = point[source]
+          '''
+          new = '''        for source, target in aliases.items():
+                  if point.get(source) is not None:
+                      operation[target] = (
+                          _positive_focus_distance(point[source], f"camera_path.points[{index}].focus_distance_m")
+                          if source == "focus_distance_m" else point[source]
+                      )
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''def _timeline_operations(raw):
+              if raw is None:
+                  return []
+              if not isinstance(raw, dict):
+                  raise ValueError("timeline은 객체여야 합니다.")
+              operations = []
+              duration = raw.get("duration_sec")
+              if duration is not None:
+                  duration = core.clamp_number(duration, 1, core.MAX_TIMELINE_DURATION, "timeline.duration_sec")
+                  operations.append({"op": "set_duration", "duration": duration})
+              start = raw.get("export_start_sec")
+              end = raw.get("export_end_sec")
+              if start is not None or end is not None:
+                  if duration is None:
+                      duration = core.MAX_TIMELINE_DURATION
+                  start = 0 if start is None else _finite(start, "timeline.export_start_sec")
+                  end = duration if end is None else _finite(end, "timeline.export_end_sec")
+                  if start < 0 or end > duration or end <= start:
+                      raise ValueError("timeline export range가 올바르지 않습니다.")
+                  operations.append({"op": "set_export_range", "start": start, "end": end})
+              return operations
+          '''
+          new = '''def _timeline_operations(raw, blocking):
+              if raw is None:
+                  return []
+              if not isinstance(raw, dict):
+                  raise ValueError("timeline은 객체여야 합니다.")
+              operations = []
+              current_duration = core.clamp_number(
+                  (blocking.get("motion") or {}).get("duration", 15),
+                  1,
+                  core.MAX_TIMELINE_DURATION,
+                  "timeline.current_duration",
+              )
+              duration = current_duration
+              requested_duration = raw.get("duration_sec")
+              if requested_duration is not None:
+                  duration = core.clamp_number(requested_duration, 1, core.MAX_TIMELINE_DURATION, "timeline.duration_sec")
+                  operations.append({"op": "set_duration", "duration": duration})
+              start = raw.get("export_start_sec")
+              end = raw.get("export_end_sec")
+              if start is not None or end is not None:
+                  start = 0 if start is None else _finite(start, "timeline.export_start_sec")
+                  end = duration if end is None else _finite(end, "timeline.export_end_sec")
+                  if start < 0 or end > duration or end <= start:
+                      raise ValueError("timeline export range가 현재/요청 duration 범위를 벗어났습니다.")
+                  operations.append({"op": "set_export_range", "start": start, "end": end})
+              return operations
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''    timeline_motion = _timeline_operations(args.get("timeline"))
+          '''
+          new = '''    timeline_motion = _timeline_operations(args.get("timeline"), blocking)
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''def apply_plan(args):
+              project_id = args.get("project_id")
+              revision = int(args["revision"])
+              prepared = _prepare_plan(args)
+          '''
+          new = '''def apply_plan(args):
+              project_id = args.get("project_id")
+              revision = int(args["revision"])
+              current = base._json_result(core.handle_get_project(project_id))
+              current_revision = int(current.get("revision") or 0)
+              if current_revision != revision:
+                  raise ValueError(f"revision_conflict: 현재 revision은 {current_revision}입니다. 프로젝트를 다시 불러와 주세요.")
+              prepared = _prepare_plan(args)
+          '''
+          assert old in text
+          text = text.replace(old, new, 1)
+          source.write_text(text, encoding='utf-8')
+
+          test = Path('tests/director-previs-command-engine-mcp.py')
+          text = test.read_text(encoding='utf-8')
+          anchor = '''        assert revision(project_id) == stable_revision
+
+              print("director-previs-command-engine-mcp: full Set -> Actor Blocking -> Camera/Lens -> Shot -> Timeline E2E, snapshot, single revision, and rollback passed")
+          '''
+          addition = '''        assert revision(project_id) == stable_revision
+
+              # Director validation catches invalid motion vocabulary before mutation.
+              expect_error(
+                  lambda: call("validate_director_previs_plan", {
+                      "project_id": project_id,
+                      "actor_paths": [{
+                          "actor_id": "actor-a",
+                          "transition": "teleport",
+                          "points": [{"time_sec": 0, "world_x_m": -0.1, "world_z_m": 0.2}],
+                      }],
+                  }),
+                  "전환 방식",
+              )
+              assert revision(project_id) == stable_revision
+
+              # Camera focus distance must be physically positive at validate time.
+              expect_error(
+                  lambda: call("validate_director_previs_plan", {
+                      "project_id": project_id,
+                      "camera_path": {"points": [{
+                          "time_sec": 0, "world_x_m": 0, "world_z_m": -2, "focus_distance_m": -1,
+                      }]},
+                  }),
+                  "0보다 커야",
+              )
+              assert revision(project_id) == stable_revision
+
+              # Export-only edits use the current timeline duration, not a synthetic 60s range.
+              expect_error(
+                  lambda: call("validate_director_previs_plan", {
+                      "project_id": project_id,
+                      "timeline": {"export_start_sec": 0, "export_end_sec": 20},
+                  }),
+                  "duration 범위",
+              )
+              assert revision(project_id) == stable_revision
+
+              # Stale callers get revision_conflict before semantic validation noise.
+              expect_error(
+                  lambda: call("apply_director_previs_plan", {
+                      "project_id": project_id,
+                      "revision": stable_revision - 1,
+                      "camera": {"tracking_target_id": "missing-actor"},
+                  }),
+                  "revision_conflict",
+              )
+              assert revision(project_id) == stable_revision
+
+              print("director-previs-command-engine-mcp: full Set -> Actor Blocking -> Camera/Lens -> Shot -> Timeline E2E, snapshot, strict validation, single revision, and rollback passed")
+          '''
+          assert anchor in text
+          text = text.replace(anchor, addition, 1)
+          test.write_text(text, encoding='utf-8')
+          PY
+          rm .github/workflows/patch-director-previs-hardening.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add director_previs_mcp.py tests/director-previs-command-engine-mcp.py .github/workflows/patch-director-previs-hardening.yml
+          git commit -m "fix: harden director previs preflight validation"
+          git push origin HEAD:feat/director-previs-command-engine-v1
