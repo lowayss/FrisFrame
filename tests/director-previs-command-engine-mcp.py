@@ -23,6 +23,7 @@ import reference_space_mcp  # noqa: E402,F401
 import set_reconstruction_mcp  # noqa: E402,F401
 import spatial_command_mcp  # noqa: E402,F401
 import director_previs_mcp  # noqa: E402,F401
+import director_previs_guard_mcp  # noqa: E402,F401
 
 
 def call(name, args):
@@ -174,6 +175,9 @@ def main():
         assert contract["supports"]["actor_pose_and_metric_paths"] is True
         assert contract["supports"]["camera_metric_position_lens_focus"] is True
         assert contract["supports"]["shot_metadata_and_framing"] is True
+        assert contract["preflight"]["policy"] == "director-previs-preflight-v1"
+        assert contract["preflight"]["stale_revision_first"] is True
+        assert contract["preflight"]["positive_camera_path_focus"] is True
 
         plan = full_plan(project_id, initial_revision, default_actor_id)
         before_validate = revision(project_id)
@@ -286,7 +290,66 @@ def main():
         )
         assert revision(project_id) == stable_revision
 
-        print("director-previs-command-engine-mcp: full Set -> Actor Blocking -> Camera/Lens -> Shot -> Timeline E2E, snapshot, single revision, and rollback passed")
+        # Invalid motion vocabulary is rejected at validate time.
+        expect_error(
+            lambda: call("validate_director_previs_plan", {
+                "project_id": project_id,
+                "actor_paths": [{
+                    "actor_id": "actor-a",
+                    "transition": "teleport",
+                    "points": [{"time_sec": 0, "world_x_m": -0.1, "world_z_m": 0.2}],
+                }],
+            }),
+            "전환 방식",
+        )
+        assert revision(project_id) == stable_revision
+
+        # Camera path focus distance must be physically positive before mutation.
+        expect_error(
+            lambda: call("validate_director_previs_plan", {
+                "project_id": project_id,
+                "camera_path": {"points": [{
+                    "time_sec": 0, "world_x_m": 0, "world_z_m": -2, "focus_distance_m": -1,
+                }]},
+            }),
+            "0보다 커야",
+        )
+        assert revision(project_id) == stable_revision
+
+        # Camera tracking/locks belong to the static camera command, not path points.
+        expect_error(
+            lambda: call("validate_director_previs_plan", {
+                "project_id": project_id,
+                "camera_path": {"points": [{
+                    "time_sec": 0, "world_x_m": 0, "world_z_m": -2, "tracking_target_id": "actor-a",
+                }]},
+            }),
+            "static camera",
+        )
+        assert revision(project_id) == stable_revision
+
+        # Export-only edits use the current 8-second timeline, not a synthetic max duration.
+        expect_error(
+            lambda: call("validate_director_previs_plan", {
+                "project_id": project_id,
+                "timeline": {"export_start_sec": 0, "export_end_sec": 20},
+            }),
+            "duration 범위",
+        )
+        assert revision(project_id) == stable_revision
+
+        # Stale callers get revision conflict before unrelated semantic validation noise.
+        expect_error(
+            lambda: call("apply_director_previs_plan", {
+                "project_id": project_id,
+                "revision": stable_revision - 1,
+                "camera": {"tracking_target_id": "missing-actor"},
+            }),
+            "revision_conflict",
+        )
+        assert revision(project_id) == stable_revision
+
+        print("director-previs-command-engine-mcp: full Set -> Actor Blocking -> Camera/Lens -> Shot -> Timeline E2E, snapshot, strict preflight, single revision, and rollback passed")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
