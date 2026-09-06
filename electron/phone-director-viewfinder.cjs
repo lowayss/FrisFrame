@@ -14,6 +14,7 @@ const VIEWFINDER_INTERVAL_MS = 33;
 const VIEWFINDER_JPEG_QUALITY = 62;
 const VIEWFINDER_MAX_WIDTH = 854;
 const VIEWFINDER_TELEMETRY_INTERVAL_MS = 200;
+const COMMAND_APPLY_TIMEOUT_MS = 800;
 const COMMAND_CACHE_MS = 60 * 1000;
 const ALLOWED_COMMANDS = new Set(["", "toggle-record", "stop", "cancel"]);
 const ALLOWED_RIGS = new Set(["raw", "handheld", "heavy"]);
@@ -58,6 +59,14 @@ function normalizeDirectorStatus(value = {}) {
     rigProfile,
     connected: value.connected === true,
   };
+}
+
+function commandTransitionSatisfied(command, before = {}, after = {}) {
+  const beforeMode = String(before.mode || "idle");
+  const afterMode = String(after.mode || "idle");
+  if (command === "toggle-record") return beforeMode === "recording" ? afterMode !== "recording" : afterMode === "recording";
+  if (command === "stop" || command === "cancel") return afterMode === "idle";
+  return true;
 }
 
 function sanitizeMotionInput(payload = {}) {
@@ -199,19 +208,21 @@ function motionHtml(token) {
 (()=>{"use strict";
 const TOKEN=${safeToken},$=id=>document.getElementById(id),W=96,H=72,canvas=document.createElement("canvas"),ctx=canvas.getContext("2d",{willReadFrequently:true});
 canvas.width=W;canvas.height=H;
-let stream=null,trackTimer=null,telemetryTimer=null,previous=null,previousOrientation=null,seq=0,calibrationId=0,xrSession=null,xrSpace=null,xrGl=null,selectedFocalMm=35,rigProfile="handheld",pendingCommand=null,sending=false,alive=true,lastLocalControlAt=0;
+let stream=null,trackTimer=null,telemetryTimer=null,previous=null,previousOrientation=null,seq=0,calibrationId=0,xrSession=null,xrSpace=null,xrGl=null,selectedFocalMm=35,rigProfile="handheld",pendingCommands=[],sending=false,telemetryInFlight=false,alive=true,lastLocalControlAt=0;
 const directorSync={mode:"idle",playheadSeconds:0,durationSeconds:0,focalMm:35,rigProfile:"handheld",connected:false,syncedAt:performance.now(),lastAck:null};
 const raw={enabled:false,screenAngle:0,orientation:{alpha:0,beta:0,gamma:0,absolute:false},acceleration:{x:0,y:0,z:0},visual:{x:0,y:0,z:0,confidence:0,metric:false},spatial:{mode:"none",metric:false,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:0}};
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,Number(v)||0));
 const wrap=v=>{let n=(Number(v)||0)%360;if(n>180)n-=360;if(n<=-180)n+=360;return n};
 const angleStep=(a,b)=>wrap((Number(b)||0)-(Number(a)||0));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
+const INPUT_TIMEOUT_MS=900,STATUS_TIMEOUT_MS=700;
+async function fetchWithTimeout(url,options={},timeoutMs=INPUT_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{return await fetch(url,{...options,signal:controller.signal})}finally{clearTimeout(timer)}}
 function setStatus(text,kind=""){const n=$("status");n.textContent=text;n.className="pill"+(kind?" "+kind:"")}
 function formatTimecode(seconds){const fps=30,total=Math.max(0,Math.floor((Number(seconds)||0)*fps+1e-6)),ff=total%fps,whole=Math.floor(total/fps),ss=whole%60,mm=Math.floor(whole/60)%60,hh=Math.floor(whole/3600);return [hh,mm,ss,ff].map(v=>String(v).padStart(2,"0")).join(":")}
 function directorPlayheadNow(){const elapsed=directorSync.mode==="recording"?Math.max(0,performance.now()-directorSync.syncedAt)/1000:0;const value=directorSync.playheadSeconds+elapsed;return directorSync.durationSeconds>0?Math.min(value,directorSync.durationSeconds):value}
-function syncDirectorControls(){if(performance.now()-lastLocalControlAt<350)return;const focal=Number(directorSync.focalMm);if(Number.isFinite(focal)){selectedFocalMm=focal;$("lensHud").textContent=Math.round(focal)+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",Math.abs(Number(n.dataset.focalMm)-focal)<.5))}if(["raw","handheld","heavy"].includes(directorSync.rigProfile)){rigProfile=directorSync.rigProfile;document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n.dataset.rig===rigProfile))}}
-function applyDirectorStatus(data,rttMs=0){const d=data?.director||{};directorSync.mode=["idle","armed","recording"].includes(d.mode)?d.mode:"idle";directorSync.playheadSeconds=Math.max(0,Number(d.playheadSeconds)||0);directorSync.durationSeconds=Math.max(0,Number(d.durationSeconds)||0);directorSync.focalMm=Number(d.focalMm)||selectedFocalMm;directorSync.rigProfile=String(d.rigProfile||rigProfile);directorSync.connected=d.connected===true;directorSync.syncedAt=performance.now()-Math.max(0,Number(rttMs)||0)/2;directorSync.lastAck=data?.lastCommandAck||directorSync.lastAck;syncDirectorControls();if(directorSync.lastAck?.command){const label=directorSync.lastAck.command==="toggle-record"?"REC":directorSync.lastAck.command.toUpperCase();$("ackHud").textContent="ACK "+label}}
-function renderDirectorHud(){const mode=directorSync.mode,strip=$("recordStrip");$("recordState").textContent=mode==="recording"?"REC":(mode==="armed"?"STBY":"LIVE");$("timecode").textContent=formatTimecode(directorPlayheadNow());strip.className="recordStrip"+(mode==="recording"?" rec":(mode==="armed"?" stby":""));$("rec").classList.toggle("recording",mode==="recording");requestAnimationFrame(renderDirectorHud)}
+function syncDirectorControls(){if(lastLocalControlAt>0&&performance.now()-lastLocalControlAt<350)return;const focal=Number(directorSync.focalMm);if(Number.isFinite(focal)){selectedFocalMm=focal;$("lensHud").textContent=Math.round(focal)+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",Math.abs(Number(n.dataset.focalMm)-focal)<.5))}if(["raw","handheld","heavy"].includes(directorSync.rigProfile)){rigProfile=directorSync.rigProfile;document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n.dataset.rig===rigProfile))}}
+function applyDirectorStatus(data,rttMs=0){const d=data?.director||{};directorSync.mode=["idle","armed","recording"].includes(d.mode)?d.mode:"idle";directorSync.playheadSeconds=Math.max(0,Number(d.playheadSeconds)||0);directorSync.durationSeconds=Math.max(0,Number(d.durationSeconds)||0);directorSync.focalMm=Number(d.focalMm)||selectedFocalMm;directorSync.rigProfile=String(d.rigProfile||rigProfile);directorSync.connected=d.connected===true;directorSync.syncedAt=performance.now()-Math.max(0,Number(rttMs)||0)/2;directorSync.lastAck=data?.lastCommandAck||null;syncDirectorControls();if(directorSync.lastAck?.command){const label=directorSync.lastAck.command==="toggle-record"?"REC":directorSync.lastAck.command.toUpperCase();$("ackHud").textContent="ACK "+label}else if(!pendingCommands.length)$("ackHud").textContent="—"}
+function renderDirectorHud(){const mode=directorSync.mode,linked=directorSync.connected||raw.enabled,strip=$("recordStrip");$("recordState").textContent=!linked?"OFF":(mode==="recording"?"REC":(mode==="armed"?"STBY":"LIVE"));$("timecode").textContent=formatTimecode(directorPlayheadNow());strip.className="recordStrip"+(mode==="recording"?" rec":(mode==="armed"?" stby":""));$("rec").classList.toggle("recording",mode==="recording");requestAnimationFrame(renderDirectorHud)}
 function screenAngle(){return Number(screen.orientation?.angle??window.orientation??0)||0}
 function remapOrientation(value,screen){const a=Number(value.alpha)||0,b=Number(value.beta)||0,g=Number(value.gamma)||0,s=((Math.round((Number(screen)||0)/90)*90)%360+360)%360;if(s===90)return{yaw:a,pitch:-g};if(s===270)return{yaw:a,pitch:g};if(s===180)return{yaw:a,pitch:-b};return{yaw:a,pitch:b}}
 function onOrientation(e){raw.screenAngle=screenAngle();raw.orientation={alpha:clamp(e.alpha,-360,360),beta:clamp(e.beta,-180,180),gamma:clamp(e.gamma,-90,90),absolute:Boolean(e.absolute)};$("pose").textContent=Math.round(raw.orientation.alpha||0)+"°/"+Math.round(raw.orientation.beta||0)+"°"}
@@ -229,14 +240,16 @@ function recenter(){calibrationId++;raw.visual={x:0,y:0,z:0,confidence:0,metric:
 async function probeXR(){try{if(await navigator.xr?.isSessionSupported?.("immersive-ar"))$("xrBtn").hidden=false}catch{}}
 function xrFrame(_time,frame){if(!xrSpace)return;const pose=frame.getViewerPose(xrSpace);if(pose){const p=pose.transform.position,o=pose.transform.orientation;raw.spatial={mode:"webxr",metric:true,position:{x:p.x,y:p.y,z:p.z},orientation:{x:o.x,y:o.y,z:o.z,w:o.w},confidence:1};raw.enabled=true;$("flow").textContent="100%";$("track").textContent="6DoF"}frame.session.requestAnimationFrame(xrFrame)}
 async function startXRFromGesture(){try{if(!navigator.xr?.isSessionSupported||!(await navigator.xr.isSessionSupported("immersive-ar")))throw new Error("이 브라우저는 WebXR 6DoF를 지원하지 않습니다.");stopTracker();const c=document.createElement("canvas");xrGl=c.getContext("webgl",{alpha:true,xrCompatible:true});if(!xrGl)throw new Error("WebGL XR 컨텍스트를 만들 수 없습니다.");if(xrGl.makeXRCompatible)await xrGl.makeXRCompatible();xrSession=await navigator.xr.requestSession("immersive-ar",{optionalFeatures:["local-floor","dom-overlay"],domOverlay:{root:document.body}});xrSession.updateRenderState({baseLayer:new XRWebGLLayer(xrSession,xrGl)});xrSpace=await xrSession.requestReferenceSpace("local");raw.enabled=true;raw.visual={x:0,y:0,z:0,confidence:0,metric:false};recenter();xrSession.addEventListener("end",()=>{xrSession=null;xrSpace=null;raw.spatial={mode:"none",metric:false,position:{x:0,y:0,z:0},orientation:{x:0,y:0,z:0,w:1},confidence:0};$("track").textContent="OFF";$("gate").hidden=false;setStatus("READY")});xrSession.requestAnimationFrame(xrFrame);$("gate").hidden=true;setStatus("6DoF","ok")}catch(error){$("gate").hidden=false;setStatus("6DoF 실패","warn");$("note").textContent=String(error?.message||error)}}
-function newCommand(type){pendingCommand={id:"cmd_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8),type}}
-async function sendOnce(){seq++;const cmd=pendingCommand;const payload={seq,sentAt:Date.now(),command:cmd?.type||"",commandId:cmd?.id||"",focalMm:selectedFocalMm,rigProfile,motion:{...raw,calibrationId,focalMm:selectedFocalMm,rigProfile}};const res=await fetch("/input?token="+encodeURIComponent(TOKEN),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const ack=await res.json();if(cmd&&ack.ack===cmd.id){pendingCommand=null;directorSync.lastAck={id:cmd.id,command:cmd.type,at:Date.now()};const label=cmd.type==="toggle-record"?"REC":cmd.type.toUpperCase();$("ackHud").textContent="ACK "+label}return ack}
+function commandLabel(type){return type==="toggle-record"?"REC":String(type||"").toUpperCase()}
+function removePendingCommand(id){if(!id)return;if(pendingCommands[0]?.id===id)pendingCommands.shift();else pendingCommands=pendingCommands.filter(item=>item.id!==id)}
+function newCommand(type){const next={id:"cmd_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8),type};pendingCommands.push(next);if(pendingCommands.length>8)pendingCommands.shift();$("ackHud").textContent="SEND "+commandLabel(type)}
+async function sendOnce(){seq++;const cmd=pendingCommands[0]||null;const payload={seq,sentAt:Date.now(),command:cmd?.type||"",commandId:cmd?.id||"",focalMm:selectedFocalMm,rigProfile,motion:{...raw,calibrationId,focalMm:selectedFocalMm,rigProfile}};const res=await fetchWithTimeout("/input?token="+encodeURIComponent(TOKEN),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),cache:"no-store"},INPUT_TIMEOUT_MS);const body=await res.json().catch(()=>({}));if(!res.ok){if(cmd&&body?.failedCommandId===cmd.id){removePendingCommand(cmd.id);directorSync.lastAck=null;$("ackHud").textContent="FAIL "+commandLabel(cmd.type)}throw new Error(String(res.status))}if(cmd&&body.ack===cmd.id){removePendingCommand(cmd.id);directorSync.lastAck={id:cmd.id,command:cmd.type,at:Date.now(),stage:"applied"};$("ackHud").textContent="ACK "+commandLabel(cmd.type)}return body}
 async function sendLoop(){if(sending)return;sending=true;while(alive){try{await sendOnce();if(raw.enabled)setStatus(raw.spatial.mode==="webxr"?"6DoF":rigProfile.toUpperCase(),"ok")}catch{setStatus("연결 끊김","warn")}await delay(24)}sending=false}
-async function pollLinkTelemetry(){const started=Date.now(),startedPerf=performance.now();try{const res=await fetch("/status?token="+encodeURIComponent(TOKEN),{cache:"no-store"});if(!res.ok)throw new Error(String(res.status));const data=await res.json(),finished=Date.now(),finishedPerf=performance.now(),midpoint=(started+finished)/2,clockOffset=(Number(data.serverNow)||finished)-midpoint,frameAt=Number(data.lastFrameAt)||0,estimatedAge=frameAt?Math.max(0,Math.round(finished-frameAt+clockOffset)):0;$("latency").textContent=frameAt?estimatedAge+"ms":"—";$("vfFps").textContent=Number(data.measuredFps)>0?Number(data.measuredFps).toFixed(0):"—";applyDirectorStatus(data,finishedPerf-startedPerf);if((Number(data.droppedFrames)||0)>0)$("note").textContent="지연 시 오래된 프레임을 버리고 최신 프레임을 우선 표시합니다."}catch{$("latency").textContent="—";$("vfFps").textContent="—"}}
+async function pollLinkTelemetry(){if(telemetryInFlight)return;telemetryInFlight=true;const started=Date.now(),startedPerf=performance.now();try{const res=await fetchWithTimeout("/status?token="+encodeURIComponent(TOKEN),{cache:"no-store"},STATUS_TIMEOUT_MS);if(!res.ok)throw new Error(String(res.status));const data=await res.json(),finished=Date.now(),finishedPerf=performance.now(),midpoint=(started+finished)/2,clockOffset=(Number(data.serverNow)||finished)-midpoint,frameAt=Number(data.lastFrameAt)||0,estimatedAge=frameAt?Math.max(0,Math.round(finished-frameAt+clockOffset)):0;$("latency").textContent=frameAt?estimatedAge+"ms":"—";$("vfFps").textContent=Number(data.measuredFps)>0?Number(data.measuredFps).toFixed(0):"—";applyDirectorStatus(data,finishedPerf-startedPerf);if((Number(data.droppedFrames)||0)>0)$("note").textContent="지연 시 오래된 프레임을 버리고 최신 프레임을 우선 표시합니다."}catch{$("latency").textContent="—";$("vfFps").textContent="—"}finally{telemetryInFlight=false}}
 document.querySelectorAll("[data-focal-mm]").forEach(b=>b.addEventListener("click",()=>{lastLocalControlAt=performance.now();selectedFocalMm=Number(b.dataset.focalMm)||35;$("lensHud").textContent=selectedFocalMm+"mm";document.querySelectorAll("[data-focal-mm]").forEach(n=>n.classList.toggle("on",n===b))}));
 document.querySelectorAll("[data-rig]").forEach(b=>b.addEventListener("click",()=>{lastLocalControlAt=performance.now();rigProfile=b.dataset.rig||"handheld";document.querySelectorAll("[data-rig]").forEach(n=>n.classList.toggle("on",n===b));setStatus(rigProfile.toUpperCase(),raw.enabled?"ok":"")}));
 $("startBtn").addEventListener("click",startCameraFromGesture);$("xrBtn").addEventListener("click",startXRFromGesture);$("centerBtn").addEventListener("click",recenter);$("rec").addEventListener("click",()=>newCommand("toggle-record"));$("stop").addEventListener("click",()=>newCommand("stop"));
-probeXR();sendLoop();pollLinkTelemetry();telemetryTimer=setInterval(pollLinkTelemetry,${VIEWFINDER_TELEMETRY_INTERVAL_MS});requestAnimationFrame(renderDirectorHud);
+async function initialize(){probeXR();await pollLinkTelemetry();if(!alive)return;sendLoop();telemetryTimer=setInterval(pollLinkTelemetry,${VIEWFINDER_TELEMETRY_INTERVAL_MS});requestAnimationFrame(renderDirectorHud)}initialize();
 window.addEventListener("pagehide",()=>{alive=false;if(telemetryTimer)clearInterval(telemetryTimer);stopTracker();try{xrSession?.end?.()}catch{}})
 })();
 </script>
@@ -265,11 +278,12 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   let totalDroppedFrames = 0;
   const streamClients = new Set();
   const commandAcks = new Map();
+  const commandRecords = new Map();
   let lastCommandAck = null;
   let lastDirectorStatus = normalizeDirectorStatus({});
   let lastDirectorStatusAt = 0;
   let directorStatusPromise = null;
-  let patchedWebContentsId = null;
+  let patchedRendererEpoch = null;
 
   function authorized(requestUrl) {
     try {
@@ -281,27 +295,34 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
 
   function cleanupCommandAcks(now = Date.now()) {
     for (const [id, at] of commandAcks) if (now - at > COMMAND_CACHE_MS) commandAcks.delete(id);
+    for (const [id, record] of commandRecords) if (now - Number(record?.at || 0) > COMMAND_CACHE_MS) commandRecords.delete(id);
+    if (lastCommandAck && now - Number(lastCommandAck.at || 0) > 5000) lastCommandAck = null;
   }
 
   async function ensureRendererPatches(window) {
     const id = window?.webContents?.id ?? null;
-    if (id != null && patchedWebContentsId === id) return;
+    const timeOrigin = await window.webContents.executeJavaScript(`String(performance.timeOrigin || 0)`, true).catch(() => "");
+    const epoch = `${id}:${timeOrigin}`;
+    if (epoch && patchedRendererEpoch === epoch) return;
     for (const filename of ["phone-motion-core-absolute-focal.js", "phone-handheld-command-ux.js"]) {
       const source = fs.readFileSync(path.join(__dirname, filename), "utf8");
       await window.webContents.executeJavaScript(source, true);
     }
-    patchedWebContentsId = id;
+    patchedRendererEpoch = epoch;
   }
 
-  async function readRendererDirectorStatus() {
+  async function readRendererDirectorStatus(force = false) {
     const now = Date.now();
-    if (now - lastDirectorStatusAt < 120) return lastDirectorStatus;
-    if (directorStatusPromise) return directorStatusPromise;
+    if (!force && now - lastDirectorStatusAt < 120) return lastDirectorStatus;
+    if (directorStatusPromise) {
+      const current = await directorStatusPromise;
+      if (!force) return current;
+    }
     directorStatusPromise = (async () => {
       const window = typeof getWindow === "function" ? getWindow() : null;
       if (!window || window.isDestroyed?.() || window.webContents?.isDestroyed?.()) return lastDirectorStatus;
       await ensureRendererPatches(window);
-      const raw = await window.webContents.executeJavaScript(`(()=>{try{const appState=typeof state!=="undefined"?state:null;const op=window.FrisFrameCameraOperator;const physical=window.FrisFramePhoneMotionCamera;return{mode:op?.mode||"idle",playheadSeconds:Number(appState?.motion?.playhead||0),durationSeconds:Number(appState?.motion?.duration||globalThis.MAX_TIMELINE_DURATION||60),focalMm:Number(appState?.camera?.focal||35),rigProfile:physical?.stabilization||"handheld",connected:Boolean(physical?.connected)}}catch{return null}})()`, true);
+      const raw = await window.webContents.executeJavaScript(`(()=>{try{const appState=typeof state!=="undefined"?state:null;const op=window.FrisFrameCameraOperator;const physical=window.FrisFramePhoneMotionCamera;const live=physical?.livePreview;return{mode:op?.mode||"idle",playheadSeconds:Number(appState?.motion?.playhead||0),durationSeconds:Number(appState?.motion?.duration||globalThis.MAX_TIMELINE_DURATION||60),focalMm:Number(live?.focal ?? appState?.camera?.focal ?? 35),rigProfile:physical?.stabilization||"handheld",connected:Boolean(physical?.connected)}}catch{return null}})()`, true);
       lastDirectorStatus = normalizeDirectorStatus(raw || {});
       lastDirectorStatusAt = Date.now();
       return lastDirectorStatus;
@@ -319,6 +340,16 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     const serialized = JSON.stringify(payload).replace(/</g, "\\u003c");
     await window.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent("frisframe:phone-remote-input",{detail:${serialized}}));`, true);
     return true;
+  }
+
+  async function waitForCommandApplied(command, before) {
+    const deadline = Date.now() + COMMAND_APPLY_TIMEOUT_MS;
+    let latest = await readRendererDirectorStatus(true);
+    while (!commandTransitionSatisfied(command, before, latest) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      latest = await readRendererDirectorStatus(true);
+    }
+    return { applied:commandTransitionSatisfied(command, before, latest), status:latest };
   }
 
   function dispatchNow() {
@@ -362,7 +393,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
 
   async function cameraFrameRect(window) {
     try {
-      return await window.webContents.executeJavaScript(`(()=>{const el=document.getElementById("cameraFrameCanvas")||document.getElementById("cameraFrame");if(!el)return null;const r=el.getBoundingClientRect();return r.width>2&&r.height>2?{x:Math.max(0,Math.round(r.x)),y:Math.max(0,Math.round(r.y)),width:Math.max(2,Math.round(r.width)),height:Math.max(2,Math.round(r.height))}:null})()`, true);
+      return await window.webContents.executeJavaScript(`(()=>{const el=document.getElementById("cameraFrameCanvas");if(!el)return null;const r=el.getBoundingClientRect();return r.width>2&&r.height>2?{x:Math.max(0,Math.round(r.x)),y:Math.max(0,Math.round(r.y)),width:Math.max(2,Math.round(r.width)),height:Math.max(2,Math.round(r.height))}:null})()`, true);
     } catch { return null; }
   }
 
@@ -375,7 +406,8 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
       const window = typeof getWindow === "function" ? getWindow() : null;
       if (!window || window.isDestroyed?.() || window.webContents?.isDestroyed?.()) return lastFrame;
       const rect = await cameraFrameRect(window);
-      const image = await window.webContents.capturePage(rect || undefined);
+      if (!rect) return lastFrame;
+      const image = await window.webContents.capturePage(rect);
       if (!image || image.isEmpty?.()) return lastFrame;
       let output = image;
       const size = image.getSize?.() || { width:0, height:0 };
@@ -442,6 +474,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   async function statusPayload(secure) {
     const measuredFps = measuredFrameIntervalMs > 0 ? Math.min(120, 1000 / measuredFrameIntervalMs) : 0;
     const director = await readRendererDirectorStatus();
+    cleanupCommandAcks(Date.now());
     return {
       ok:true,
       secure,
@@ -474,18 +507,41 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     readJson(request,response,async(body)=>{
       const input=sanitizeMotionInput(body);lastInputAt=Date.now();cleanupCommandAcks(lastInputAt);
       const payload={...input,receivedAt:lastInputAt};
-      if (input.command && input.commandId && commandAcks.has(input.commandId)) { jsonResponse(response,200,{ok:true,ack:input.commandId,duplicate:true,seq:input.seq}); return; }
+      if (input.command && !input.commandId) { jsonResponse(response,400,{ok:false,error:"command-id-required",seq:input.seq}); return; }
+      if (input.command && input.commandId && commandAcks.has(input.commandId)) { jsonResponse(response,200,{ok:true,ack:input.commandId,stage:"applied",duplicate:true,seq:input.seq}); return; }
+      if (input.command && input.commandId && commandRecords.has(input.commandId)) {
+        const existing = commandRecords.get(input.commandId);
+        const result = await existing.promise;
+        if (result.applied) jsonResponse(response,200,{ok:true,ack:input.commandId,stage:"applied",duplicate:true,seq:input.seq,mode:result.status?.mode||"idle"});
+        else jsonResponse(response,result.statusCode||409,{ok:false,error:result.error||"command-not-applied",failedCommandId:input.commandId,seq:input.seq,mode:result.status?.mode||"idle"});
+        return;
+      }
       if (!input.command && input.seq <= lastAcceptedSeq) { jsonResponse(response,200,{ok:true,stale:true,seq:input.seq,lastAcceptedSeq}); return; }
       lastAcceptedSeq=Math.max(lastAcceptedSeq,input.seq);
       try {
         if (input.command) {
-          await dispatchPayload(payload);
-          if (input.commandId) { commandAcks.set(input.commandId,lastInputAt); lastCommandAck={id:input.commandId,command:input.command,at:lastInputAt}; }
-        } else scheduleDispatch(payload);
-        jsonResponse(response,200,{ok:true,ack:input.commandId||null,seq:input.seq,lastAcceptedSeq});
+          const before = await readRendererDirectorStatus(true);
+          const record = { at:lastInputAt, command:input.command, beforeMode:before.mode, promise:null };
+          record.promise = (async () => {
+            const dispatched = await dispatchPayload(payload);
+            if (!dispatched) return { applied:false,error:"renderer-unavailable",statusCode:503,status:before };
+            const applied = await waitForCommandApplied(input.command,before);
+            if (!applied.applied) return { applied:false,error:"command-not-applied",statusCode:409,status:applied.status };
+            return { applied:true,status:applied.status };
+          })();
+          commandRecords.set(input.commandId,record);
+          const result = await record.promise;
+          if (!result.applied) { jsonResponse(response,result.statusCode||409,{ok:false,error:result.error||"command-not-applied",failedCommandId:input.commandId,seq:input.seq,mode:result.status?.mode||"idle"}); return; }
+          commandAcks.set(input.commandId,lastInputAt);
+          lastCommandAck={id:input.commandId,command:input.command,at:lastInputAt,stage:"applied",mode:result.status?.mode||"idle"};
+          jsonResponse(response,200,{ok:true,ack:input.commandId,stage:"applied",seq:input.seq,lastAcceptedSeq,mode:result.status?.mode||"idle"});
+        } else {
+          scheduleDispatch(payload);
+          jsonResponse(response,200,{ok:true,ack:null,seq:input.seq,lastAcceptedSeq});
+        }
       } catch(error) {
         writeLog(`director viewfinder command dispatch failed: ${error.stack || error}`);
-        jsonResponse(response,503,{ok:false,error:"renderer-unavailable",seq:input.seq});
+        jsonResponse(response,503,{ok:false,error:"renderer-unavailable",failedCommandId:input.commandId||null,seq:input.seq});
       }
     });
   }
@@ -495,7 +551,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   async function start() {
     if (httpServer) return getConfig();
     token = crypto.randomBytes(24).toString("base64url");
-    lastAcceptedSeq = 0; commandAcks.clear(); lastCommandAck=null; lastDirectorStatus=normalizeDirectorStatus({}); lastDirectorStatusAt=0; directorStatusPromise=null;
+    lastAcceptedSeq = 0; commandAcks.clear(); commandRecords.clear(); lastCommandAck=null; lastDirectorStatus=normalizeDirectorStatus({}); lastDirectorStatusAt=0; directorStatusPromise=null;
     const addresses = privateIpv4Addresses();
     tls = tryEnsureTlsMaterial({directory:tlsDirectory,hosts:addresses});
     httpServer = http.createServer((req,res)=>handleRequest(req,res,false));
@@ -509,7 +565,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   }
 
   function stop() {
-    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();lastCommandAck=null;lastAcceptedSeq=0;lastDirectorStatus=normalizeDirectorStatus({});lastDirectorStatusAt=0;directorStatusPromise=null;patchedWebContentsId=null;
+    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();commandRecords.clear();lastCommandAck=null;lastAcceptedSeq=0;lastDirectorStatus=normalizeDirectorStatus({});lastDirectorStatusAt=0;directorStatusPromise=null;patchedRendererEpoch=null;
     for (const client of [...streamClients]) { try { client.response.end(); } catch {} closeStreamClient(client); }
     streamClients.clear();
     for (const server of [httpServer,httpsServer]) if (server) try { server.close(); } catch {}
@@ -525,4 +581,4 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   return { start, stop, getConfig };
 }
 
-module.exports = { createPhoneMotionBridge, sanitizeMotionInput, normalizeDirectorStatus, bootstrapHtml, motionHtml };
+module.exports = { createPhoneMotionBridge, sanitizeMotionInput, normalizeDirectorStatus, commandTransitionSatisfied, bootstrapHtml, motionHtml };
