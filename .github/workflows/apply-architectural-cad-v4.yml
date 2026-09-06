@@ -23,7 +23,9 @@ jobs:
         with:
           node-version: '22'
       - name: Patch source
-        run: python3 scripts/patch_architectural_cad_v4.py
+        run: |
+          python3 scripts/patch_architectural_cad_v4.py
+          python3 scripts/patch_architectural_cad_v4_fix.py
       - name: Validate patched runtime
         run: |
           node --check multi-camera-core.js
@@ -34,6 +36,7 @@ jobs:
       - name: Remove one-shot patch machinery
         run: |
           rm scripts/patch_architectural_cad_v4.py
+          rm scripts/patch_architectural_cad_v4_fix.py
           rm .github/workflows/apply-architectural-cad-v4.yml
       - name: Commit patched source
         run: |
