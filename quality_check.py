@@ -57,6 +57,7 @@ def main() -> None:
     check_python_syntax()
     for filename in (
         "app.js",
+        "boot-errors.js",
         "storyboard-core.js",
         "motion-core.js",
         "scene-blocking-core.js",
@@ -155,6 +156,7 @@ def main() -> None:
         "tests/mcp-live-sync-contract.test.cjs",
         "tests/retired-spatial-runtime-contract.test.cjs",
         "tests/dom-contract.test.cjs",
+        "tests/birdseye-2-5d-mode-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
         run(f"단위 검사 · {filename}", [node, filename])
