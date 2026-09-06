@@ -39,9 +39,11 @@ def check_python_syntax() -> None:
         ROOT / "reference_interpretation_mcp.py",
         ROOT / "set_reconstruction_mcp.py",
         ROOT / "reference_master_pipeline_mcp.py",
+        ROOT / "spatial_quality_mcp.py",
         ROOT / "tests/reference-interpretation-mcp.py",
         ROOT / "tests/set-reconstruction-mcp.py",
         ROOT / "tests/reference-master-pipeline-mcp.py",
+        ROOT / "tests/spatial-quality-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
         ROOT / "tests/seed-packaged-reference-project.py",
@@ -127,6 +129,7 @@ def main() -> None:
         "tests/pose-core.test.cjs",
         "tests/camera-drafting.test.cjs",
         "tests/multi-camera-core.test.cjs",
+        "tests/environment-preset-quality.test.cjs",
         "tests/spatial-scale-core.test.cjs",
         "tests/selection-ux.test.cjs",
         "tests/alignment-ux.test.cjs",
@@ -175,6 +178,7 @@ def main() -> None:
     run("Reference 이미지 해석 계약", [sys.executable, "tests/reference-interpretation-mcp.py"])
     run("2D 마스터 세트 재구성", [sys.executable, "tests/set-reconstruction-mcp.py"])
     run("Reference → Master Set 파이프라인", [sys.executable, "tests/reference-master-pipeline-mcp.py"])
+    run("공간 해석 품질", [sys.executable, "tests/spatial-quality-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
