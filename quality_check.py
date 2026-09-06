@@ -168,6 +168,7 @@ def main() -> None:
         "tests/architectural-cad-runtime.test.cjs",
         "tests/architectural-cad-v2-runtime.test.cjs",
         "tests/architectural-cad-v3-runtime.test.cjs",
+        "tests/architectural-cad-v4-runtime.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
         run(f"단위 검사 · {filename}", [node, filename])
