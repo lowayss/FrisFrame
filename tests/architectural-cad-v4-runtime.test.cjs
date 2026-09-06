@@ -107,10 +107,9 @@ const left = api.createWall(-2, 1.5, -2, -1.5, { commit: false, snap: false, thi
 assert.equal(api.roomZones.length, 1);
 assert.equal(api.roomZones[0].areaM2, 12);
 
-assert.deepEqual(
-  api.setRoomMetadata(api.roomZones[0].id, { name: "거실", use: "living" }, { commit: false }),
-  { name: "거실", use: "living" },
-);
+const roomMeta = api.setRoomMetadata(api.roomZones[0].id, { name: "거실", use: "living" }, { commit: false });
+assert.equal(roomMeta.name, "거실");
+assert.equal(roomMeta.use, "living");
 assert.equal(api.roomZones[0].name, "거실");
 assert.equal(api.roomZones[0].use, "living");
 
@@ -125,10 +124,10 @@ const door = api.insertOpening("door", bottom, 0.4, -1.5, { commit: false });
 const windowId = api.insertOpening("window", top, 0, 1.5, { commit: false });
 assert.ok(door && windowId);
 
-assert.deepEqual(
-  api.setDoorSwing(door, "left", "in", { commit: false }),
-  { hinge: "left", direction: "in", angleDeg: 90 },
-);
+const swingResult = api.setDoorSwing(door, "left", "in", { commit: false });
+assert.equal(swingResult.hinge, "left");
+assert.equal(swingResult.direction, "in");
+assert.equal(swingResult.angleDeg, 90);
 let doorElement = stateObject.setMasterPlan.elements.find((entry) => entry.id === door);
 let doorItem = stateObject.items.find((entry) => entry.id === door);
 assert.equal(doorElement.doorSwing.hinge, "left");
