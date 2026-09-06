@@ -25,6 +25,7 @@ jobs:
       - name: Patch source
         run: |
           python3 scripts/patch_architectural_cad_v5.py
+          python3 scripts/fix_architectural_cad_v5_dimension.py
           python3 scripts/fix_architectural_cad_v5_test.py
       - name: Validate patched runtime
         run: |
@@ -37,6 +38,7 @@ jobs:
       - name: Remove one-shot patch machinery
         run: |
           rm scripts/patch_architectural_cad_v5.py
+          rm scripts/fix_architectural_cad_v5_dimension.py
           rm scripts/fix_architectural_cad_v5_test.py
           rm .github/workflows/apply-architectural-cad-v5.yml
       - name: Commit patched source
