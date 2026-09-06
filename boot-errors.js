@@ -582,3 +582,566 @@
 
   window.addEventListener("load", installBirdseye25D, { once: true });
 })();
+
+(function initBirdseyeCadEditFlow() {
+  "use strict";
+
+  const CAD_STEP_METERS = [0.10, 0.25, 0.50, 1.00];
+  const cad = {
+    installed: false,
+    axisMode: "free",
+    snapEnabled: true,
+    stepMeters: 0.25,
+    rotateStepDeg: 15,
+    originalUpdateThreeEditorDrag: null,
+    originalPollManagedProjectCommands: null,
+    originalSyncUi: null,
+    originalRenderThreeView: null,
+    lastAutoOpenedPlan: "",
+    installAttempts: 0,
+  };
+
+  function birdseyeApi() {
+    return window.FrisFrameBirdseye25D || null;
+  }
+
+  function currentState() {
+    return typeof state !== "undefined" ? state : null;
+  }
+
+  function isBirdseye25D() {
+    return birdseyeApi()?.mode === "2.5d";
+  }
+
+  function clampStage(value) {
+    const min = typeof STAGE_COORD_MIN !== "undefined" ? Number(STAGE_COORD_MIN) : 0.02;
+    const max = typeof STAGE_COORD_MAX !== "undefined" ? Number(STAGE_COORD_MAX) : 0.98;
+    return Math.max(min, Math.min(max, Number(value) || 0));
+  }
+
+  function stageSize(renderState = currentState()) {
+    if (typeof stageWorldSize === "function" && renderState) return stageWorldSize(renderState);
+    return { width: 36, depth: 20.25 };
+  }
+
+  function leaderIdFor(itemId) {
+    if (!itemId) return "";
+    if (typeof transformLeaderIdForItem === "function" && currentState()) {
+      return transformLeaderIdForItem(itemId, currentState()) || itemId;
+    }
+    return itemId;
+  }
+
+  function groupItemIds(itemId) {
+    const leaderId = leaderIdFor(itemId);
+    if (!leaderId) return [];
+    if (typeof transformGroupItemIds === "function" && currentState()) {
+      const ids = transformGroupItemIds(leaderId, currentState());
+      if (Array.isArray(ids) && ids.length) return [...new Set(ids.map(String))];
+    }
+    return [String(leaderId)];
+  }
+
+  function selectedItem() {
+    const renderState = currentState();
+    if (!renderState || typeof selected === "undefined" || !selected?.id) return null;
+    if (!["item", "facing"].includes(selected.kind)) return null;
+    const leaderId = leaderIdFor(selected.id);
+    return renderState.items?.find?.((item) => String(item.id) === String(leaderId)) || null;
+  }
+
+  function itemLocked(item) {
+    if (!item) return true;
+    if (typeof sourceEditLocked === "function") return Boolean(sourceEditLocked(item.id));
+    return Boolean(item.editLocked);
+  }
+
+  function notifyLocked(item) {
+    if (!item) return;
+    if (typeof notifyEditLocked === "function") notifyEditLocked(item.name || "대상");
+    else if (typeof notifyApp === "function") notifyApp(`${item.name || "대상"}은(는) 잠겨 있습니다.`);
+  }
+
+  function injectCadStyles() {
+    if (document.getElementById("frisframeBirdseyeCadStyles")) return;
+    const style = document.createElement("style");
+    style.id = "frisframeBirdseyeCadStyles";
+    style.textContent = `
+      #birdseyeCadControls {
+        position: absolute;
+        top: 58px;
+        left: 50%;
+        z-index: 47;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        max-width: calc(100% - 28px);
+        min-height: 34px;
+        transform: translateX(-50%);
+        padding: 5px 7px;
+        border: 1px solid rgba(150, 171, 183, 0.28);
+        border-radius: 9px;
+        background: rgba(10, 16, 21, 0.88);
+        box-shadow: 0 7px 20px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(10px);
+        color: #d9e5ea;
+        font: 800 10px/1 system-ui, sans-serif;
+      }
+      #birdseyeCadControls[hidden] { display: none !important; }
+      #birdseyeCadControls button,
+      #birdseyeCadControls select {
+        min-height: 27px;
+        border: 1px solid rgba(150, 171, 183, 0.24);
+        border-radius: 6px;
+        background: rgba(28, 39, 46, 0.94);
+        color: #dce7ec;
+        font: 800 10px/1 system-ui, sans-serif;
+      }
+      #birdseyeCadControls button { padding: 0 9px; cursor: pointer; }
+      #birdseyeCadControls select { padding: 0 5px; cursor: pointer; }
+      #birdseyeCadControls button.is-active,
+      #birdseyeCadControls button[aria-pressed="true"] {
+        border-color: rgba(129, 207, 240, 0.86);
+        background: rgba(42, 91, 112, 0.94);
+        color: #f1fbff;
+      }
+      #birdseyeCadControls .cad-divider {
+        width: 1px;
+        height: 19px;
+        margin: 0 2px;
+        background: rgba(159, 180, 190, 0.22);
+      }
+      #birdseyeCadControls .cad-label { color: #94a8b2; white-space: nowrap; }
+      #birdseyeCadReadout {
+        max-width: 430px;
+        min-width: 180px;
+        overflow: hidden;
+        padding: 0 4px;
+        color: #b9cbd3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-weight: 700;
+      }
+      #birdseyeCadReadout[data-locked="true"] { color: #f2b56d; }
+      @media (max-width: 1080px) {
+        #birdseyeCadReadout { display: none; }
+        #birdseyeCadControls { left: 12px; right: 12px; transform: none; justify-content: center; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function makeCadButton(label, attributes = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    Object.entries(attributes).forEach(([key, value]) => button.setAttribute(key, value));
+    return button;
+  }
+
+  function installCadControls() {
+    const wrap = document.getElementById("threeWrap");
+    if (!wrap || document.getElementById("birdseyeCadControls")) return Boolean(wrap);
+    const controls = document.createElement("div");
+    controls.id = "birdseyeCadControls";
+    controls.hidden = true;
+    controls.setAttribute("aria-label", "2.5D CAD 편집 보조");
+
+    const axisLabel = document.createElement("span");
+    axisLabel.className = "cad-label";
+    axisLabel.textContent = "축";
+    const dividerA = document.createElement("span");
+    dividerA.className = "cad-divider";
+    const dividerB = document.createElement("span");
+    dividerB.className = "cad-divider";
+    const dividerC = document.createElement("span");
+    dividerC.className = "cad-divider";
+    const stepLabel = document.createElement("span");
+    stepLabel.className = "cad-label";
+    stepLabel.textContent = "간격";
+
+    const stepSelect = document.createElement("select");
+    stepSelect.id = "cadSnapStep";
+    stepSelect.setAttribute("aria-label", "CAD 스냅 및 이동 간격");
+    CAD_STEP_METERS.forEach((step) => {
+      const option = document.createElement("option");
+      option.value = step.toFixed(2);
+      option.textContent = `${step.toFixed(2)}m`;
+      stepSelect.appendChild(option);
+    });
+    stepSelect.value = cad.stepMeters.toFixed(2);
+
+    const readout = document.createElement("span");
+    readout.id = "birdseyeCadReadout";
+    readout.textContent = "대상을 선택하세요";
+
+    controls.append(
+      axisLabel,
+      makeCadButton("자유", { "data-cad-axis": "free", title: "축 고정 해제 (Esc)" }),
+      makeCadButton("X", { "data-cad-axis": "x", title: "X축만 이동 (X)" }),
+      makeCadButton("Z", { "data-cad-axis": "z", title: "Z축만 이동 (Z)" }),
+      dividerA,
+      makeCadButton("스냅", { "data-cad-toggle": "snap", "aria-pressed": "true", title: "미터 그리드 스냅" }),
+      stepLabel,
+      stepSelect,
+      dividerB,
+      makeCadButton("-15°", { "data-cad-action": "rotate-left", title: "선택 대상 -15° (Q)" }),
+      makeCadButton("+15°", { "data-cad-action": "rotate-right", title: "선택 대상 +15° (E)" }),
+      dividerC,
+      readout,
+    );
+    controls.addEventListener("click", handleCadControlClick);
+    stepSelect.addEventListener("change", () => {
+      const next = Number(stepSelect.value);
+      if (CAD_STEP_METERS.includes(next)) cad.stepMeters = next;
+      syncCadUi();
+    });
+    wrap.appendChild(controls);
+    return true;
+  }
+
+  function itemDimensions(item) {
+    if (!item) return null;
+    try {
+      if (item.type === "actor" && typeof actorPhysicalDimensions === "function") return actorPhysicalDimensions(item);
+      if (typeof propPhysicalDimensions === "function") return propPhysicalDimensions(item);
+    } catch {
+      // Fall back to the persisted metric dimensions below.
+    }
+    const dims = item.referenceDimensionsM || item.physicalDimensionsM;
+    if (!dims) return null;
+    return {
+      width: Number(dims.width || 0),
+      height: Number(dims.height || 0),
+      depth: Number(dims.depth || 0),
+    };
+  }
+
+  function selectedReadout() {
+    const item = selectedItem();
+    if (!item) return { text: `선택 없음 · 이동 ${cad.stepMeters.toFixed(2)}m · Q/E ${cad.rotateStepDeg}°`, locked: false };
+    const renderState = currentState();
+    const size = stageSize(renderState);
+    const pose = typeof resolvedItemPose === "function" ? resolvedItemPose(item, renderState) : item;
+    const worldX = (Number(pose.x || 0.5) - 0.5) * size.width;
+    const worldZ = (Number(pose.y || 0.5) - 0.5) * size.depth;
+    const dims = itemDimensions(item);
+    const dimensionText = dims
+      ? ` · ${Number(dims.width).toFixed(2)}×${Number(dims.depth).toFixed(2)}×${Number(dims.height).toFixed(2)}m`
+      : "";
+    const locked = itemLocked(item);
+    return {
+      text: `${item.name || item.id} · X ${worldX.toFixed(2)}m · Z ${worldZ.toFixed(2)}m${dimensionText} · ${locked ? "잠금" : "편집 가능"}`,
+      locked,
+    };
+  }
+
+  function syncCadUi() {
+    const controls = document.getElementById("birdseyeCadControls");
+    if (!controls) return;
+    controls.hidden = !isBirdseye25D();
+    controls.querySelectorAll("button[data-cad-axis]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.cadAxis === cad.axisMode);
+    });
+    const snap = controls.querySelector('button[data-cad-toggle="snap"]');
+    snap?.setAttribute("aria-pressed", String(cad.snapEnabled));
+    const stepSelect = document.getElementById("cadSnapStep");
+    if (stepSelect && stepSelect.value !== cad.stepMeters.toFixed(2)) stepSelect.value = cad.stepMeters.toFixed(2);
+    const readout = document.getElementById("birdseyeCadReadout");
+    if (readout) {
+      const value = selectedReadout();
+      readout.textContent = value.text;
+      readout.dataset.locked = String(value.locked);
+    }
+  }
+
+  function setAxisMode(mode) {
+    cad.axisMode = ["x", "z"].includes(mode) ? mode : "free";
+    syncCadUi();
+  }
+
+  function toggleAxisMode(mode) {
+    setAxisMode(cad.axisMode === mode ? "free" : mode);
+  }
+
+  function snapCoordinate(normalized, axisName, renderState = currentState()) {
+    if (!cad.snapEnabled) return normalized;
+    const size = stageSize(renderState);
+    const span = axisName === "x" ? size.width : size.depth;
+    const world = (Number(normalized) - 0.5) * span;
+    const snappedWorld = Math.round(world / cad.stepMeters) * cad.stepMeters;
+    return clampStage(0.5 + snappedWorld / span);
+  }
+
+  function constrainedDragTarget(item, drag) {
+    let x = Number(item.x);
+    let y = Number(item.y);
+    const startItem = drag?.startState?.items?.find?.((entry) => String(entry.id) === String(item.id));
+    if (cad.axisMode === "x" && startItem) y = Number(startItem.y);
+    if (cad.axisMode === "z" && startItem) x = Number(startItem.x);
+    if (cad.snapEnabled) {
+      if (cad.axisMode !== "z") x = snapCoordinate(x, "x");
+      if (cad.axisMode !== "x") y = snapCoordinate(y, "z");
+    }
+    return { x: clampStage(x), y: clampStage(y) };
+  }
+
+  function applyDragCorrection() {
+    if (!isBirdseye25D() || typeof threeDrag === "undefined" || !threeDrag) return false;
+    if (threeDrag.kind !== "edit" || threeDrag.pending || threeDrag.editor?.kind !== "item") return false;
+    if (typeof threeEditMode !== "undefined" && threeEditMode !== "move") return false;
+    if (cad.axisMode === "free" && !cad.snapEnabled) return false;
+    const renderState = currentState();
+    const leaderId = leaderIdFor(threeDrag.editItemId || threeDrag.editor.id);
+    const leader = renderState?.items?.find?.((item) => String(item.id) === String(leaderId));
+    if (!leader || itemLocked(leader)) return false;
+    const target = constrainedDragTarget(leader, threeDrag);
+    const correctionX = target.x - Number(leader.x);
+    const correctionY = target.y - Number(leader.y);
+    if (Math.abs(correctionX) < 1e-9 && Math.abs(correctionY) < 1e-9) return false;
+
+    groupItemIds(leaderId).forEach((id) => {
+      const item = renderState.items.find((entry) => String(entry.id) === String(id));
+      if (!item || itemLocked(item)) return;
+      item.x = clampStage(Number(item.x) + correctionX);
+      item.y = clampStage(Number(item.y) + correctionY);
+    });
+    threeDrag.changed = true;
+    return true;
+  }
+
+  function installDragHook() {
+    if (typeof updateThreeEditorDrag !== "function") return false;
+    cad.originalUpdateThreeEditorDrag = updateThreeEditorDrag;
+    updateThreeEditorDrag = function updateCadAwareThreeEditorDrag(...args) {
+      const result = cad.originalUpdateThreeEditorDrag(...args);
+      if (applyDragCorrection() && typeof renderThreeView === "function") {
+        const frame = typeof currentInteractionFrame === "function" ? currentInteractionFrame() : currentState();
+        renderThreeView(frame, true);
+      }
+      syncCadUi();
+      return result;
+    };
+    return true;
+  }
+
+  function nudgeSelectedMeters(dx, dz, multiplier = 1) {
+    const item = selectedItem();
+    if (!item) {
+      if (typeof notifyApp === "function") notifyApp("2.5D에서 이동할 대상을 먼저 선택하세요.");
+      return false;
+    }
+    if (itemLocked(item)) {
+      notifyLocked(item);
+      return false;
+    }
+    if (cad.axisMode === "x" && dz) return false;
+    if (cad.axisMode === "z" && dx) return false;
+    if (typeof nudge !== "function") return false;
+    const size = stageSize(currentState());
+    const step = cad.stepMeters * multiplier;
+    const amount = dx ? step / size.width : step / size.depth;
+    nudge(item, dx, dz, amount);
+    requestAnimationFrame(syncCadUi);
+    return true;
+  }
+
+  function rotateSelected(deltaDegrees) {
+    const item = selectedItem();
+    if (!item) {
+      if (typeof notifyApp === "function") notifyApp("2.5D에서 회전할 대상을 먼저 선택하세요.");
+      return false;
+    }
+    if (itemLocked(item)) {
+      notifyLocked(item);
+      return false;
+    }
+    const renderState = currentState();
+    const leaderId = leaderIdFor(item.id);
+    if (typeof materializeEvaluatedViewForEditing === "function") materializeEvaluatedViewForEditing(leaderId);
+    const leader = renderState?.items?.find?.((entry) => String(entry.id) === String(leaderId));
+    if (!leader) return false;
+    leader.facing = ((Number(leader.facing || 0) + Number(deltaDegrees || 0)) % 360 + 360) % 360;
+    const preserved = groupItemIds(leaderId);
+    if (typeof commit === "function") commit({ preserveSourceIds: preserved });
+    if (typeof syncUi === "function") syncUi(false);
+    if (typeof renderThreeView === "function") {
+      const frame = typeof currentInteractionFrame === "function" ? currentInteractionFrame() : renderState;
+      renderThreeView(frame, true);
+    }
+    syncCadUi();
+    return true;
+  }
+
+  function handleCadControlClick(event) {
+    const axis = event.target.closest("button[data-cad-axis]");
+    if (axis) {
+      setAxisMode(axis.dataset.cadAxis);
+      return;
+    }
+    const toggle = event.target.closest("button[data-cad-toggle]");
+    if (toggle?.dataset.cadToggle === "snap") {
+      cad.snapEnabled = !cad.snapEnabled;
+      syncCadUi();
+      return;
+    }
+    const action = event.target.closest("button[data-cad-action]");
+    if (action?.dataset.cadAction === "rotate-left") rotateSelected(-cad.rotateStepDeg);
+    if (action?.dataset.cadAction === "rotate-right") rotateSelected(cad.rotateStepDeg);
+  }
+
+  function isTextEntryTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']"));
+  }
+
+  function handleCadKeyboard(event) {
+    if (!isBirdseye25D() || isTextEntryTarget(event.target)) return;
+    if (document.querySelector("dialog[open]")) return;
+    if (event.metaKey || event.ctrlKey) return;
+
+    if (!event.altKey && ["KeyX", "KeyZ", "Escape"].includes(event.code)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.code === "KeyX") toggleAxisMode("x");
+      else if (event.code === "KeyZ") toggleAxisMode("z");
+      else setAxisMode("free");
+      return;
+    }
+
+    if (!event.altKey && ["KeyQ", "KeyE"].includes(event.code)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      rotateSelected(event.code === "KeyQ" ? -cad.rotateStepDeg : cad.rotateStepDeg);
+      return;
+    }
+
+    const direction = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const multiplier = event.shiftKey ? 4 : (event.altKey ? 0.1 : 1);
+    nudgeSelectedMeters(direction[0], direction[1], multiplier);
+  }
+
+  function masterPlanSignature(renderState = currentState()) {
+    const plan = renderState?.setMasterPlan;
+    if (!plan || !Array.isArray(plan.elements)) return "";
+    return JSON.stringify({
+      schema: plan.schema || "",
+      version: plan.version || 0,
+      sourceName: plan.sourceName || "",
+      generatedItemIds: Array.isArray(plan.generatedItemIds) ? plan.generatedItemIds : [],
+      elements: plan.elements.map((element) => [
+        element.id,
+        element.worldXM,
+        element.worldZM,
+        element.widthM,
+        element.depthM,
+        element.heightM,
+        element.rotationDeg,
+        element.collectionId,
+      ]),
+    });
+  }
+
+  function openMasterPlanInBirdseye(signature) {
+    const birdseye = birdseyeApi();
+    if (!birdseye || !signature || cad.lastAutoOpenedPlan === signature) return;
+    cad.lastAutoOpenedPlan = signature;
+    if (typeof workspaceMode !== "undefined" && workspaceMode === "storyboard" && typeof setWorkspaceMode === "function") {
+      setWorkspaceMode("blocking");
+    }
+    birdseye.setMode("2.5d");
+    requestAnimationFrame(() => {
+      birdseye.fit();
+      syncCadUi();
+    });
+    if (typeof notifyApp === "function") notifyApp("세트 마스터플랜을 2.5D 전체보기로 열었습니다.");
+  }
+
+  function installManagedProjectAutoOpenHook() {
+    if (typeof pollManagedProjectCommands !== "function") return false;
+    cad.originalPollManagedProjectCommands = pollManagedProjectCommands;
+    pollManagedProjectCommands = async function pollManagedProjectCommandsWithBirdseye(...args) {
+      const beforeRevision = typeof managedProjectRevision !== "undefined" ? Number(managedProjectRevision || 0) : 0;
+      const beforeSignature = masterPlanSignature();
+      const result = await cad.originalPollManagedProjectCommands(...args);
+      const afterRevision = typeof managedProjectRevision !== "undefined" ? Number(managedProjectRevision || 0) : beforeRevision;
+      const afterSignature = masterPlanSignature();
+      if (afterRevision > beforeRevision && afterSignature && afterSignature !== beforeSignature) {
+        openMasterPlanInBirdseye(afterSignature);
+      }
+      return result;
+    };
+    return true;
+  }
+
+  function installUiSyncHooks() {
+    if (typeof syncUi === "function") {
+      cad.originalSyncUi = syncUi;
+      syncUi = function syncCadAwareUi(...args) {
+        const result = cad.originalSyncUi(...args);
+        syncCadUi();
+        return result;
+      };
+    }
+    if (typeof renderThreeView === "function") {
+      cad.originalRenderThreeView = renderThreeView;
+      renderThreeView = function renderCadAwareThreeView(...args) {
+        const result = cad.originalRenderThreeView(...args);
+        syncCadUi();
+        return result;
+      };
+    }
+  }
+
+  function installCadEditFlow() {
+    if (cad.installed) return;
+    cad.installAttempts += 1;
+    if (!birdseyeApi() || typeof updateThreeEditorDrag !== "function" || typeof pollManagedProjectCommands !== "function") {
+      if (cad.installAttempts < 80) setTimeout(installCadEditFlow, 50);
+      return;
+    }
+    injectCadStyles();
+    if (!installCadControls()) return;
+    if (!installDragHook()) return;
+    installManagedProjectAutoOpenHook();
+    installUiSyncHooks();
+    document.addEventListener("keydown", handleCadKeyboard, true);
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("#viewButtons, #threeCanvas, #birdseyeControls")) requestAnimationFrame(syncCadUi);
+    });
+    cad.installed = true;
+    syncCadUi();
+    window.FrisFrameBirdseyeCad = {
+      get axisMode() { return cad.axisMode; },
+      get snapEnabled() { return cad.snapEnabled; },
+      get stepMeters() { return cad.stepMeters; },
+      get rotateStepDeg() { return cad.rotateStepDeg; },
+      setAxisMode,
+      setSnapEnabled(value) {
+        cad.snapEnabled = Boolean(value);
+        syncCadUi();
+      },
+      setStepMeters(value) {
+        const next = Number(value);
+        if (CAD_STEP_METERS.includes(next)) cad.stepMeters = next;
+        syncCadUi();
+      },
+      nudgeSelectedMeters,
+      rotateSelected,
+      openLatestSetPlan() {
+        openMasterPlanInBirdseye(masterPlanSignature());
+      },
+    };
+  }
+
+  window.addEventListener("load", installCadEditFlow, { once: true });
+})();
