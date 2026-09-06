@@ -36,6 +36,10 @@ def check_python_syntax() -> None:
         ROOT / "reference_space_consistency_mcp.py",
         ROOT / "reference_space_plan_mcp.py",
         ROOT / "reference_space_orientation_mcp.py",
+        ROOT / "reference_interpretation_mcp.py",
+        ROOT / "set_reconstruction_mcp.py",
+        ROOT / "tests/reference-interpretation-mcp.py",
+        ROOT / "tests/set-reconstruction-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
         ROOT / "tests/seed-packaged-reference-project.py",
@@ -146,6 +150,7 @@ def main() -> None:
         "tests/desktop-ux-manifest.test.cjs",
         "tests/workflow-shell-ux-contract.test.cjs",
         "tests/mcp-desktop-runtime-contract.test.cjs",
+        "tests/set-reconstruction-runtime-contract.test.cjs",
         "tests/mcp-first-product-boundary.test.cjs",
         "tests/mcp-live-sync-contract.test.cjs",
         "tests/retired-spatial-runtime-contract.test.cjs",
@@ -160,6 +165,8 @@ def main() -> None:
     run("Reference Space MCP", [sys.executable, "tests/reference-space-mcp.py"])
     run("Reference Space 원자 계획", [sys.executable, "tests/reference-space-plan-mcp.py"])
     run("Reference Space 화면 방향", [sys.executable, "tests/reference-space-orientation-mcp.py"])
+    run("Reference 이미지 해석 계약", [sys.executable, "tests/reference-interpretation-mcp.py"])
+    run("2D 마스터 세트 재구성", [sys.executable, "tests/set-reconstruction-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
