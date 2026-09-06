@@ -276,19 +276,23 @@ def main():
         assert any(entry["id"] == "door-main" and entry["image_bbox"]["height"] == 0.64 for entry in evidence["objectEvidence"])
         assert evidence["cameraApplied"] is False
 
-        # Remove all reliable metric scale evidence: this must no longer be
-        # considered shootable, even though the geometry can still be compiled.
+        # User-supplied dimensions are optional. With explicit anchors removed,
+        # the same image interpretation must autonomously recover a usable scale
+        # from familiar object/scene priors rather than blocking the workflow.
         unscaled = reference_interpretation()
         unscaled["scale_anchors"] = []
         unscaled["scene_envelope"]["basis"] = "inferred"
         unscaled["scene_envelope"]["confidence"] = 0.45
-        review = json.loads(base.call_tool("compile_reference_master_plan", {
+        automatic = json.loads(base.call_tool("compile_reference_master_plan", {
             "interpretation": unscaled,
         }))
-        assert review["status"] == "review"
-        assert review["reference_reconstruction"]["blocking_viable"] is False
-        assert review["reference_reconstruction"]["scale"]["status"] == "unanchored"
-        assert review["reference_reconstruction"]["correction_queue"][0]["code"] == "scale-anchor-needed"
+        assert automatic["status"] == "ready", automatic
+        assert automatic["reference_reconstruction"]["blocking_viable"] is True
+        assert automatic["reference_reconstruction"]["scale"]["status"] == "autonomous"
+        auto_scale = automatic["reference_reconstruction"]["scale"]["autonomous"]
+        assert auto_scale["ready"] is True
+        assert auto_scale["source"] == "object-prior-consensus"
+        assert not any(entry["code"] == "scale-anchor-needed" for entry in automatic["reference_reconstruction"]["correction_queue"])
 
         print("reference-reconstruction-v2-mcp: shootable-set readiness, evidence retention, and focused correction queue passed")
     finally:

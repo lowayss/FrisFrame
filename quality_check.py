@@ -39,11 +39,13 @@ def check_python_syntax() -> None:
         ROOT / "reference_interpretation_mcp.py",
         ROOT / "set_reconstruction_mcp.py",
         ROOT / "reference_master_pipeline_mcp.py",
+        ROOT / "autonomous_scale_core.py",
         ROOT / "spatial_quality_mcp.py",
         ROOT / "tests/reference-interpretation-mcp.py",
         ROOT / "tests/set-reconstruction-mcp.py",
         ROOT / "tests/reference-master-pipeline-mcp.py",
         ROOT / "tests/reference-reconstruction-v2-mcp.py",
+        ROOT / "tests/autonomous-scale-inference-mcp.py",
         ROOT / "tests/spatial-quality-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
@@ -185,6 +187,7 @@ def main() -> None:
     run("2D 마스터 세트 재구성", [sys.executable, "tests/set-reconstruction-mcp.py"])
     run("Reference → Master Set 파이프라인", [sys.executable, "tests/reference-master-pipeline-mcp.py"])
     run("Reference Reconstruction v2", [sys.executable, "tests/reference-reconstruction-v2-mcp.py"])
+    run("Autonomous Scale Inference", [sys.executable, "tests/autonomous-scale-inference-mcp.py"])
     run("공간 해석 품질", [sys.executable, "tests/spatial-quality-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])

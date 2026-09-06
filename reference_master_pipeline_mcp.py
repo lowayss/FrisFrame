@@ -21,6 +21,7 @@ import mcp_server as core
 import reference_interpretation_mcp as interpretation
 import reference_space_mcp as reference
 import set_reconstruction_mcp as set_reconstruction
+import autonomous_scale_core as autonomous_scale
 
 
 PIPELINE_POLICY = "reference-image-to-master-set-single-source-of-truth"
@@ -262,6 +263,14 @@ COMPILE_TOOL = {
             "minimum_reliable_confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "relation_tolerance_m": {"type": "number", "exclusiveMinimum": 0},
             "parallel_tolerance_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45},
+            "autonomous_scale": {
+                "type": "boolean",
+                "description": "사용자 실측 입력 없이 object/scene size prior 합의로 전역 미터 스케일을 자동 보정합니다. 기본 true.",
+            },
+            "minimum_autonomous_scale_confidence": {
+                "type": "number", "minimum": 0.25, "maximum": 0.95,
+                "description": "자동 스케일 합의를 blocking-ready로 인정할 최소 confidence. 기본 0.58.",
+            },
         },
         "required": ["interpretation"],
     },
@@ -286,6 +295,14 @@ APPLY_TOOL = {
             "minimum_reliable_confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "relation_tolerance_m": {"type": "number", "exclusiveMinimum": 0},
             "parallel_tolerance_deg": {"type": "number", "exclusiveMinimum": 0, "maximum": 45},
+            "autonomous_scale": {
+                "type": "boolean",
+                "description": "사용자 실측 입력 없이 object/scene size prior 합의로 전역 미터 스케일을 자동 보정합니다. 기본 true.",
+            },
+            "minimum_autonomous_scale_confidence": {
+                "type": "number", "minimum": 0.25, "maximum": 0.95,
+                "description": "자동 스케일 합의를 blocking-ready로 인정할 최소 confidence. 기본 0.58.",
+            },
         },
         "required": ["project_id", "revision", "interpretation"],
     },
@@ -397,6 +414,40 @@ def _prepare_interpretation(raw):
                 raise ValueError(f"objects[{index}].occluded_by '{reference_id}'가 objects에 없습니다.")
     return prepared
 
+def _autonomous_scale_raw(raw, args):
+    if not isinstance(raw, dict):
+        raise ValueError("interpretation은 객체여야 합니다.")
+    internal = args.get("_autonomous_scale_report") if isinstance(args, dict) else None
+    if isinstance(internal, dict):
+        return copy.deepcopy(raw), copy.deepcopy(internal)
+
+    prepared = _prepare_interpretation(raw)
+    scaled_prepared, report = autonomous_scale.infer_and_apply(
+        prepared,
+        minimum_confidence=(args or {}).get(
+            "minimum_autonomous_scale_confidence",
+            autonomous_scale.DEFAULT_MIN_CONFIDENCE,
+        ),
+        enabled=bool((args or {}).get("autonomous_scale", True)),
+    )
+
+    # _prepare_object maps set roles (opening/furniture/service) into the legacy
+    # interpretation role vocabulary. Restore the caller's original role token
+    # before Master Plan compilation while keeping the scaled geometry/defaults.
+    original_by_id = {
+        str(entry.get("id")): entry
+        for entry in raw.get("objects", [])
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    for entry in scaled_prepared.get("objects") or []:
+        original = original_by_id.get(str(entry.get("id") or ""), {})
+        if "role" in original:
+            entry["role"] = original["role"]
+        else:
+            entry.pop("role", None)
+    return scaled_prepared, report
+
+
 def _default_collection_id(role):
     return COLLECTION_BY_ROLE.get(role, "props")
 
@@ -475,13 +526,15 @@ def _compile_raw_master_plan(raw, normalized_interpretation):
 
 def _normalize_pipeline(args, *, blocking=None):
     raw = args.get("interpretation")
-    prepared = _prepare_interpretation(raw)
+    metric_raw, autonomous_report = _autonomous_scale_raw(raw, args)
+    prepared = _prepare_interpretation(metric_raw)
+    prepared["_autonomous_scale"] = copy.deepcopy(autonomous_report)
     normalized_interpretation = interpretation.normalize_interpretation(
         prepared,
         relation_tolerance_m=args.get("relation_tolerance_m", 0.75),
         parallel_tolerance_deg=args.get("parallel_tolerance_deg", 12.0),
     )
-    raw_master_plan = _compile_raw_master_plan(raw, normalized_interpretation)
+    raw_master_plan = _compile_raw_master_plan(metric_raw, normalized_interpretation)
     normalized_master_plan = set_reconstruction.normalize_master_plan(
         raw_master_plan,
         blocking=blocking,
@@ -489,7 +542,6 @@ def _normalize_pipeline(args, *, blocking=None):
         minimum_reliable_confidence=args.get("minimum_reliable_confidence", 0.6),
     )
     return prepared, normalized_interpretation, raw_master_plan, normalized_master_plan
-
 
 def _camera_observation(camera):
     if not isinstance(camera, dict):
@@ -569,14 +621,21 @@ def _reconstruction_report(prepared, normalized_interpretation, normalized_maste
     scene_type = _scene_type(prepared.get("scene_type"))
     envelope = _report_scene_envelope(prepared)
     reliable_scale = int(normalized_interpretation["summary"].get("reliable_scale_anchor_count", 0))
+    autonomous_report = copy.deepcopy(prepared.get("_autonomous_scale") or {})
+    autonomous_ready = bool(autonomous_report.get("ready"))
     user_fixed_envelope = bool(
         envelope
         and envelope.get("basis") == "user_fixed"
         and float(envelope.get("confidence", 0)) >= 0.8
         and any(envelope.get(key) is not None for key in ("width_m", "depth_m"))
     )
-    scale_ready = reliable_scale > 0 or user_fixed_envelope
-    scale_status = "anchored" if scale_ready else "unanchored"
+    scale_ready = reliable_scale > 0 or user_fixed_envelope or autonomous_ready
+    if reliable_scale > 0 or user_fixed_envelope:
+        scale_status = "anchored"
+    elif autonomous_ready:
+        scale_status = "autonomous"
+    else:
+        scale_status = "unanchored"
 
     queue = []
     if not scale_ready:
@@ -584,7 +643,7 @@ def _reconstruction_report(prepared, normalized_interpretation, normalized_maste
             "code": "scale-anchor-needed",
             "rank": 0,
             "severity": "blocking",
-            "message": "촬영 가능한 미터 스케일을 위해 신뢰 가능한 visible scale anchor 또는 user-fixed scene envelope가 필요합니다.",
+            "message": "자동 object/scene prior 합의로도 안정적인 미터 스케일을 얻지 못했습니다. 이 경우에만 추가 scale evidence가 필요합니다.",
         })
 
     if scene_type == "interior":
@@ -643,6 +702,8 @@ def _reconstruction_report(prepared, normalized_interpretation, normalized_maste
             })
 
     ignored_issue_codes = {"missing-camera", "camera-target-not-in-interpretation"}
+    if autonomous_ready:
+        ignored_issue_codes.add("missing-reliable-scale-anchor")
     for issue in normalized_interpretation.get("issues", []):
         if issue.get("code") in ignored_issue_codes:
             continue
@@ -710,6 +771,7 @@ def _reconstruction_report(prepared, normalized_interpretation, normalized_maste
             "status": scale_status,
             "reliable_anchor_count": reliable_scale,
             "user_fixed_scene_envelope": user_fixed_envelope,
+            "autonomous": autonomous_report,
         },
         "camera_evidence": {
             "present": camera is not None,
@@ -778,6 +840,14 @@ def pipeline_contract():
         "first_pass_goal": "shootable-spatial-set",
         "detail_policy": "decorative-detail-never-blocks-first-pass-readiness",
         "correction_policy": "Correct only flagged spatial uncertainties that can change actor blocking, camera placement, framing, or movement clearance.",
+        "autonomous_scale": {
+            "default": True,
+            "policy": autonomous_scale.POLICY,
+            "user_metric_input_required": False,
+            "method": "robust consensus of familiar object-size priors + scene-envelope prior + vision spatial geometry",
+            "user_fixed_override": "optional and authoritative when present",
+            "uncertainty": "single-image absolute scale remains probabilistic; confidence and evidence are always retained",
+        },
         "ownership": {
             "image_pixel_reasoning": "external-vision-mcp-client",
             "metric_validation_master_set_and_views": "FrisFrame",
@@ -812,7 +882,7 @@ def pipeline_contract():
             "visual_evidence": "For important objects, retain normalized image_bbox, visible_fraction, occlusion references, and a short evidence note when available.",
             "priority": "Mark spatially decisive architecture/openings as critical, large blocking objects as major, and nonessential decoration as detail.",
             "hidden_geometry": "Never silently close a room. Hidden boundaries must be explicitly supplied as inferred geometry with confidence/evidence.",
-            "scale": "Use one or more plausible visible scale anchors; user-fixed dimensions outrank guesses.",
+            "scale": "Infer metric scale autonomously from multiple familiar object/scene priors by default; explicit user-fixed dimensions are optional overrides, not prerequisites.",
             "camera": "Reference camera observation is evidence for later shot calibration and never moves the authored FrisFrame camera while building the set.",
         },
         "preferred_tools": [
