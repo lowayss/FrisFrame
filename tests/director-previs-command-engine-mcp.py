@@ -212,6 +212,7 @@ def main():
         assert state["motion"]["duration"] == 8
         assert state["motion"]["exportRange"] == {"start": 0.0, "end": 8.0}
         assert any(key["source"] == "actor-a" and key.get("posePreset") == "point" for key in state["motion"]["keyframes"])
+        assert any(key["source"] == "actor-b" and key.get("posePreset") == "neutral" for key in state["motion"]["keyframes"])
         assert sum(1 for key in state["motion"]["keyframes"] if key["source"] == "camera") == 2
         assert state["directorPrevis"]["transactionId"] == "reference-to-shot-001"
         assert state["directorPrevis"]["atomicRevision"] is True
@@ -221,7 +222,7 @@ def main():
         assert snapshot["master_set_item_count"] == 3
         assert snapshot["actor_count"] == 2
         assert snapshot["shot"]["shot_type"] == "MS"
-        assert snapshot["timeline"]["actor_keyframe_count"] == 2
+        assert snapshot["timeline"]["actor_keyframe_count"] == 3
         assert snapshot["timeline"]["camera_keyframe_count"] == 2
 
         # One later director patch updates actor + lens + shot metadata in one revision.
