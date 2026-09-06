@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const mainEntry = fs.readFileSync(path.join(root, "electron/main-entry.cjs"), "utf8");
 const main = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
+const phoneDirector = fs.readFileSync(path.join(root, "electron/phone-director-viewfinder.cjs"), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 const expectedPrelude = [
@@ -31,8 +32,17 @@ const expectedMainInjection = [
   "preview-cache-ux.js",
   "performance-ux.js",
 ];
+const expectedConditionalPhoneInjection = [
+  "phone-handheld-command-ux.js",
+];
 const expectedInjection = [...expectedPrelude, ...expectedMainInjection];
-const expectedUx = expectedInjection.filter((filename) => /-ux\.js$/.test(filename));
+const expectedAlwaysUx = expectedInjection.filter((filename) => /-ux\.js$/.test(filename));
+const phoneCameraIndex = expectedAlwaysUx.indexOf("phone-motion-camera-ux.js");
+const expectedPackagedUx = [
+  ...expectedAlwaysUx.slice(0, phoneCameraIndex + 1),
+  ...expectedConditionalPhoneInjection,
+  ...expectedAlwaysUx.slice(phoneCameraIndex + 1),
+];
 const quotedManifest = (source) => [...source.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 
 const prelude = mainEntry.match(/TAKE_PRELUDE_FILES = Object\.freeze\(\[(.*?)\]\)/s);
@@ -52,12 +62,21 @@ assert.deepEqual(mainInjected, expectedMainInjection,
   "desktop main renderer injection order must stay canonical");
 assert.deepEqual(injected, expectedInjection,
   "combined desktop renderer injection order must match the canonical manifest");
-assert.deepEqual(packaged, expectedUx,
-  "desktop package UX files must match the UX subset of the combined injection manifest and order");
+assert.deepEqual(packaged, expectedPackagedUx,
+  "desktop package UX files must preserve always-on order and colocate conditional phone UX after Physical Camera UX");
 assert.ok(packageJson.build.files.includes("electron/phone-motion-core.js"),
   "phone motion support core must be packaged even though it is not an -ux.js module");
+assert.ok(packageJson.build.files.includes("electron/phone-motion-core-absolute-focal.js"),
+  "absolute phone focal compatibility core must be packaged for on-demand Director Viewfinder injection");
 assert.ok(packageJson.build.files.includes("electron/camera-take-path-core.js"),
   "camera Take path support core must be packaged even though it is not an -ux.js module");
+assert.match(phoneDirector, /ensureRendererPatches/,
+  "Director Viewfinder must own one explicit conditional renderer-patch injection path");
+for (const filename of ["phone-motion-core-absolute-focal.js", ...expectedConditionalPhoneInjection]) {
+  assert.match(phoneDirector, new RegExp(filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `${filename} must be referenced by the conditional phone renderer-patch injector`);
+  assert.ok(fs.existsSync(path.join(root, "electron", filename)), `${filename} must exist on disk`);
+}
 assert.equal(new Set(injected).size, injected.length,
   "desktop renderer injection manifests must not contain duplicates");
 for (const filename of expectedInjection) {
@@ -68,4 +87,4 @@ assert.equal(mainInjected.at(-1), "performance-ux.js",
 assert.match(mainEntry, /inject\(\)\.finally\(\(\) => listener\(\.\.\.args\)\)/,
   "existing did-finish-load UX injection must wait for the Take prelude");
 
-console.log("desktop-ux-manifest: Take prelude, package and renderer injection manifests are synchronized");
+console.log("desktop-ux-manifest: always-on and conditional phone renderer manifests are synchronized with packaging");
