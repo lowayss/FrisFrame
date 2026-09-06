@@ -122,13 +122,6 @@ assert.equal(api.selectedRoomId, null);
 
 const dimension = api.getWallDimensionGeometry(bottom);
 assert.ok(dimension);
-console.log("V5_DIM_DIAG", JSON.stringify({
-  room: api.roomZones[0],
-  bottom: stateObject.setMasterPlan.elements.find((entry) => entry.id === bottom),
-  dimension,
-  dimRoom: api.selectRoomAtPoint(dimension.midpoint.xM, dimension.midpoint.zM),
-}));
-api.selectRoom(null);
 assert.equal(Number(dimension.lengthM.toFixed(6)), 4);
 assert.equal(api.selectRoomAtPoint(dimension.midpoint.xM, dimension.midpoint.zM), null, "wall CAD dimension midpoint must sit outside its room regardless of wall direction");
 assert.equal(Number(Math.hypot(dimension.end.xM - dimension.start.xM, dimension.end.zM - dimension.start.zM).toFixed(6)), 4);
