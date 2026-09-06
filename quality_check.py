@@ -41,12 +41,14 @@ def check_python_syntax() -> None:
         ROOT / "reference_master_pipeline_mcp.py",
         ROOT / "autonomous_scale_core.py",
         ROOT / "spatial_quality_mcp.py",
+        ROOT / "spatial_command_mcp.py",
         ROOT / "tests/reference-interpretation-mcp.py",
         ROOT / "tests/set-reconstruction-mcp.py",
         ROOT / "tests/reference-master-pipeline-mcp.py",
         ROOT / "tests/reference-reconstruction-v2-mcp.py",
         ROOT / "tests/autonomous-scale-inference-mcp.py",
         ROOT / "tests/spatial-quality-mcp.py",
+        ROOT / "tests/spatial-command-engine-mcp.py",
         ROOT / "tests/mcp-camera-take-context.py",
         ROOT / "tests/mcp-camera-take-path-summary.py",
         ROOT / "tests/seed-packaged-reference-project.py",
@@ -189,6 +191,7 @@ def main() -> None:
     run("Reference Reconstruction v2", [sys.executable, "tests/reference-reconstruction-v2-mcp.py"])
     run("Autonomous Scale Inference", [sys.executable, "tests/autonomous-scale-inference-mcp.py"])
     run("공간 해석 품질", [sys.executable, "tests/spatial-quality-mcp.py"])
+    run("Spatial Command Engine", [sys.executable, "tests/spatial-command-engine-mcp.py"])
     run("Camera Take Context MCP", [sys.executable, "tests/mcp-camera-take-context.py"])
     run("Camera Take Path Summary MCP", [sys.executable, "tests/mcp-camera-take-path-summary.py"])
     run("MCP 서버", [sys.executable, "tests/mcp-server-smoke.py"])
