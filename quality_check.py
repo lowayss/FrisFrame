@@ -158,6 +158,8 @@ def main() -> None:
         "tests/dom-contract.test.cjs",
         "tests/birdseye-2-5d-mode-contract.test.cjs",
         "tests/birdseye-cad-edit-flow-contract.test.cjs",
+        "tests/birdseye-cad-runtime-behavior.test.cjs",
+        "tests/birdseye-cad-metric-contract.test.cjs",
         "tests/electron-contract.test.cjs",
     ):
         run(f"단위 검사 · {filename}", [node, filename])
