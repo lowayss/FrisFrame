@@ -1,0 +1,113 @@
+name: Temporary Windows port fallback fix
+
+on:
+  push:
+    branches:
+      - hardening/runtime-integrity-v3
+    paths:
+      - .github/workflows/tmp-windows-port-fallback-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/runtime-integrity-v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Patch Windows bind conflict classification
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          path = Path("server.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
+              try:
+                  return ThreadingHTTPServer((host, requested_port), handler), False
+              except OSError as error:
+                  if (
+                      not allow_port_fallback
+                      or int(requested_port or 0) <= 0
+                      or error.errno != errno.EADDRINUSE
+                  ):
+                      raise
+                  return ThreadingHTTPServer((host, 0), handler), True
+          '''
+          new = '''def port_bind_unavailable(error):
+              error_number = getattr(error, "errno", None)
+              windows_error = getattr(error, "winerror", None)
+              return (
+                  error_number == errno.EADDRINUSE
+                  or windows_error in (10013, 10048)
+                  or (os.name == "nt" and error_number in (10013, 10048))
+              )
+
+
+          def bind_http_server(host, requested_port, handler, allow_port_fallback=False):
+              try:
+                  return ThreadingHTTPServer((host, requested_port), handler), False
+              except OSError as error:
+                  if (
+                      not allow_port_fallback
+                      or int(requested_port or 0) <= 0
+                      or not port_bind_unavailable(error)
+                  ):
+                      raise
+                  return ThreadingHTTPServer((host, 0), handler), True
+          '''
+          if text.count(old) != 1:
+              raise SystemExit("server.py bind helper did not match exactly")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+
+          test_path = Path("tests/test_server_security.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          marker = '''    def test_local_http_server_falls_back_only_when_requested_port_is_busy(self):
+          '''
+          addition = '''    def test_windows_bind_errors_are_classified_as_unavailable_ports(self):
+              windows_access = OSError("Windows socket access denied")
+              windows_access.errno = 10013
+              windows_access.winerror = 10013
+              windows_in_use = OSError("Windows address in use")
+              windows_in_use.errno = 10048
+              windows_in_use.winerror = 10048
+              unrelated = OSError("unrelated")
+              unrelated.errno = 22
+              self.assertTrue(server.port_bind_unavailable(windows_access))
+              self.assertTrue(server.port_bind_unavailable(windows_in_use))
+              self.assertFalse(server.port_bind_unavailable(unrelated))
+
+'''
+          if test_text.count(marker) != 1:
+              raise SystemExit("server fallback test marker did not match exactly")
+          test_path.write_text(test_text.replace(marker, addition + marker), encoding="utf-8")
+
+          contract = Path("tests/electron-contract.test.cjs")
+          contract_text = contract.read_text(encoding="utf-8")
+          old_contract = 'assert.match(server, /errno\\.EADDRINUSE/);\n'
+          new_contract = 'assert.match(server, /errno\\.EADDRINUSE/);\nassert.match(server, /10013, 10048/, "Windows occupied/reserved persisted ports must use the same explicit fallback path");\n'
+          if contract_text.count(old_contract) != 1:
+              raise SystemExit("electron contract marker did not match exactly")
+          contract.write_text(contract_text.replace(old_contract, new_contract), encoding="utf-8")
+
+          Path(".github/workflows/tmp-windows-port-fallback-fix.yml").unlink()
+          '@ | python -
+      - name: Verify Windows fallback
+        shell: pwsh
+        run: |
+          python -m unittest tests.test_server_security
+          node tests/electron-contract.test.cjs
+      - name: Commit fix
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: classify Windows occupied port errors"
+          git push origin HEAD:hardening/runtime-integrity-v3
