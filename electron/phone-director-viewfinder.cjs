@@ -3,6 +3,8 @@
 const crypto = require("node:crypto");
 const http = require("node:http");
 const https = require("node:https");
+const fs = require("node:fs");
+const path = require("node:path");
 const { privateIpv4Addresses } = require("./phone-remote.cjs");
 const { tryEnsureTlsMaterial } = require("./phone-remote-tls.cjs");
 
@@ -159,6 +161,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   let lastFrameAt = 0;
   const streamClients = new Set();
   const commandAcks = new Map();
+  let patchedWebContentsId = null;
 
   function authorized(requestUrl) {
     try {
@@ -172,9 +175,20 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
     for (const [id, at] of commandAcks) if (now - at > COMMAND_CACHE_MS) commandAcks.delete(id);
   }
 
+  async function ensureRendererPatches(window) {
+    const id = window?.webContents?.id ?? null;
+    if (id != null && patchedWebContentsId === id) return;
+    for (const filename of ["phone-motion-core-absolute-focal.js", "phone-handheld-command-ux.js"]) {
+      const source = fs.readFileSync(path.join(__dirname, filename), "utf8");
+      await window.webContents.executeJavaScript(source, true);
+    }
+    patchedWebContentsId = id;
+  }
+
   async function dispatchPayload(payload) {
     const window = typeof getWindow === "function" ? getWindow() : null;
     if (!window || window.isDestroyed?.() || window.webContents?.isDestroyed?.()) return false;
+    await ensureRendererPatches(window);
     const serialized = JSON.stringify(payload).replace(/</g, "\\u003c");
     await window.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent("frisframe:phone-remote-input",{detail:${serialized}}));`, true);
     return true;
@@ -321,7 +335,7 @@ function createPhoneMotionBridge({ getWindow, writeLog = () => {}, tlsDirectory 
   }
 
   function stop() {
-    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();lastAcceptedSeq=0;
+    if (dispatchTimer) clearTimeout(dispatchTimer); dispatchTimer=null;pendingInput=null;commandAcks.clear();lastAcceptedSeq=0;patchedWebContentsId=null;
     for (const client of [...streamClients]) { try { client.response.end(); } catch {} client.closed = true; }
     streamClients.clear();
     for (const server of [httpServer,httpsServer]) if (server) try { server.close(); } catch {}
