@@ -72,7 +72,6 @@ def main() -> None:
         "camera-drafting-core.js",
         "multi-camera-core.js",
         "spatial-scale-core.js",
-        "license_activation.html",
         "electron/preload.cjs",
         "electron/phone-remote-preload.cjs",
         "electron/main-entry.cjs",
