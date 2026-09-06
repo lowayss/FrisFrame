@@ -7,9 +7,12 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const entry = fs.readFileSync(path.join(root, "mcp_desktop_entry.py"), "utf8");
 const runtime = fs.readFileSync(path.join(root, "director_previs_mcp.py"), "utf8");
+const guard = fs.readFileSync(path.join(root, "director_previs_guard_mcp.py"), "utf8");
 
 assert.match(entry, /import director_previs_mcp/,
   "packaged MCP entrypoint must statically import the director previs engine so PyInstaller bundles it");
+assert.match(entry, /import director_previs_guard_mcp/,
+  "packaged MCP entrypoint must statically import the strict Director Previs preflight guard after the engine");
 for (const tool of [
   "get_director_previs_contract",
   "validate_director_previs_plan",
@@ -36,5 +39,15 @@ assert.match(runtime, /trackingTargetId/,
   "director camera implementation must persist explicit tracking targets");
 assert.match(runtime, /focusDistanceM/,
   "director camera implementation must persist explicit focus distance");
+assert.match(guard, /POLICY = "director-previs-preflight-v1"/,
+  "director preflight must have a stable versioned policy");
+assert.match(guard, /revision_conflict/,
+  "stale Director Previs callers must be rejected before semantic execution");
+assert.match(guard, /positive_camera_path_focus/,
+  "director contract must advertise strict positive camera path focus validation");
+assert.match(guard, /export_range_uses_current_or_requested_duration/,
+  "director contract must advertise current/requested timeline range validation");
+assert.match(guard, /camera_path_static_only_fields_rejected/,
+  "director contract must keep tracking and locks on static camera commands rather than silently ignoring path fields");
 
-console.log("director-previs-runtime-contract: atomic Master Set + actor + camera/lens + shot orchestration contract passed");
+console.log("director-previs-runtime-contract: atomic Master Set + actor + camera/lens + shot orchestration + strict packaged preflight passed");
