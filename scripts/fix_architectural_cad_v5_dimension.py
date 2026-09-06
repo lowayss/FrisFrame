@@ -24,7 +24,8 @@ new = '''    const line = lineFor(element, item);
         outward = dot >= 0 ? { x: -left.x, z: -left.z } : left;
       }
     }
-    const offset = Number.isFinite(Number(offsetM)) ? Number(offsetM) : Math.max(0.28, line.thickness * 0.5 + 0.22);
+    const explicitOffset = offsetM != null && Number.isFinite(Number(offsetM));
+    const offset = explicitOffset ? Number(offsetM) : Math.max(0.28, line.thickness * 0.5 + 0.22);
 '''
 if old not in source:
     raise SystemExit("missing wallDimensionGeometry side anchor")
