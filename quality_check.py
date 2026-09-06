@@ -93,6 +93,7 @@ def main() -> None:
         "electron/phone-remote.cjs",
         "electron/phone-remote-tls.cjs",
         "electron/phone-motion-server.cjs",
+        "electron/phone-director-viewfinder.cjs",
         "electron/phone-motion-core.js",
         "electron/phone-motion-camera-ux.js",
         "electron/camera-take-path-core.js",
